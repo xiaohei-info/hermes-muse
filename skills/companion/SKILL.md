@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Manage goals and expiring interests, proactive reminders, feedback, memory and relationships, nightly alignment, silent Feed and bounded parallel research using the current Hermes profile.
-version: 0.1.4
+version: 0.1.5
 ---
 
 # Companion
@@ -23,10 +23,6 @@ Read the relevant procedure in full. Call `muse_manage` with `action` and a `dat
 Main conversation owns explicit user goals, preferences and feedback; incremental upkeep owns factual dated/relationship notes; nightly review owns dreams/alignment and bounded goal research/Ideas/skill review; Feed owns authored articles; proactive watch owns candidate selection. Everyone checks live state before consuming a recalled goal or interest. A native memory fact is not automatically a live monitoring directive.
 
 `GOAL.md` starts with plugin-managed JSON metadata in an HTML comment. Use goal_create/goal_update to change its lifecycle, so cancellation and watch closure stay linked. Freeform evidence goes in hidden_files and final artifacts in files. Do not duplicate operational state into native USER/MEMORY or create another user profile. Read relevant people/group notes before personalized advice.
-
-## User decisions and background work
-
-Create goals, record/renew interests, schedule watches, change goal status/review dates, apply feedback/preferences, edit/delete Feed items and forget records only in a real user conversation. Cron rejects these operations even with a saved user signal. Record interests during the user's turn; background maintenance cannot backfill them. Cron may append goal progress, propose Ideas, write new Feed articles, prepare/revalidate notices, finish reviews and stop an existing watch whose agreed stop condition is met.
 
 ## Universal completion contract
 

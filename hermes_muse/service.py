@@ -63,7 +63,7 @@ class Companion:
                            "text": str(text)[:8000], "created": now})
             previous = self.store.get(db, "session", session_id, {})
             self.store.put(db, "session", session_id, {**previous, "id": session_id,
-                           "last_signal": now, "active": True, "background_delivery": False, "route": route or previous.get("route"), "turn_id": turn_id})
+                           "last_signal": now, "active": True, "route": route or previous.get("route"), "turn_id": turn_id})
             # Signals are a bounded processing inbox. Durable facts belong in native memory.
             old = sorted(self.store.rows(db, "signal"), key=lambda x: x["created"])
             processed = min(self.store.get(db, "cursor", "memory-upkeep", 0), self.store.get(db, "cursor", "nightly-review", 0))

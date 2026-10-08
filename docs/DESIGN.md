@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.4
+# Hermes Muse design — v0.1.5
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -51,9 +51,9 @@ Exactly four fixed jobs, all inheriting host model/provider/timezone:
 
 Four pre-run gates skip empty work without an LLM call. Failed work does not advance a successful processing cursor. A quiet-pass timer after substantial conversation can advance the existing memory-upkeep job; a new user turn cancels/restarts it and attempts are capped at three/day. No fifth permanent Cron. Explicit promised reminders and goal-owned watches create native jobs as required; notification delivery may use owned one-shot jobs. All dynamic jobs are recorded for closure and uninstall.
 
-## Background decision boundary
+## Evidence for background work
 
-The state tool refuses user-decision actions in Cron context even if an old real-user signal is supplied: goal creation, goal status/review-date changes, interest recording, watch creation, feedback, Feed edits/deletion, forgetting and preference updates. Research progress, Ideas, new Feed articles, notice preparation/revalidation and stopping an existing watch remain available. New watch prompts are limited to 4000 characters; recurring intervals must be at least 30 minutes. Cron clock slots are checked across midnight regardless of calendar sparsity, with random/hashed clock fields rejected. One-off schedules remain available below 30 minutes. Notification delivery explicitly selects the current profile's bare bot-chat target, regardless of source conversation or gateway count.
+Foreground and background calls use the 0.1.2 action rules. Operations that require user evidence still need a recent recorded user signal, and renewing an interest needs a newer signal. Cron context alone does not deny state writes. Watches use native schedules and no plugin-specific 30-minute or 4000-character limit. New notifications go to the current profile's Bot Chat.
 
 ## Lifecycle contracts
 
@@ -62,7 +62,7 @@ The state tool refuses user-decision actions in Cron context even if an old real
 3. Closing a goal pauses its owned future watches, invalidates obsolete pending reminders, and preserves any explicitly marked final result awaiting delivery. Reopen does not silently resume old monitoring.
 4. User feedback distinguishes done, dismiss once, snooze and stop-topic. Silence is not acceptance. Stop-topic blocks future selection; an expired interest can remain an historical fact without being an active research directive.
 5. Discovery/preparation/queueing/dispatch are not successful delivery. Exact event fingerprints are unique under a SQLite transaction. Ordinary dispatch reserves one daily slot atomically. Unknown outcomes are retained for inspection, never blindly retried. Semantic cross-source equivalence still requires judgment.
-6. New notices target bare bot-chat, which native Cron resolves in the job-owning profile. The bot reads the selected result and replies in its canonical chat; Hermes can create a missing chat or queue behind its live owner. notification_handoff aliases the same queue, with no extra source-session injection. Bot Chat receipt completion is tracked separately from admission. Receiving these delivery turns never records a real-user signal and the plugin state tool permits only context/status/feed_list until a real user turn arrives, preventing recursive notification creation. Existing queued jobs retain their original route. No automatic cross-channel resend.
+6. New notices target bare bot-chat, which native Cron resolves in the job-owning profile. The bot reads the selected result and replies in its canonical chat; Hermes can create a missing chat or queue behind its live owner. notification_handoff aliases the same queue, with no extra source-session injection. Bot Chat receipt completion is tracked separately from admission. Incoming delivery turns are excluded from user-signal collection. State operations remain available under the same evidence rules; queueing an already-dispatched notice is idempotent. The delivery prompt tells the bot to reply here without requeueing that notice. Existing queued jobs retain their original route. No automatic cross-channel resend.
 7. Forgetting first stops rewriters, removes owned originals/derived copies and suppresses identified pending reuse. Native/external memory deletion and historic session/backups are explicitly checked through actual tools; the plugin cannot promise erasure from a backend without a deletion API.
 8. Research uses native asynchronous delegation with bounded fan-out, normalized item results, one retry of failed READ-ONLY items and explicit coverage gaps. Unknown external mutations are never automatically repeated. Model/provider choice remains the host's.
 

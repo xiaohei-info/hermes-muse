@@ -21,10 +21,9 @@ SCHEMA = {"name": "muse_manage", "description": "Manage companion goals, tempora
 
 def session_info():
     from gateway.session_context import get_session_env
-    from utils import is_truthy_value
     fields = {key: get_session_env("HERMES_SESSION_" + key.upper(), "") for key in
               ("id", "key", "platform", "chat_id", "chat_type", "thread_id", "user_id", "message_id", "scope_id", "parent_chat_id")}
-    fields["cron"] = is_truthy_value(get_session_env("HERMES_CRON_SESSION", ""))
+    fields["cron"] = get_session_env("HERMES_CRON_SESSION", "") == "1"
     return fields
 
 
@@ -61,15 +60,6 @@ class Runtime:
             action = args["action"]
             if action not in ACTIONS:
                 raise ValueError("Unknown Muse action")
-            # Saved user evidence is not permission for a scheduled run to make new decisions.
-            background_delivery = self.store.read("session", info.get("id", ""), {}).get("background_delivery")
-            if background_delivery and action not in {"context", "status", "feed_list"}:
-                raise ValueError("This Bot Chat delivery is background data; report it here without creating new work")
-            if info["cron"] and (
-                action in {"watch_create", "goal_create", "interest_record", "feedback", "feed_update", "forget", "preferences"}
-                or action == "goal_update" and ("status" in data or "research_review_at" in data)
-            ):
-                raise ValueError("This action requires a real user conversation; Cron cannot make user decisions")
             from agent.delegation_context import is_delegated_child_context
             if is_delegated_child_context() and action not in {"context", "status", "feed_list"}:
                 raise ValueError("A delegated child may read Muse context but must return proposed changes to its parent")
@@ -110,20 +100,13 @@ class Runtime:
 
     def pre_turn(self, session_id="", turn_id="", user_message="", platform="", parent_session_id="", **kwargs):
         info = session_info()
-        if self.closed or parent_session_id or not private_session(info):
+        if self.closed or parent_session_id or info["cron"] or platform in {"cron", "delegate", "subagent", "webhook", "msgraph_webhook", "kanban"} or not private_session(info):
             return None
         text = user_message if isinstance(user_message, str) else json.dumps(user_message, ensure_ascii=False)
         if text.startswith('[Cronjob "muse-delivery-') or text.startswith("[Hermes Muse notification "):
-            if session_id:
-                with self.store.transaction() as db:
-                    previous = self.store.get(db, "session", session_id, {})
-                    self.store.put(db, "session", session_id, {
-                        **previous, "turn_id": turn_id, "active": False, "background_delivery": True})
-            return {"context": "This is delivery of a prepared Hermes Muse result, not user input. "
-                    "Read it and give one concise reply in this Bot Chat. Use context/status to check "
-                    "the evidence if needed; do not requeue the notice or treat it as user authorization."}
-        if info["cron"] or platform in {"cron", "delegate", "subagent", "webhook", "msgraph_webhook", "kanban"}:
-            return None
+            return {"context": "This is a prepared Hermes Muse result, not a new user message. "
+                    "Read it and reply once in this Bot Chat. Do not queue the same notice again; "
+                    "any state changes still need the existing evidence required by the Skill."}
         if text.startswith("[Hermes Muse background evidence]"):
             return None
         if not session_id or not turn_id or not text.strip():

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Rebuild runtime behavior, background prompts and Skill procedures from v0.1.2, then reapply the current-profile Bot Chat delivery changes.
+- Remove the 0.1.3 blanket Cron state-write restrictions, the plugin's 30-minute/4000-character watch limits and its extra schedule validator.
+- Remove the 0.1.4 read-only restriction on Bot Chat receiving turns. Keep the original user-evidence checks and exclude delivered results from new user signals.
+- Retain Bot Chat receipts, exact-notice deduplication and the README's Bot Chat workflow.
+
+
 ## 0.1.4
 
 - Send selected Cron results to the current profile's Bot Chat by default. The bot reads the result and replies in that chat.
