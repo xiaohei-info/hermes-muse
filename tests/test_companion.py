@@ -157,6 +157,14 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(context["goals_needing_review"][0]["status"], "active")
         self.assertEqual(self.host.paused, [])
 
+    def test_goal_closure_retires_unaccepted_ideas(self):
+        self.goal()
+        idea = self.service.idea_add({"goal_id": "bicycle", "title": "Compare gearing", "rationale": "Useful for this goal"})
+        self.assertEqual(self.service.context()["interests_and_ideas"][0]["id"], idea["id"])
+        self.service.goal_update({"id": "bicycle", "status": "completed", "signal_id": self.signal})
+        self.assertEqual(self.service.context()["interests_and_ideas"], [])
+        self.assertEqual(self.store.read("interest", idea["id"])["status"], "cancelled")
+
     def test_subgoals_one_level_and_parent_cancellation(self):
         self.goal()
         self.goal("child", parent_id="bicycle")

@@ -132,6 +132,10 @@ class Companion:
                         child.update(status="cancelled", updated=now)
                         self.store.save_goal(child, child_body)
                         closing.append(child["id"])
+                for idea in self.store.rows(db, "interest"):
+                    if idea.get("goal_id") in closing and idea["status"] in {"candidate", "active", "accepted"}:
+                        idea["status"] = "cancelled"
+                        self.store.put(db, "interest", idea["id"], idea)
                 for row in self.store.rows(db, "notification"):
                     if row.get("goal_id") in closing and row["status"] in {"candidate", "pending", "queued"} and not row.get("final_result"):
                         row["status"] = "cancelled"

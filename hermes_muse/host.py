@@ -186,7 +186,7 @@ class HermesHost:
             raise ValueError("A watch requires an active goal")
         with self.store.transaction() as db:
             Companion(self.store, self).require_signal(db, data.get("signal_id"))
-        expires = epoch(data["expires"]) if data.get("expires") else None
+        expires = epoch(data["expires"]) if data.get("expires") else goal.get("deadline")
         if expires is not None and expires <= time.time():
             raise ValueError("Watch expiry must be in the future")
         key = "watch-" + uuid.uuid4().hex[:12]
