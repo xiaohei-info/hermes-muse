@@ -18,18 +18,20 @@ The system prompt section takes effect in new conversations. Background executio
 
 ## Feature comparison
 
+The plugin sets up its jobs and rules on first load, using the model, sources and messaging channels already configured in Hermes.
+
 | Muse feature | Native Hermes | With Hermes Muse |
 | --- | --- | --- |
-| Remember preferences and recent context | Long-term memory and user notes can retain facts and preferences across conversations. | Uses that memory and adds scheduled upkeep, relationship notes and nightly review. |
-| Notice important changes | Cron and session heartbeats can check sources and send updates; you configure what to check. | Checks goals, interests and related information by default, verifies candidates, and applies reminder hours and frequency limits. |
-| Follow goals over time | Supports persistent work within a session, a task board and scheduled checks. | Tracks goals, progress and related watches together; closes future checks when the goal ends or the watch expires. |
-| Prepare work in the background | Asynchronous subagents can work while the main conversation continues. | Adds scheduled goal research and saved briefings. The plugin's batch research still needs the assistant to advance it and cannot resume across restarts. |
-| Offer relevant suggestions | Can use the conversation and memory to suggest next steps; proactive research and follow-up need configuration. | Regularly prepares findings and suggestions for active goals, leaving the user to decide what to pursue. |
-| Personalized Feed | Can search, write articles and run scheduled briefings. | Creates a local Feed around the user's interests, with search, feedback and deletion. No dedicated Feed page. |
-| Adjust reminders and stop following up | Can update preferences and pause or delete scheduled jobs; how feedback affects future work needs configuration. | Handles completion, snoozing, one-time dismissal and topic opt-outs separately. Temporary interests expire after 14 days by default. |
-| Handle everyday errands | Depends on connected browser and service tools and their permissions. | Uses the same tools; the plugin adds no calling, booking or payment workflow. |
+| Remember preferences and recent context | Built-in memory and user notes retain facts. Scheduled relationship upkeep and nightly review need their own setup. | Memory upkeep is ready to use: regular updates to recent context and relationship notes, plus nightly review. |
+| Notice important changes | Cron, session heartbeats and messaging are built in. You configure what to watch, when to notify, deduplication and frequency limits. | Proactive reminders are ready to use: checks follow goals and interests, with source verification, delivery hours and frequency limits already set up. |
+| Follow goals over time | Persistent tasks and a task board are built in. You organize long-term goals, progress, related watches and stopping conditions. | Create and follow goals in conversation. Progress and watches belong to the goal, and related checks stop when it closes. |
+| Prepare work in the background | Asynchronous subagents are built in. You configure which goals to research regularly and how to save and use the results. | Scheduled goal research and briefing storage are set up. Research can run while the main conversation continues. |
+| Offer relevant suggestions | Can suggest next steps using conversation and memory. Ongoing research, selection and storage need their own setup. | Regularly prepares suggestions for active goals, records candidates and feedback, and waits for the user to decide what to pursue. |
+| Personalized Feed | Search, writing and scheduled tasks are available. You assemble topic selection, article records, feedback and updates. | A local Feed is ready to use: articles follow your interests, with search, feedback and deletion through chat. |
+| Adjust reminders and stop following up | Can update preferences and stop jobs. You define how feedback affects reminders, goals and watches. | Say “done,” “later” or “stop bringing this up” to adjust reminders. Temporary interests expire after 14 days by default. |
+| Handle everyday errands | Can use browser and external tools. Calling, booking and payment services and workflows need to be connected and configured. | The plugin does not supply calling, booking or payment workflows. Existing tools remain available. |
 
-Source checks, memory upkeep and content generation use the existing model and tools. See [implementation coverage](docs/FEATURE-COVERAGE.md) for specific limits.
+The Feed has no dedicated page. The plugin's batch research still needs the assistant to advance it and cannot resume across restarts. Memory upkeep, factual checks and content generation use the existing model and tools; see [implementation coverage](docs/FEATURE-COVERAGE.md) for specific limits.
 
 ## Four recurring Cron jobs
 
