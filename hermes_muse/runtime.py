@@ -188,12 +188,12 @@ class Runtime:
             self.timers.clear()
 
 
-def register(ctx):
+def register(ctx, *, plugin_root=ROOT):
     from hermes_constants import get_hermes_home
     required = ("register_tool", "register_skill", "register_system_prompt_section", "register_hook", "on_unload")
     if any(not callable(getattr(ctx, name, None)) for name in required):
         raise RuntimeError("Hermes Muse needs Hermes 0.21.5+ with prompt sections, plugin skills and unload hooks")
-    runtime = Runtime(ctx, get_hermes_home(), plugin_root=ctx.manifest.path)
+    runtime = Runtime(ctx, get_hermes_home(), plugin_root=plugin_root)
     runtime.host.initialize()
     prompt = (runtime.host.root / "prompts/system.md").read_text(encoding="utf-8").replace("{{MUSE_HOME}}", str(runtime.store.root)).replace("{{HERMES_HOME}}", str(runtime.home))
     ctx.register_skill("companion", runtime.host.root / "skills/companion/SKILL.md", description="Goals, memory upkeep, proactive reminders, reflection, Feed and research lifecycle")

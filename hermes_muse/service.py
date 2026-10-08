@@ -247,7 +247,9 @@ class Companion:
             raise ValueError("Notification owner is inactive or expired")
         with self.store.transaction() as db:
             if row["priority"] == "promised":
-                self.require_signal(db, data.get("signal_id"))
+                owned_promise = data.get("watch_id") and self.host.is_active_watch(data["watch_id"], row.get("goal_id"))
+                if not owned_promise:
+                    self.require_signal(db, data.get("signal_id"))
             if self.store.get(db, "forgotten", "notification:" + key):
                 return {"id": key, "status": "forgotten"}
             existing = self.store.get(db, "notification", key)

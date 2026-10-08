@@ -197,6 +197,17 @@ class HermesHost:
         return self._owned_job(key, {"name": "muse-" + key, "schedule": data["schedule"], "prompt": prompt,
                                    "skills": [f"{PLUGIN}:companion"], "deliver": "local"}, owner=goal["id"], expires=expires)
 
+    def is_active_watch(self, job_id, goal_id):
+        from cron.jobs import get_job
+        record = self.manifest()["jobs"].get(job_id)
+        if not record or not record["key"].startswith("watch-") or record.get("owner") != goal_id:
+            return False
+        if record.get("expires") is not None and record["expires"] <= time.time():
+            return False
+        with profile_scope(self.home):
+            job = get_job(job_id)
+        return bool(job and job.get("enabled"))
+
     def pause_owner(self, owner):
         from cron.jobs import pause_job, get_job
         with profile_scope(self.home):
@@ -286,7 +297,7 @@ def cron_run(home, key):
             return {"wakeAgent": False, "reason": "watch expired"}
         try:
             goal, _ = store.goal(owned["owner"])
-            return {"wakeAgent": goal["status"] == "active", "goal": goal["id"]}
+            return {"wakeAgent": goal["status"] == "active", "goal": goal["id"], "watch_id": pair[0]}
         except ValueError:
             return {"wakeAgent": False}
     now = time.time()

@@ -5,6 +5,7 @@
 - Standard-library unit suite: `python -m unittest discover -s tests -v`.
 - Real Hermes integration: `python tests/native_smoke.py` with a Hermes interpreter.
 - To test a separate source checkout with that interpreter: `HERMES_SOURCE=/path/to/hermes-agent python tests/native_smoke.py`.
+- Published-repository install/remove smoke test: `python tests/install_smoke.py` (network required, isolated home).
 - Official validation: `hermes plugins validate . --json`.
 
 Native integration runs under temporary homes and checks actual plugin registration, Skill lookup, bounded system prompt rendering, tool availability, four real Cron jobs, actual script gates, idempotent reload, preserved paused jobs/templates/native identity/memory, A -> B -> A profile switching and harmless launchers after removal. It makes no model calls and sends no real messages.
