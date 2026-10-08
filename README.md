@@ -16,26 +16,20 @@ Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](d
 
 The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Research and content generation use the existing model and tools at their normal cost.
 
-## What it does
+## Feature comparison
 
-In public discussions, Muse users describe getting a nudge about an unanswered message, finding weekend activities suited to their children, and receiving useful follow-ups after mentioning something in conversation. These [user reports](https://www.reddit.com/r/MetaAI/comments/1wxfn5z/muse_isgood/) helped shape the features below.
-
-| Feature | What it means in everyday use | Hermes Muse today |
+| Muse feature | Native Hermes | With Hermes Muse |
 | --- | --- | --- |
-| Remember what you shared | Keep preferences, people and current plans in mind across conversations. | Supported. Uses Hermes memory, with regular upkeep of new facts and relationship notes. |
-| Notice important changes | Bring up relevant developments or messages that need your attention. | Supported. Checks connected sources, prepares verified reminders and sends through existing messaging channels. |
-| Keep following a goal | Follow a job search, trip or writing project without a fresh explanation every day. | Supported. Tracks goals and progress, checks as agreed, and stops related watches when they expire or the goal closes. |
-| Prepare work and report back | Research, compare options and save briefings while you continue chatting. | Partial. Scheduled research and background tasks work; larger studies need the assistant to keep advancing them, and cannot resume automatically after a restart. |
-| Suggest something that fits your life | Find suitable family activities or propose a next step for a current goal. | Partial. Uses goals and preferences to prepare suggestions; there is no complete calendar-planning workflow. |
-| Pick out things worth reading | Collect articles and updates around your interests, ready when you want them. | Partial. Creates a local Feed with search and feedback, without a dedicated Feed page. |
-| Adjust to feedback and stop | Respond differently to “done,” “later” and “stop bringing this up.” | Supported. Records completion, snoozes and topic opt-outs; temporary interests expire, and reminder hours and frequency are limited. |
-| Handle everyday errands | Call customer service, make a booking or place an order, handing back when needed. | Not covered. This plugin has no calling, booking or payment workflow. |
+| Remember preferences and recent context | Long-term memory and user notes can retain facts and preferences across conversations. | Uses that memory and adds scheduled upkeep, relationship notes and nightly review. |
+| Notice important changes | Cron and session heartbeats can check sources and send updates; you configure what to check. | Checks goals, interests and related information by default, verifies candidates, and applies reminder hours and frequency limits. |
+| Follow goals over time | Supports persistent work within a session, a task board and scheduled checks. | Tracks goals, progress and related watches together; closes future checks when the goal ends or the watch expires. |
+| Prepare work in the background | Asynchronous subagents can work while the main conversation continues. | Adds scheduled goal research and saved briefings. The plugin's batch research still needs the assistant to advance it and cannot resume across restarts. |
+| Offer relevant suggestions | Can use the conversation and memory to suggest next steps; proactive research and follow-up need configuration. | Regularly prepares findings and suggestions for active goals, leaving the user to decide what to pursue. |
+| Personalized Feed | Can search, write articles and run scheduled briefings. | Creates a local Feed around the user's interests, with search, feedback and deletion. No dedicated Feed page. |
+| Adjust reminders and stop following up | Can update preferences and pause or delete scheduled jobs; how feedback affects future work needs configuration. | Handles completion, snoozing, one-time dismissal and topic opt-outs separately. Temporary interests expire after 14 days by default. |
+| Handle everyday errands | Depends on connected browser and service tools and their permissions. | Uses the same tools; the plugin adds no calling, booking or payment workflow. |
 
-Examples range from [helping someone keep a daily writing routine](https://www.reddit.com/r/MetaAI/comments/1whc17p/my_experience_using_muse/) to [waiting on a customer-service phone line](https://www.reddit.com/r/MetaAI/comments/1wqaj5c/muse_is_fucking_amazing/). These are individual reports, not guarantees that every account gets the same result.
-
-Other users report [reminders about things already resolved](https://www.reddit.com/r/MetaAI/comments/1wpdcdd/it_was_great_until_it_wasnt/). That makes feedback and stopping part of the feature set too. This project does not promise perfect recall or zero repetition.
-
-“Supported” means the corresponding workflow is in place. Memory upkeep, factual checks and suggestion quality depend on the configured model and tools; real models and messaging channels still need acceptance testing. See the [implementation coverage](docs/FEATURE-COVERAGE.md) for specific limits.
+Source checks, memory upkeep and content generation use the existing model and tools. See [implementation coverage](docs/FEATURE-COVERAGE.md) for specific limits.
 
 ## Four recurring Cron jobs
 
