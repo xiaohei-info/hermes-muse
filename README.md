@@ -12,7 +12,7 @@ It uses Hermes memory, Cron, Skills and subagents with the user's existing model
 hermes plugins install xiaohei-info/hermes-muse --enable
 ```
 
-Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace and registers one Skill and one state tool, and configures the system rules and four recurring Cron jobs from five prompt files. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
+Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and three conversation hooks, adds one system prompt section, and creates four recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
 
 The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Research and content generation use the existing model and tools at their normal cost.
 
@@ -33,6 +33,39 @@ The plugin sets up its jobs and rules on first load, using the model, sources an
 
 The Feed has no dedicated page. The plugin's batch research still needs the assistant to advance it and cannot resume across restarts. Memory upkeep, factual checks and content generation use the existing model and tools; see [implementation coverage](docs/FEATURE-COVERAGE.md) for specific limits.
 
+## Skill and tool
+
+| Name | Purpose |
+| --- | --- |
+| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: goals and interests, reminders and feedback, memory and relationships, Feed, and research. |
+| muse_manage | Lets the assistant record and query goals, interests, reminders, feedback, Feed and research progress, and handle expiry, stopping and delivery state. |
+
+The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all four recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
+
+## Prompts
+
+The plugin includes five prompt files:
+
+| File | Purpose |
+| --- | --- |
+| [system.md](prompts/system.md) | Conversation rules: when to read the Skill and current state, record goals, handle feedback, verify reminders and delegate background work. |
+| [proactive-watch.md](prompts/proactive-watch.md) | Look for relevant changes, check sources, prior reminders and expiry, then decide whether to notify. |
+| [memory-upkeep.md](prompts/memory-upkeep.md) | Process new user information, update facts and relationship notes, and record what has been processed. |
+| [nightly-review.md](prompts/nightly-review.md) | Update alignment notes, study active goals, prepare suggestions and review skills. |
+| [feed-pulse.md](prompts/feed-pulse.md) | Write articles from interests and feedback, and save the content and index. |
+
+Hermes appends `system.md` after the memory section through its plugin API; it takes effect in new conversations. The other four files become the corresponding Cron job prompts and are used when those jobs run. Each plugin load refreshes these job prompts while preserving the user's schedule, model and pause settings.
+
+## Conversation hooks
+
+| Hook | Purpose |
+| --- | --- |
+| pre_llm_call | Before the reply, records a short user excerpt and its source session, and adds a state-tool pointer to the current turn for goals, interests and feedback. |
+| post_llm_call | After replying to a user message of at least 80 characters, waits for five quiet minutes before scheduling memory upkeep. New input cancels the pending timer; at most three early triggers per day. |
+| on_session_end | Clears the current turn's busy flag so later reminders do not keep waiting on a conversation that has ended. |
+
+These hooks process private and local conversations, skipping groups, Cron and subagent input. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
+
 ## Four recurring Cron jobs
 
 | Job | Default schedule | Output |
@@ -52,7 +85,12 @@ The root is the active profile's `HERMES_HOME`, usually `~/.hermes`.
 
 ```text
 $HERMES_HOME/
-├── plugins/hermes-muse/             # code, Skill, prompts and templates
+├── plugins/hermes-muse/             # plugin code and resources
+│   ├── skills/companion/
+│   │   ├── SKILL.md                # shared procedures
+│   │   └── references/             # goals, reminders, memory, Feed, research
+│   ├── prompts/                    # the five prompts listed above
+│   └── templates/                  # initial workspace files
 ├── muse/
 │   ├── install.json                # job IDs and owned files
 │   ├── install.lock
@@ -75,9 +113,9 @@ $HERMES_HOME/
 └── cron/                           # scheduling and execution records owned by Hermes
 ```
 
-The memory, dreams and goal directories borrow Muse's organization. The ownership record, SQLite state, Feed storage and native memory paths are Hermes adaptations. Notes and goal files are created when needed.
+The memory, dreams and goal directories borrow Muse's organization. The ownership record, SQLite state, Feed storage and native memory paths are Hermes adaptations. First load adds missing workspace templates; goals, notes and articles are created during use. Reloading does not duplicate the recurring jobs.
 
-Installation does not rewrite Hermes core, SOUL, native USER/MEMORY files, user project AGENTS files or the global system prompt. During use, the assistant saves new facts through existing memory tools.
+Installation does not rewrite Hermes core, SOUL, native USER/MEMORY files, user project AGENTS files or the configured `agent.system_prompt` value. During use, the assistant saves new facts through existing memory tools.
 
 Conversation hooks keep short user excerpts for upkeep. Unprocessed excerpts remain until maintenance succeeds; processed history is bounded. The plugin collects no telemetry and excludes group chats from personal companion workflows. See [SECURITY.md](SECURITY.md) for data scope.
 

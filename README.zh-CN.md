@@ -12,7 +12,7 @@ Hermes Muse 是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的
 hermes plugins install xiaohei-info/hermes-muse --enable
 ```
 
-需要 Hermes 0.21.5 及相关插件接口，已测试版本见[验收清单](docs/ACCEPTANCE.md)。首次加载会自动创建工作区，注册 1 个 Skill 和 1 个状态工具，并用 5 份提示词配置系统规则及 4 个固定 Cron，无须选择功能或另行初始化。没有运行中的宿主时，下次启动 Hermes 才会加载。
+需要 Hermes 0.21.5 及相关插件接口，已测试版本见[验收清单](docs/ACCEPTANCE.md)。首次加载会自动创建工作区，注册 1 个 Skill、1 个状态工具和 3 个会话钩子，追加 1 段系统提示词，并建立 4 个固定 Cron，无须选择功能或另行初始化。没有运行中的宿主时，下次启动 Hermes 才会加载。
 
 新增系统规则在新会话生效。后台执行需要 Hermes 调度器在线、模型可用；实际研究和内容生成使用现有模型与工具，按相应服务计费。
 
@@ -33,6 +33,39 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 Feed 暂无独立页面；插件的批量研究仍需助手推进，暂不支持跨重启恢复。记忆整理、事实核实和内容生成由现有模型与工具完成，具体限制见[详细实现对照](docs/FEATURE-COVERAGE.zh-CN.md)。
 
+## Skill 与工具
+
+| 名称 | 作用 |
+| --- | --- |
+| [hermes-muse:companion](skills/companion/SKILL.md) | 主对话和后台任务共用的操作规程，包括目标与兴趣、主动提醒与反馈、记忆与人物关系、Feed、后台研究。 |
+| muse_manage | 供助手记录和查询目标、兴趣、提醒、反馈、Feed 与研究进度，并处理到期、停止和投递状态。 |
+
+Skill 随插件注册，文件保留在插件目录。主对话按需读取其中的规程，四个固定 Cron 都绑定这个 Skill。日常使用直接聊天即可，由助手调用工具。
+
+## 提示词
+
+插件自带 5 份提示词：
+
+| 文件 | 用途 |
+| --- | --- |
+| [system.md](prompts/system.md) | 主对话的工作约定：何时读取 Skill 和状态，如何记录目标、处理反馈、核实提醒及委派后台工作。 |
+| [proactive-watch.md](prompts/proactive-watch.md) | 主动巡查：寻找相关变化，核实来源、重复记录和时效，决定是否提醒。 |
+| [memory-upkeep.md](prompts/memory-upkeep.md) | 记忆维护：整理新增用户信息，更新事实、人物关系和处理记录。 |
+| [nightly-review.md](prompts/nightly-review.md) | 夜间复盘：更新对齐记录，研究活跃目标，整理建议并复盘技能。 |
+| [feed-pulse.md](prompts/feed-pulse.md) | Feed 写作：结合兴趣和反馈生成文章，保存内容与索引。 |
+
+`system.md` 通过 Hermes 插件接口追加到系统提示词的记忆段之后，在新会话生效。其余四份写入对应 Cron 的任务正文，在后台任务运行时使用。每次加载插件会同步这些任务正文，保留用户设置的执行时间、模型和暂停状态。
+
+## 会话钩子
+
+| 钩子 | 作用 |
+| --- | --- |
+| pre_llm_call | 在回复前记录用户原话片段和来源会话，并在本轮上下文中附上状态工具入口，供助手处理新目标、兴趣和反馈。 |
+| post_llm_call | 用户消息达到 80 个字符时，回复后等待 5 分钟安静期，再安排记忆整理；新消息会取消本次计时，每天最多提前触发 3 次。 |
+| on_session_end | 清除本轮的忙碌标记，避免后续提醒一直等待已经结束的对话。 |
+
+这些钩子处理私聊和本地对话，跳过群聊、Cron 和子任务输入。延迟整理复用现有的记忆维护 Cron；插件从运行进程卸载时会取消临时计时器。
+
 ## 四个固定 Cron
 
 | 任务 | 默认频率 | 输出 |
@@ -52,7 +85,12 @@ Feed 暂无独立页面；插件的批量研究仍需助手推进，暂不支持
 
 ```text
 $HERMES_HOME/
-├── plugins/hermes-muse/             # 代码、Skill、提示词和模板
+├── plugins/hermes-muse/             # 插件代码与资源
+│   ├── skills/companion/
+│   │   ├── SKILL.md                # 共用操作规程
+│   │   └── references/             # 目标、提醒、记忆、Feed、研究
+│   ├── prompts/                    # 上述 5 份提示词
+│   └── templates/                  # 工作区初始文件
 ├── muse/
 │   ├── install.json                # 任务 ID 和文件归属
 │   ├── install.lock
@@ -75,9 +113,9 @@ $HERMES_HOME/
 └── cron/                           # Hermes 自己管理的任务及执行记录
 ```
 
-`memory`、`dreams` 和目标目录借鉴 Muse 的组织方式。`install.json`、`state.db`、Feed 落盘和原生记忆路径是 Hermes 适配。笔记和目标文件按实际内容创建。
+`memory`、`dreams` 和目标目录借鉴 Muse 的组织方式。`install.json`、`state.db`、Feed 落盘和原生记忆路径是 Hermes 适配。首次加载只补齐缺失的工作区模板；目标、笔记和文章在使用时生成。重载不会重复创建固定任务。
 
-安装不改写 Hermes 核心、`SOUL.md`、原生 `USER.md`/`MEMORY.md`、用户项目 `AGENTS.md` 或全局系统提示词。运行期间，助手通过现有记忆工具保存新事实。
+安装不改写 Hermes 核心、`SOUL.md`、原生 `USER.md`/`MEMORY.md`、用户项目 `AGENTS.md` 或配置中的 `agent.system_prompt`。运行期间，助手通过现有记忆工具保存新事实。
 
 会话钩子保存短用户原话片段供维护处理，未处理片段保留到维护成功，已处理历史保留有限数量。插件不收集遥测；个人资料流程不进入群聊。数据范围见 [SECURITY.md](SECURITY.md)。
 
