@@ -12,7 +12,7 @@ It uses Hermes memory, Cron, Skills and subagents with the user's existing model
 hermes plugins install xiaohei-info/hermes-muse --enable
 ```
 
-Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and three conversation hooks, adds one system prompt section, and creates four recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
+Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and three conversation hooks, adds one system prompt section, and creates six recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
 
 The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Research and content generation use the existing model and tools at their normal cost.
 
@@ -37,14 +37,14 @@ The Feed has no dedicated page. The plugin's batch research still needs the assi
 
 | Name | Purpose |
 | --- | --- |
-| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: goals and interests, reminders and feedback, memory and relationships, Feed, and research. |
+| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: goals and interests, reminders and feedback, memory and relationships, Feed, research, and weekly/monthly reviews. |
 | muse_manage | Lets the assistant record and query goals, interests, reminders, feedback, Feed and research progress, and handle expiry, stopping and delivery state. |
 
-The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all four recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
+The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all six recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
 
 ## Prompts
 
-The plugin includes five prompt files:
+The plugin includes seven prompt files:
 
 | File | Purpose |
 | --- | --- |
@@ -53,8 +53,10 @@ The plugin includes five prompt files:
 | [memory-upkeep.md](prompts/memory-upkeep.md) | Process new user information, update facts and relationship notes, and record what has been processed. |
 | [nightly-review.md](prompts/nightly-review.md) | Update alignment notes, study active goals, prepare suggestions and review skills. |
 | [feed-pulse.md](prompts/feed-pulse.md) | Write articles from interests and feedback, and save the content and index. |
+| [weekly-governance-review.md](prompts/weekly-governance-review.md) | Review useful outcomes, avoidable effort and next-week adjustments. |
+| [monthly-system-audit.md](prompts/monthly-system-audit.md) | Check whether instructions and recurring work still serve the user; suggest what to move, simplify or remove. |
 
-Hermes appends `system.md` after the memory section through its plugin API; it takes effect in new conversations. The other four files become the corresponding Cron job prompts and are used when those jobs run. Each plugin load refreshes these job prompts while preserving the user's schedule, model and pause settings.
+Hermes appends `system.md` after the memory section through its plugin API; it takes effect in new conversations. The other six files become the corresponding Cron job prompts and are used when those jobs run. Each plugin load refreshes these job prompts while preserving the user's schedule, model and pause settings.
 
 ## Conversation hooks
 
@@ -66,7 +68,7 @@ Hermes appends `system.md` after the memory section through its plugin API; it t
 
 These hooks process private and local conversations, skipping groups, Cron and subagent input. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
 
-## Four recurring Cron jobs
+## Six recurring Cron jobs
 
 | Job | Default schedule | Output |
 | --- | --- | --- |
@@ -74,12 +76,16 @@ These hooks process private and local conversations, skipping groups, Cron and s
 | muse-memory-upkeep | Hourly | New facts and people/group notes |
 | muse-nightly-review | Daily at 03:20 | Alignment, goal research, Ideas and skill review |
 | muse-feed-pulse | Hourly | Local Feed articles |
+| muse-weekly-governance-review | Sunday at 21:15 | A short review of outcomes, costs and proposed adjustments |
+| muse-monthly-system-audit | First day of the month at 10:40 | A short audit of priorities, instructions and recurring work |
 
-Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Specific reminders, watches and notice deliveries can create additional recorded Cron jobs; four is the permanent job count.
+Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Specific reminders, watches and notice deliveries can create additional recorded Cron jobs; six is the permanent job count.
 
 Conversations and background upkeep share goals, interests and feedback records. Background work can continue from recorded user input; renewing an interest still requires a newer user signal, never the assistant's own output. Watches use native Hermes scheduling rules.
 
-Pre-run scripts skip the model when there is no eligible work. An hourly Feed tick does not require an article on every run.
+The first four jobs skip the model when there is no eligible work. An hourly Feed tick does not require an article on every run. Weekly and monthly reviews run at their scheduled times, state any evidence gaps, and deliver a short report to Bot Chat. They suggest changes without applying them and do not run a separate Skill audit. Existing user-created reviews are left in place.
+
+The latest review summaries are available through `muse_manage status`; full outputs stay in native Cron history. The next review can use them to check whether earlier suggestions led to useful changes.
 
 ## Files
 
@@ -90,13 +96,13 @@ $HERMES_HOME/
 ├── plugins/hermes-muse/             # plugin code and resources
 │   ├── skills/companion/
 │   │   ├── SKILL.md                # shared procedures
-│   │   └── references/             # goals, reminders, memory, Feed, research
-│   ├── prompts/                    # the five prompts listed above
+│   │   └── references/             # goals, reminders, memory, Feed, research, governance
+│   ├── prompts/                    # the seven prompts listed above
 │   └── templates/                  # initial workspace files
 ├── muse/
 │   ├── install.json                # job IDs and owned files
 │   ├── install.lock
-│   ├── state.db                    # interests, notices, budgets and Feed index
+│   ├── state.db                    # interests, notices, budgets, Feed index, review summaries
 │   ├── AGENTS.md
 │   ├── TOOLS.md
 │   ├── PROACTIVE_PREFERENCES.md
@@ -127,7 +133,7 @@ Conversation hooks keep short user excerpts for upkeep. Unprocessed excerpts rem
 
 `Cron prepares a result → delivers to this profile's Bot Chat → the bot reads it → replies to the user in chat`
 
-Receiving the result runs an assistant turn on that profile's model. Hermes can create the Bot Chat on first delivery if it does not exist; its native queue handles a busy chat. Feed writing and routine upkeep stay silent. Only selected reminders enter this delivery flow.
+Receiving the result runs an assistant turn on that profile's model. Hermes can create the Bot Chat on first delivery if it does not exist; its native queue handles a busy chat. Feed writing and routine upkeep stay silent. Selected reminders and scheduled weekly/monthly reports enter this delivery flow.
 
 The official installer displays the plugin's after-install notes, but has no plugin-defined channel/session picker. This version uses Bot Chat by default and does not require an external channel such as Telegram.
 

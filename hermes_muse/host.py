@@ -11,10 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .service import Companion, DEFAULT_PREFERENCES
-from .store import PLUGIN, VERSION, Store, epoch, stamp
+from .store import GOVERNANCE_JOBS, PLUGIN, VERSION, Store, epoch, stamp
 
 JOBS = {"proactive-watch": "*/30 * * * *", "memory-upkeep": "0 * * * *",
-        "nightly-review": "20 3 * * *", "feed-pulse": "0 * * * *"}
+        "nightly-review": "20 3 * * *", "feed-pulse": "0 * * * *",
+        "weekly-governance-review": "15 21 * * 0", "monthly-system-audit": "40 10 1 * *"}
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -143,7 +144,8 @@ class HermesHost:
         for key, schedule in JOBS.items():
             prompt = (self.root / "prompts" / f"{key}.md").read_text(encoding="utf-8")
             self._owned_job(key, {"name": "muse-" + key, "schedule": schedule,
-                                  "prompt": prompt, "skills": [f"{PLUGIN}:companion"], "deliver": "local",
+                                  "prompt": prompt, "skills": [f"{PLUGIN}:companion"],
+                                  "deliver": "bot-chat" if key in GOVERNANCE_JOBS else "local",
                                   "attach_to_session": False}, fixed=True)
         return self.manifest()
 
@@ -329,7 +331,9 @@ def cron_run(home, key):
             return {"wakeAgent": False}
     now = time.time()
     signals = context["new_user_signals"]
-    if key == "memory-upkeep":
+    if key in GOVERNANCE_JOBS:
+        wake = True  # a scheduled review can report insufficient evidence even without active goals
+    elif key == "memory-upkeep":
         wake = bool(signals)
     elif key == "feed-pulse":
         wake = bool(context["interests_and_ideas"] or context["goals"] or context["preferences"]["feed_brief"])

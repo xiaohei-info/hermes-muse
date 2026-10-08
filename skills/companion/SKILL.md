@@ -15,6 +15,7 @@ This is the single Skill registered as `hermes-muse:companion`. It adds procedur
 - Incremental memory, relationships, reflection, repair and forgetting: [memory](references/memory.md).
 - Feed creation, search, feedback and build-from-an-article: [Feed](references/feed.md).
 - Background execution and independent wide research: [research](references/research.md).
+- Weekly value review and monthly structure audit: [governance](references/governance.md).
 
 Read the relevant procedure in full. Call `muse_manage` with `action` and a `data` object. Tool errors mean the action did not finish; repair inputs or report the limitation. `context` returns current data, `status` also returns resource ownership. Never hand-edit state.db, install.json or native Cron stores.
 
@@ -28,4 +29,4 @@ Main conversation owns explicit user goals, preferences and feedback; incrementa
 
 A promise is open until its actual result reaches the user or the user cancels it. Evidence prepared, job queued, main-session wake accepted and message generated are different events. Preserve unknown delivery outcomes and do not repeat irreversible actions. Research/Feed never extend interests themselves. Use original user signal IDs; do not manufacture them from old summaries or cron prompts. Installation grants no new external service authority.
 
-`review_complete`: data `{job, up_to, summary}`. Job is one of proactive-watch, memory-upkeep, nightly-review, feed-pulse. `up_to` is a timezone-aware ISO timestamp or numeric epoch; for memory use the last successfully processed signal's created value. Advance only after every dependent write succeeds; a partial batch advances only through its contiguous successful prefix.
+`review_complete`: data `{job, up_to, summary}`. Job is one of proactive-watch, memory-upkeep, nightly-review, feed-pulse, weekly-governance-review, monthly-system-audit. `up_to` is a timezone-aware ISO timestamp or numeric epoch; for memory use the last successfully processed signal's created value. Advance only after every dependent write succeeds; a partial batch advances only through its contiguous successful prefix.

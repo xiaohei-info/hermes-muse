@@ -51,7 +51,16 @@ def main():
                 loaded = manager._plugins.get("hermes-muse")
                 assert loaded and loaded.enabled, repr(loaded)
                 jobs = list_jobs(include_disabled=True)
-                assert len(jobs) == 4, [(j["name"], j["id"]) for j in jobs]
+                assert len(jobs) == 6, [(j["name"], j["id"]) for j in jobs]
+                for key, schedule in (("weekly-governance-review", "15 21 * * 0"),
+                                      ("monthly-system-audit", "40 10 1 * *")):
+                    job = next(j for j in jobs if j["name"] == "muse-" + key)
+                    assert job["deliver"] == "bot-chat", job
+                    assert schedule in str(job["schedule"]), job
+                    assert "hermes-muse:companion" in str(job), job
+                    ok, gate = _run_job_script("hermes-muse-" + key + ".py", workdir=str(home / "muse"))
+                    assert ok and _parse_wake_gate(gate), (ok, gate)
+                assert not any("skill-audit" in j["name"] for j in jobs)
                 ids = {j["id"] for j in jobs}
                 if index == 0 and first_ids is not None:
                     assert first_ids == ids, "Reload duplicated jobs"
@@ -80,7 +89,7 @@ def main():
                 prefs.write_text("User maintained source list.\n")
                 HermesHost(Store(home), plugin_root=home / "plugins/hermes-muse").initialize()
                 assert prefs.read_text() == "User maintained source list.\n"
-                assert len(list_jobs(include_disabled=True)) == 4
+                assert len(list_jobs(include_disabled=True)) == 6
             finally:
                 reset_hermes_home_override(token)
         for home in homes:
@@ -91,10 +100,10 @@ def main():
                 assert ok and not _parse_wake_gate(output), (ok, output)
                 assert (home / "muse/install.json").exists()
                 # Host remove intentionally leaves native tasks for the documented cleanup flow.
-                assert len(list_jobs(include_disabled=True)) == 4
+                assert len(list_jobs(include_disabled=True)) == 6
         from native_companion_smoke import run as companion_checks
         companion_checks(base / "companion")
-        print("PASS: native registration, Skill, prompt, tools, four Cron jobs, real script gates, A->B->A isolation, idempotent reload, preserved native files and harmless removed-plugin launchers")
+        print("PASS: native registration, Skill, prompt, tools, six Cron jobs, real script gates, A->B->A isolation, idempotent reload, preserved native files and harmless removed-plugin launchers")
 
 
 if __name__ == "__main__":

@@ -28,9 +28,9 @@ def main():
         assert "Bot Chat" in output, output
         assert (home / "plugins/hermes-muse/plugin.yaml").exists()
         # First real host load; installation alone need not have a live host to initialize.
-        run("-c", "from hermes_cli.plugins import discover_plugins; discover_plugins(); from cron.jobs import list_jobs,create_job; assert len(list_jobs(True))==4; create_job(prompt='Unrelated user job',schedule='0 12 * * *',name='keep-me',deliver='local')")
+        run("-c", "from hermes_cli.plugins import discover_plugins; discover_plugins(); from cron.jobs import list_jobs,create_job; assert len(list_jobs(True))==6; create_job(prompt='Unrelated user job',schedule='0 12 * * *',name='keep-me',deliver='local')")
         manifest = json.loads((home / "muse/install.json").read_text())
-        assert len(manifest["fixed"]) == 4
+        assert len(manifest["fixed"]) == 6
         run("-m", "hermes_cli.main", "plugins", "remove", "hermes-muse")
         assert not (home / "plugins/hermes-muse").exists()
         assert (home / "muse/install.json").exists()
@@ -38,7 +38,7 @@ def main():
         # Simulate the documented AI cleanup using the recorded ownership, preserving unrelated jobs.
         run("-c", "import json; from pathlib import Path; from hermes_constants import get_hermes_home; from cron.jobs import list_jobs,remove_job; h=get_hermes_home(); m=json.loads((h/'muse/install.json').read_text()); [remove_job(i) for i in m['jobs']]; assert [j['name'] for j in list_jobs(True)]==['keep-me']; [(h/p).unlink(missing_ok=True) for p in m['scripts']]")
         assert (home / "SOUL.md").read_text() == "Preserve this identity.\n"
-        print("PASS: official GitHub install -> first host load -> four tasks -> official remove -> owned-only cleanup; identity and unrelated jobs preserved")
+        print("PASS: official GitHub install -> first host load -> six tasks -> official remove -> owned-only cleanup; identity and unrelated jobs preserved")
 
 
 if __name__ == "__main__":

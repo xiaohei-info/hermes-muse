@@ -10,7 +10,7 @@ Coverage percentages discussed during planning were estimates, not release quali
 
 ## Installation and ownership
 
-Entry: `hermes plugins install xiaohei-info/hermes-muse --enable`. The first actual plugin load performs locked, idempotent initialization. No model/network call occurs during registration. It creates missing templates without overwriting user documents, registers one Skill (`hermes-muse:companion`), one bounded system prompt section, a small state tool and hooks; creates four native Cron jobs; records their actual IDs and owned files in `muse/install.json`. A running Hermes scheduler is required for background execution. Repeated load/upgrade preserves edits and paused jobs, and never duplicates jobs. Interrupted initialization is reconciled by a plugin marker plus exact workdir/skill ownership, not job name alone.
+Entry: `hermes plugins install xiaohei-info/hermes-muse --enable`. The first actual plugin load performs locked, idempotent initialization. No model/network call occurs during registration. It creates missing templates without overwriting user documents, registers one Skill (`hermes-muse:companion`), one bounded system prompt section, a small state tool and hooks; creates six native Cron jobs; records their actual IDs and owned files in `muse/install.json`. A running Hermes scheduler is required for background execution. Repeated load/upgrade preserves edits and paused jobs, and never duplicates jobs. Interrupted initialization is reconciled by a plugin marker plus exact workdir/skill ownership, not job name alone.
 
 Native uninstall: `hermes plugins remove hermes-muse`. Hermes has no guaranteed uninstall callback for deleting cron jobs. README instructs the user to ask their remaining Hermes assistant to pause/remove only job IDs in `muse/install.json`, inspect in-flight work and remove owned launchers. User data is retained. Every launcher checks that the plugin is still installed and enabled, and exits silently otherwise. Reload/unload only stops in-process timers, never erases user data or cancels persistent jobs merely because a process exits.
 
@@ -18,7 +18,7 @@ Native uninstall: `hermes plugins remove hermes-muse`. Hermes has no guaranteed 
 
 Paths below are relative to the active `HERMES_HOME`; resolve per call or explicitly bind a captured profile for deferred work. Never use a process-global default home.
 
-- `plugins/hermes-muse/`: immutable shipped code, `plugin.yaml`, `skills/companion/SKILL.md`, reference procedures, five `prompts/*.md`, clean templates.
+- `plugins/hermes-muse/`: immutable shipped code, `plugin.yaml`, `skills/companion/SKILL.md`, reference procedures, seven `prompts/*.md`, clean templates.
 - `memories/USER.md`, `memories/MEMORY.md`: native Hermes files, or the user's existing memory tools/provider. Installation does not write these or `SOUL.md` or replace `agent.system_prompt`.
 - `muse/install.json`: version, installation identity, owned native job IDs and launcher paths; survives remove.
 - `muse/state.db`: SQLite transactional operational state, NOT a replacement long-term memory service. Short-lived user signals/cursors, expiring interests/Ideas, notification reservations and outcomes, Feed index/feedback, source-session references and research job handles. Native Cron remains the authoritative execution ledger.
@@ -40,7 +40,7 @@ Feed -> current, unexpired interests + brief + live evidence -> authored local a
 
 ## Scheduling
 
-Exactly four fixed jobs, all inheriting host model/provider/timezone:
+Exactly six fixed jobs, all inheriting host model/provider/timezone:
 
 | Job | Schedule | Work |
 | --- | --- | --- |
@@ -48,8 +48,12 @@ Exactly four fixed jobs, all inheriting host model/provider/timezone:
 | muse-memory-upkeep | 0 * * * * | Incremental memory/relationships only after new real user signal. |
 | muse-nightly-review | 20 3 * * * | Reflection/repair, goal research rotation, Ideas, skills review and lifecycle cleanup. |
 | muse-feed-pulse | 0 * * * * | Opportunity to generate fresh content; not an article quota. |
+| muse-weekly-governance-review | 15 21 * * 0 | Seven-day review of useful outcomes, cost, reuse and simplification. |
+| muse-monthly-system-audit | 40 10 1 * * | Thirty-day review of alignment, instruction placement and redundant workflows. |
 
-Four pre-run gates skip empty work without an LLM call. Failed work does not advance a successful processing cursor. A quiet-pass timer after substantial conversation can advance the existing memory-upkeep job; a new user turn cancels/restarts it and attempts are capped at three/day. No fifth permanent Cron. Explicit promised reminders and goal-owned watches create native jobs as required; notification delivery may use owned one-shot jobs. All dynamic jobs are recorded for closure and uninstall.
+Four pre-run gates skip empty work without an LLM call. Failed work does not advance a successful processing cursor. A quiet-pass timer after substantial conversation can advance the existing memory-upkeep job; a new user turn cancels/restarts it and attempts are capped at three/day. No extra permanent Cron for that timer. Explicit promised reminders and goal-owned watches create native jobs as required; notification delivery may use owned one-shot jobs. All dynamic jobs are recorded for closure and uninstall.
+
+Weekly/monthly gates always wake at the scheduled tick, even without active goals. They use the same Skill and current-profile evidence, report gaps, and propose changes without applying them. No separate Skill audit or mandatory doctrine file is added. Their final outputs go directly to Bot Chat, without entering the ordinary notice budget/queue. The receiver treats the report as background evidence, not user authorization. `review_complete` saves successful processing cursors and the latest bounded summary in `state.db`; `status.reviews` exposes these summaries for follow-up, while native Cron retains full outputs and delivery records. Existing user-created review tasks are not adopted or removed.
 
 ## Evidence for background work
 

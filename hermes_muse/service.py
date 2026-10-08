@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime
 
-from .store import DAY, Store, bounded, digest, epoch, identifier, stamp
+from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, stamp
 
 DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": 1,
                        "time_sensitive_per_day": 3, "blocked_topics": [], "feed_brief": ""}
@@ -211,7 +211,7 @@ class Companion:
 
     def review_complete(self, data):
         job = data.get("job")
-        if job not in {"memory-upkeep", "nightly-review", "feed-pulse", "proactive-watch"}:
+        if job not in {"memory-upkeep", "nightly-review", "feed-pulse", "proactive-watch", *GOVERNANCE_JOBS}:
             raise ValueError("Unknown review job")
         up_to = epoch(data["up_to"])
         now = self.clock()

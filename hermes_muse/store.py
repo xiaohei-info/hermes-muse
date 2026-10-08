@@ -15,6 +15,7 @@ from pathlib import Path
 VERSION = "0.1.5"
 PLUGIN = "hermes-muse"
 DAY = 86400
+GOVERNANCE_JOBS = ("weekly-governance-review", "monthly-system-audit")
 
 
 def stamp(value=None):

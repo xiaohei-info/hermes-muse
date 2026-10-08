@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .host import HermesHost, JOBS, ROOT, profile_scope
 from .service import Companion
-from .store import PLUGIN, Store, stamp
+from .store import GOVERNANCE_JOBS, PLUGIN, Store, stamp
 
 log = logging.getLogger(__name__)
 ACTIONS = ("context", "status", "goal_create", "goal_update", "interest_record", "idea_add", "feedback",
@@ -69,6 +69,8 @@ class Runtime:
                     result = self.service.context()
                     if action == "status":
                         result["installation"] = self.host.manifest()
+                        result["reviews"] = {job: self.store.read("meta", "last_review:" + job)
+                                             for job in GOVERNANCE_JOBS}
                 elif action == "preferences":
                     result = self.service.preference_update(data)
                 elif action == "watch_create":
@@ -103,9 +105,11 @@ class Runtime:
         if self.closed or parent_session_id or info["cron"] or platform in {"cron", "delegate", "subagent", "webhook", "msgraph_webhook", "kanban"} or not private_session(info):
             return None
         text = user_message if isinstance(user_message, str) else json.dumps(user_message, ensure_ascii=False)
-        if text.startswith('[Cronjob "muse-delivery-') or text.startswith("[Hermes Muse notification "):
+        if (text.startswith('[Cronjob "muse-delivery-') or text.startswith("[Hermes Muse notification ")
+                or any(text.startswith('[Cronjob "muse-' + job + '"') for job in GOVERNANCE_JOBS)):
             return {"context": "This is a prepared Hermes Muse result, not a new user message. "
                     "Read it and reply once in this Bot Chat. Do not queue the same notice again; "
+                    "Weekly/monthly recommendations remain proposals until the user asks to apply them; "
                     "any state changes still need the existing evidence required by the Skill."}
         if text.startswith("[Hermes Muse background evidence]"):
             return None

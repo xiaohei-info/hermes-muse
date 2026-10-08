@@ -30,6 +30,11 @@ def run(home):
 
     with profile_scope(home):
         runtime.host.initialize()
+        # Reviews persist summaries without manufacturing user activity or notices.
+        for review in ("weekly-governance-review", "monthly-system-audit"):
+            call("review_complete", job=review, up_to=now, summary="Evidence limited; simplify only after discussion.")
+            assert call("status")["reviews"][review]["summary"].startswith("Evidence limited")
+        assert not runtime.store.all("signal") and not runtime.store.all("notification")
         runtime.service.signal("user-choice", "source-session", "Track bicycles until I choose one.")
         tokens = set_session_vars(session_id="cron-session", chat_type="private", cron_session="1")
         try:
@@ -95,6 +100,11 @@ def run(home):
                                        user_message='[Cronjob "muse-delivery-test" output]\n\n' + payload)
             assert context and "Bot Chat" in context["context"]
             assert len(runtime.store.all("signal")) == count
+            for review in ("weekly-governance-review", "monthly-system-audit"):
+                review_context = runtime.pre_turn(session_id="bot-session", turn_id=review,
+                    user_message='[Cronjob "muse-' + review + '" output]\n\nConsider simplifying a job.')
+                assert "proposals" in review_context["context"]
+                assert len(runtime.store.all("signal")) == count
             call("goal_update", id="bicycle", progress="Bot reviewed the result.")
             call("preferences", ordinary_per_day=3)
             before = len(list_jobs(True))

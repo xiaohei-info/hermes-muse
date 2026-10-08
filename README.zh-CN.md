@@ -12,7 +12,7 @@ Hermes Muse 是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的
 hermes plugins install xiaohei-info/hermes-muse --enable
 ```
 
-需要 Hermes 0.21.5 及相关插件接口，已测试版本见[验收清单](docs/ACCEPTANCE.md)。首次加载会自动创建工作区，注册 1 个 Skill、1 个状态工具和 3 个会话钩子，追加 1 段系统提示词，并建立 4 个固定 Cron，无须选择功能或另行初始化。没有运行中的宿主时，下次启动 Hermes 才会加载。
+需要 Hermes 0.21.5 及相关插件接口，已测试版本见[验收清单](docs/ACCEPTANCE.md)。首次加载会自动创建工作区，注册 1 个 Skill、1 个状态工具和 3 个会话钩子，追加 1 段系统提示词，并建立 6 个固定 Cron，无须选择功能或另行初始化。没有运行中的宿主时，下次启动 Hermes 才会加载。
 
 新增系统规则在新会话生效。后台执行需要 Hermes 调度器在线、模型可用；实际研究和内容生成使用现有模型与工具，按相应服务计费。
 
@@ -37,14 +37,14 @@ Feed 暂无独立页面；插件的批量研究仍需助手推进，暂不支持
 
 | 名称 | 作用 |
 | --- | --- |
-| [hermes-muse:companion](skills/companion/SKILL.md) | 主对话和后台任务共用的操作规程，包括目标与兴趣、主动提醒与反馈、记忆与人物关系、Feed、后台研究。 |
+| [hermes-muse:companion](skills/companion/SKILL.md) | 主对话和后台任务共用的操作规程，包括目标与兴趣、主动提醒与反馈、记忆与人物关系、Feed、后台研究和周／月复盘。 |
 | muse_manage | 供助手记录和查询目标、兴趣、提醒、反馈、Feed 与研究进度，并处理到期、停止和投递状态。 |
 
-Skill 随插件注册，文件保留在插件目录。主对话按需读取其中的规程，四个固定 Cron 都绑定这个 Skill。日常使用直接聊天即可，由助手调用工具。
+Skill 随插件注册，文件保留在插件目录。主对话按需读取其中的规程，六个固定 Cron 都绑定这个 Skill。日常使用直接聊天即可，由助手调用工具。
 
 ## 提示词
 
-插件自带 5 份提示词：
+插件自带 7 份提示词：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -53,8 +53,10 @@ Skill 随插件注册，文件保留在插件目录。主对话按需读取其�
 | [memory-upkeep.md](prompts/memory-upkeep.md) | 记忆维护：整理新增用户信息，更新事实、人物关系和处理记录。 |
 | [nightly-review.md](prompts/nightly-review.md) | 夜间复盘：更新对齐记录，研究活跃目标，整理建议并复盘技能。 |
 | [feed-pulse.md](prompts/feed-pulse.md) | Feed 写作：结合兴趣和反馈生成文章，保存内容与索引。 |
+| [weekly-governance-review.md](prompts/weekly-governance-review.md) | 周复盘：哪些产出有用、哪些投入浪费、下周值得调整什么。 |
+| [monthly-system-audit.md](prompts/monthly-system-audit.md) | 月度审计：检查规则和定时任务是否仍服务于用户，提出迁移、精简或删除建议。 |
 
-`system.md` 通过 Hermes 插件接口追加到系统提示词的记忆段之后，在新会话生效。其余四份写入对应 Cron 的任务正文，在后台任务运行时使用。每次加载插件会同步这些任务正文，保留用户设置的执行时间、模型和暂停状态。
+`system.md` 通过 Hermes 插件接口追加到系统提示词的记忆段之后，在新会话生效。其余六份写入对应 Cron 的任务正文，在后台任务运行时使用。每次加载插件会同步这些任务正文，保留用户设置的执行时间、模型和暂停状态。
 
 ## 会话钩子
 
@@ -66,7 +68,7 @@ Skill 随插件注册，文件保留在插件目录。主对话按需读取其�
 
 这些钩子处理私聊和本地对话，跳过群聊、Cron 和子任务输入。延迟整理复用现有的记忆维护 Cron；插件从运行进程卸载时会取消临时计时器。
 
-## 四个固定 Cron
+## 六个固定 Cron
 
 | 任务 | 默认频率 | 输出 |
 | --- | --- | --- |
@@ -74,12 +76,16 @@ Skill 随插件注册，文件保留在插件目录。主对话按需读取其�
 | muse-memory-upkeep | 每小时 | 新事实、人物和群组资料 |
 | muse-nightly-review | 每天 03:20 | 对齐记录、目标研究、Ideas 和技能复盘 |
 | muse-feed-pulse | 每小时 | 本地 Feed 文章 |
+| muse-weekly-governance-review | 周日 21:15 | 产出、成本和调整建议的简短复盘 |
+| muse-monthly-system-audit | 每月 1 日 10:40 | 用户需求、提示词和运行流程的简短审计 |
 
-频率使用 Hermes 当前时区。有明确截止时间的监控会在到期后停止。具体提醒、监控和通知投递可以产生额外 Cron，均记录到安装清单；四个是固定任务数量。
+频率使用 Hermes 当前时区。有明确截止时间的监控会在到期后停止。具体提醒、监控和通知投递可以产生额外 Cron，均记录到安装清单；六个是固定任务数量。
 
 主对话和后台整理共用目标、兴趣和反馈记录。后台可以根据已记录的真实用户表达继续处理；兴趣续期仍需要新的用户表达，助手自己的输出不会续期兴趣。监控使用 Hermes 原生调度规则。
 
-前置脚本会在没有符合条件的工作时跳过模型调用。Feed 每小时检查一次，不要求每次生成文章。
+前四个任务在没有符合条件的工作时跳过模型调用。Feed 每小时检查一次，不要求每次生成文章。周复盘和月度审计按时执行，有资料不足的地方会说明，报告投递到 Bot Chat。两者只提建议，不自动修改配置，也不额外执行 Skill 巡检。用户已有的同类任务会保留。
+
+最近一次周／月报告摘要可通过 `muse_manage status` 查询，完整输出保留在原生 Cron 历史中，下一轮可据此检查之前的建议有没有带来改善。
 
 ## 文件
 
@@ -90,13 +96,13 @@ $HERMES_HOME/
 ├── plugins/hermes-muse/             # 插件代码与资源
 │   ├── skills/companion/
 │   │   ├── SKILL.md                # 共用操作规程
-│   │   └── references/             # 目标、提醒、记忆、Feed、研究
-│   ├── prompts/                    # 上述 5 份提示词
+│   │   └── references/             # 目标、提醒、记忆、Feed、研究、周／月复盘
+│   ├── prompts/                    # 上述 7 份提示词
 │   └── templates/                  # 工作区初始文件
 ├── muse/
 │   ├── install.json                # 任务 ID 和文件归属
 │   ├── install.lock
-│   ├── state.db                    # 兴趣、提醒、频次、Feed 索引
+│   ├── state.db                    # 兴趣、提醒、频次、Feed 索引、复盘摘要
 │   ├── AGENTS.md
 │   ├── TOOLS.md
 │   ├── PROACTIVE_PREFERENCES.md
@@ -127,7 +133,7 @@ $HERMES_HOME/
 
 `Cron 准备结果 → 投递到当前 profile 的 Bot Chat → Bot 阅读结果 → 在聊天中回复用户`
 
-Bot Chat 的接收会触发一轮助手处理，使用该 profile 的模型。没有 Bot Chat 会话时，Hermes 可在首次投递时自动创建；已有会话繁忙时由原生机制排队。Feed 和日常整理仍保持静默，只有筛选出的提醒进入这条流程。
+Bot Chat 的接收会触发一轮助手处理，使用该 profile 的模型。没有 Bot Chat 会话时，Hermes 可在首次投递时自动创建；已有会话繁忙时由原生机制排队。Feed 和日常整理仍保持静默，筛选出的提醒和定期周／月报告进入这条流程。
 
 官方安装命令会显示插件的安装后说明，目前不提供插件自定义的渠道／会话选择菜单。本版默认使用 Bot Chat，不要求先接 Telegram 等外部渠道。
 
