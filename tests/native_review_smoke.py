@@ -98,13 +98,41 @@ def run(home):
             assert get_job(job["id"]), schedule
             remove_job(job["id"])
 
-        bot = {"id": BOT_CHAT_PLATFORM + ":default", "home_target_set": True}
+        bot = {"id": BOT_CHAT_PLATFORM + ":other-profile", "home_target_set": True}
         telegram = {"id": "telegram", "home_target_set": True}
-        slack = {"id": "slack", "home_target_set": True}
-        for targets, expected in (([bot], None), ([bot, telegram], {"deliver": "telegram"}),
-                                  ([bot, telegram, slack], None), ([], None)):
+        for targets in ([bot], [bot, telegram], [], [telegram]):
             with patch("cron.scheduler_delivery.cron_delivery_targets", return_value=targets):
-                assert runtime.host.route() == expected, targets
+                assert runtime.host.route() == {"deliver": BOT_CHAT_PLATFORM}
+        source = runtime.store.read("session", "review-session")
+        source["route"] = {"platform": "telegram", "chat_id": "123", "session_key": "source"}
+        runtime.store.write("session", "review-session", source)
+        assert runtime.host.route("review-session") == {"deliver": BOT_CHAT_PLATFORM}
+        notice = runtime.service.notification_add({
+            "event_key": "review-notice", "message": "A bicycle is available.", "rationale": "Matches the goal",
+            "sources": ["https://example.org/source"], "verified_at": time.time(),
+            "expires": time.time() + 3600, "priority": "urgent", "goal_id": "bicycle"})
+        queued = runtime.handoff(notice["id"])
+        assert queued["route"] == {"deliver": "bot-chat"}
+        job = get_job(queued["job_id"])
+        assert job["deliver"] == "bot-chat" and job["no_agent"], job
+        from hermes_muse.host import cron_run
+        payload = cron_run(home, "deliver-" + notice["id"])
+        assert payload.startswith("[Hermes Muse notification ") and "A bicycle is available." in payload
+        tokens = set_session_vars(session_id="bot-session", chat_type="private", cron_session="")
+        try:
+            before = len(runtime.store.all("signal"))
+            context = runtime.pre_turn(session_id="bot-session", turn_id="delivery-turn",
+                                       user_message='[Cronjob "muse-delivery-test" output]\n\n' + payload)
+            assert "one concise reply" in context["context"]
+            assert len(runtime.store.all("signal")) == before
+            result = json.loads(runtime.handle({"action": "notification_handoff", "data": {"id": notice["id"]}}))
+            assert not result["ok"] and "background data" in result["error"], result
+            runtime.pre_turn(session_id="bot-session", turn_id="human-turn", user_message="I am interested in hiking.")
+            result = json.loads(runtime.handle({"action": "interest_record", "data": {
+                "title": "Hiking", "signal_id": "human-turn"}}))
+            assert result["ok"], result
+        finally:
+            clear_session_vars(tokens)
 
         tokens = set_session_vars(session_id="review-session", chat_type="private", cron_session="")
         try:
@@ -117,7 +145,7 @@ def run(home):
         original = (home / "config.yaml").read_bytes()
         assert enabled(home)
         assert (home / "config.yaml").read_bytes() == original
-    print("PASS: Cron user-decision guard, allowed upkeep, bounded watch prompts/cadence, bot-chat exclusion and interactive completion")
+    print("PASS: Cron user-decision guard, allowed upkeep, bounded watch prompts/cadence, current-profile Bot Chat routing, no self-triggered user signals and interactive completion")
 
 
 if __name__ == "__main__":

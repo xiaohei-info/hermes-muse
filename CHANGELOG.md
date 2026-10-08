@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4
+
+- Send selected Cron results to the current profile's Bot Chat by default. The bot reads the result and replies in that chat.
+- Remove the separate source-session injection step; notification_handoff uses the same delivery queue.
+- Track live-owner and deferred Bot Chat receipts, without treating admission as a completed reply.
+- Exclude incoming delivery turns from user-signal collection and prevent recursive notification creation.
+- Document Bot Chat as the recommended workflow, native missing-chat creation and the installer's static after-install notes.
+
+
 ## 0.1.3
 
 - Refuse user-decision state operations from Cron, including use of saved user signals; keep research progress, reminder preparation and watch stopping available.

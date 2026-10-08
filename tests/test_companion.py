@@ -284,6 +284,38 @@ class CompanionTests(unittest.TestCase):
             HermesHost(self.store).reconcile()
         self.assertEqual(self.store.read("notification", row["id"])["status"], "sent")
 
+    def test_bot_chat_receipts_track_live_and_deferred_completion_without_replay(self):
+        import sys
+        import types
+        from hermes_muse.host import HermesHost
+        self.host.destination = {"deliver": "bot-chat"}
+        modules = {name: types.ModuleType(name) for name in
+                   ("cron.executions", "cron.jobs", "cron.bot_chat_delivery", "tools.bot_live_delivery")}
+        modules["cron.executions"].latest_execution = lambda job: {
+            "id": "bot-attempt", "status": "completed", "delivery_outcome": "queued"}
+        modules["cron.jobs"].get_job = lambda job: {
+            "last_delivery_queued": {"bot-chat:(own)": {"delivery_id": "receipt-one"}}}
+        for deferred in (False, True):
+            row = self.notice("bot-" + str(deferred), priority="urgent")
+            self.service.notification_queue({"id": row["id"]})
+            self.service.delivery_text(row["id"])
+            receipt = {"status": "queued"}
+            modules["tools.bot_live_delivery"].read_delivery_result = lambda home, key: None if deferred else receipt
+            modules["cron.bot_chat_delivery"].read_pending = lambda key: receipt if deferred else None
+            with patch.dict(sys.modules, modules), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
+                for state, expected in (("queued", "transport_queued"), ("claimed", "transport_queued"),
+                                        ("settled" if deferred else "ambiguous", "sent" if deferred else "unknown")):
+                    receipt["status"] = state
+                    HermesHost(self.store).reconcile()
+                    self.assertEqual(self.store.read("notification", row["id"])["status"], expected)
+                before = len(self.host.jobs)
+                self.service.notification_queue({"id": row["id"]})
+                self.assertEqual(len(self.host.jobs), before)
+                modules["cron.jobs"].get_job = lambda job: {}
+                self.assertEqual(HermesHost(self.store).bot_delivery_status(row["job_id"]), "unknown")
+                modules["cron.jobs"].get_job = lambda job: {
+                    "last_delivery_queued": {"bot-chat:(own)": {"delivery_id": "receipt-one"}}}
+
     def test_preference_failure_preserves_file(self):
         before = self.store.path("PROACTIVE_PREFERENCES.md").read_bytes()
         with self.assertRaises(ValueError):

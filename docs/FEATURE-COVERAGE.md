@@ -23,7 +23,7 @@ Configured procedures are not programmatic guarantees of model behavior. Actual 
 | Polling mail, prices and progress | Configured | Watch procedures are provided; the model queries whichever source tools are available. |
 | Finding useful opportunities to notify | Configured | proactive-watch reads goals, interests and research; the model judges relevance and new value. |
 | Checking original evidence and current state | Configured | Prompts require source checks. Code checks verification time, expiry and owner state, not factual truth. |
-| Main-conversation review of background evidence | Partial | Hands off when the source session exists and Hermes permits injection; otherwise uses native Cron delivery. |
+| Main-conversation review of background evidence | Partial | Selected results go to this profile's Bot Chat for review and a reply; no separate injection into the source conversation. |
 | Deduplication across sources | Partial | Equal event keys cannot be queued concurrently; semantic duplicates still require model judgment. |
 | Expiry, quiet hours and frequency limits | Implemented | Checks hours, budgets, topic blocks, owner state and expiry before dispatch. |
 | Reminder feedback | Implemented | Separate actions for done, dismiss, snooze and stop-topic; the model interprets the user reply. |
@@ -67,9 +67,9 @@ Configured procedures are not programmatic guarantees of model behavior. Actual 
 
 | Muse feature | Status | Current implementation and limits |
 | --- | --- | --- |
-| Multiple conversations and reply routing | Partial | Records source sessions/routes, subject to client support. Personal companion workflows exclude group chats. |
+| Multiple conversations and reply routing | Partial | Keeps source records; reminders default to the current profile's Bot Chat without automatic session switching. Personal workflows exclude group chats. |
 | Interactive questions and approval cards | Partial | Uses existing Hermes questions and approvals; no additional Muse components. |
-| Mobile notifications and user availability | Partial | Uses configured messaging channels; no Muse app or cross-device foreground/busy-state awareness. |
+| Mobile notifications and user availability | Partial | Replies in Bot Chat; mobile push depends on the client. No Muse app or cross-device presence awareness. |
 | Mail, calendar, drive and other connectors | Partial | Reuses connected tools; does not ship Muse's connector services or full service-specific skill collection. |
 | Device control and health data | Not covered | No device pairing, phone control or health-data service. |
 | Images, audio, video and podcasts | Partial | Host media tools remain available; the plugin adds no media-production workflow. |

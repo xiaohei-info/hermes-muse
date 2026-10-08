@@ -6,6 +6,8 @@ Paths derived from record IDs are validated and contained; writes are atomic and
 
 Cron cannot use the state tool for user decisions, even with a saved real-user signal: goal creation/status/review changes, interest recording, watch creation, feedback, Feed edits/deletion, forgetting and preferences are refused. Progress, new research/Feed results, reminder preparation and stopping existing watches remain available. Research instructions request read-only work; tool access still follows Hermes configuration and parent permissions, without a plugin-enforced read-only tool allowlist.
 
+Notifications explicitly target the same profile's Bot Chat and run an assistant turn there. They are not user requests: the plugin excludes them from user-signal collection and refuses state mutations on that receiving turn. New user input restores normal state operations. Notification delivery does not automatically move to another profile or external channel.
+
 Native scheduling and transport are outside the plugin transaction. A process crash after dispatch can leave an unknown outcome; do not blindly retry. Deleting an indexed record is not a guarantee that every native transcript, backup or external memory index is erased. The Skill explicitly requires verification and disclosure of those limits.
 
 Report security issues through the repository owner's GitHub contact or a private vulnerability report if available. Do not include private user data or credentials in public issues.

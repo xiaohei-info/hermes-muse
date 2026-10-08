@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.3
+# Hermes Muse design — v0.1.4
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -53,7 +53,7 @@ Four pre-run gates skip empty work without an LLM call. Failed work does not adv
 
 ## Background decision boundary
 
-The state tool refuses user-decision actions in Cron context even if an old real-user signal is supplied: goal creation, goal status/review-date changes, interest recording, watch creation, feedback, Feed edits/deletion, forgetting and preference updates. Research progress, Ideas, new Feed articles, notice preparation/revalidation and stopping an existing watch remain available. New watch prompts are limited to 4000 characters; recurring intervals must be at least 30 minutes. Cron clock slots are checked across midnight regardless of calendar sparsity, with random/hashed clock fields rejected. One-off schedules remain available below 30 minutes. Destination fallback excludes native BOT_CHAT_PLATFORM targets and uses a home only when exactly one gateway remains.
+The state tool refuses user-decision actions in Cron context even if an old real-user signal is supplied: goal creation, goal status/review-date changes, interest recording, watch creation, feedback, Feed edits/deletion, forgetting and preference updates. Research progress, Ideas, new Feed articles, notice preparation/revalidation and stopping an existing watch remain available. New watch prompts are limited to 4000 characters; recurring intervals must be at least 30 minutes. Cron clock slots are checked across midnight regardless of calendar sparsity, with random/hashed clock fields rejected. One-off schedules remain available below 30 minutes. Notification delivery explicitly selects the current profile's bare bot-chat target, regardless of source conversation or gateway count.
 
 ## Lifecycle contracts
 
@@ -62,7 +62,7 @@ The state tool refuses user-decision actions in Cron context even if an old real
 3. Closing a goal pauses its owned future watches, invalidates obsolete pending reminders, and preserves any explicitly marked final result awaiting delivery. Reopen does not silently resume old monitoring.
 4. User feedback distinguishes done, dismiss once, snooze and stop-topic. Silence is not acceptance. Stop-topic blocks future selection; an expired interest can remain an historical fact without being an active research directive.
 5. Discovery/preparation/queueing/dispatch are not successful delivery. Exact event fingerprints are unique under a SQLite transaction. Ordinary dispatch reserves one daily slot atomically. Unknown outcomes are retained for inspection, never blindly retried. Semantic cross-source equivalence still requires judgment.
-6. Delivery uses only the recorded originating route or one unambiguous explicitly configured native home destination. No arbitrary recipient supplied by a research source, no broadcast. No destination means pending local review on the next conversation. Main-session injection uses the native public API only when the existing host gate allows it; never self-grant host permissions.
+6. New notices target bare bot-chat, which native Cron resolves in the job-owning profile. The bot reads the selected result and replies in its canonical chat; Hermes can create a missing chat or queue behind its live owner. notification_handoff aliases the same queue, with no extra source-session injection. Bot Chat receipt completion is tracked separately from admission. Receiving these delivery turns never records a real-user signal and the plugin state tool permits only context/status/feed_list until a real user turn arrives, preventing recursive notification creation. Existing queued jobs retain their original route. No automatic cross-channel resend.
 7. Forgetting first stops rewriters, removes owned originals/derived copies and suppresses identified pending reuse. Native/external memory deletion and historic session/backups are explicitly checked through actual tools; the plugin cannot promise erasure from a backend without a deletion API.
 8. Research uses native asynchronous delegation with bounded fan-out, normalized item results, one retry of failed READ-ONLY items and explicit coverage gaps. Unknown external mutations are never automatically repeated. Model/provider choice remains the host's.
 

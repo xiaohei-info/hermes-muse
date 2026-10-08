@@ -24,7 +24,8 @@ def main():
                 raise AssertionError(completed.stdout + "\n" + completed.stderr)
             return completed.stdout
 
-        run("-m", "hermes_cli.main", "plugins", "install", "xiaohei-info/hermes-muse", "--enable")
+        output = run("-m", "hermes_cli.main", "plugins", "install", "xiaohei-info/hermes-muse", "--enable")
+        assert "Bot Chat" in output, output
         assert (home / "plugins/hermes-muse/plugin.yaml").exists()
         # First real host load; installation alone need not have a live host to initialize.
         run("-c", "from hermes_cli.plugins import discover_plugins; discover_plugins(); from cron.jobs import list_jobs,create_job; assert len(list_jobs(True))==4; create_job(prompt='Unrelated user job',schedule='0 12 * * *',name='keep-me',deliver='local')")

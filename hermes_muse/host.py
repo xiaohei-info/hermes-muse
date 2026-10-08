@@ -185,19 +185,9 @@ class HermesHost:
         return False
 
     def route(self, session_id=None):
-        if session_id:
-            session = self.store.read("session", session_id, {})
-            route = session.get("route")
-            if route and route.get("platform") and route.get("chat_id"):
-                return route
-        from cron.scheduler_delivery import BOT_CHAT_PLATFORM, cron_delivery_targets
-        with profile_scope(self.home):
-            targets = cron_delivery_targets()
-        # No fan-out and no arbitrary choice when more than one home destination exists.
-        homes = [r for r in targets if r.get("home_target_set") and not r["id"].startswith(BOT_CHAT_PLATFORM + ":")]
-        if len(homes) == 1:
-            return {"deliver": homes[0]["id"]}
-        return None
+        from cron.scheduler_delivery import BOT_CHAT_PLATFORM
+        # Bare bot-chat resolves against this job's profile, never another profile's Bot Chat.
+        return {"deliver": BOT_CHAT_PLATFORM}
 
     def delivery_job(self, notification, route):
         return self._owned_job("deliver-" + notification["id"], {
@@ -274,6 +264,8 @@ class HermesHost:
                 status = "failed" if execution["status"] == "failed" else "unknown"
             elif execution["status"] == "completed" and outcome == "delivered":
                 status = "sent"
+            elif outcome == "queued" and row.get("route", {}).get("deliver") == "bot-chat":
+                status = self.bot_delivery_status(row["job_id"])
             elif outcome == "queued":
                 from cron.delivery_queue import get_status
                 with profile_scope(self.home):
@@ -290,6 +282,30 @@ class HermesHost:
                     self.store.put(db, "notification", row["id"], row)
             updates.append(row)
         return updates
+
+    def bot_delivery_status(self, job_id):
+        from cron.jobs import get_job
+        from cron.bot_chat_delivery import read_pending
+        from tools.bot_live_delivery import read_delivery_result
+        with profile_scope(self.home):
+            job = get_job(job_id)
+            if not job:
+                return "unknown"
+            receipts = job.get("last_delivery_queued") or {}
+            if not receipts:
+                return "unknown"  # no receipt id means no evidence of admission or completion
+            states = []
+            for receipt in receipts.values():
+                key = receipt.get("delivery_id")
+                if not key:
+                    return "unknown"
+                actual = read_delivery_result(self.home, key) or read_pending(key) or {}
+                states.append(actual.get("status"))
+        if all(state == "settled" for state in states):
+            return "sent"
+        if all(state in {"settled", "queued", "claimed", "transferred"} for state in states):
+            return "transport_queued"
+        return "unknown"
 
     def local_now(self, timestamp):
         from hermes_time import now
@@ -314,7 +330,18 @@ def cron_run(home, key):
     service = Companion(store, host)
     host.reconcile()
     if key.startswith("deliver-"):
-        return service.delivery_text(key[len("deliver-"):])
+        notice_id = key[len("deliver-"):]
+        text = service.delivery_text(notice_id)
+        if not text:
+            return ""
+        notice = store.read("notification", notice_id, {})
+        if notice.get("route", {}).get("deliver") != "bot-chat":
+            return text  # already queued deliveries keep their original destination
+        return ("[Hermes Muse notification " + notice_id + "]\n"
+                "This is a prepared Cron result, not a new user request. Read the result and report it "
+                "once in this Bot Chat. Do not create or queue another notification for this delivery.\n"
+                "Why: " + notice.get("rationale", "") + "\n"
+                "Sources: " + ", ".join(notice.get("sources", [])) + "\n\n" + text)
     context = service.context()
     if key.startswith("watch-"):
         pair = next(((jid, r) for jid, r in host.manifest()["jobs"].items() if r["key"] == key), None)

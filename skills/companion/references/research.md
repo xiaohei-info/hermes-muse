@@ -6,4 +6,4 @@ For independent read-only research, `research_start` accepts `{goal_id?, items:[
 
 Final output must report total, successes, failures/unknowns, evidence, as-of date and uncovered questions. Save evidence under the goal's hidden_files and append concise progress. If no web/source tool is configured, state that gap rather than fabricate findings. Never choose a different paid model/provider from the host defaults without user direction. For large ongoing work, use native task facilities and bounded batches, not an unbounded assistant loop.
 
-Original main-session handoff for independently scheduled evidence is attempted through the existing plugin message API only with host permission. Otherwise use native notification delivery and preserve source/goal context for follow-up. A platform's missing UI or receipt is not repaired by modifying Hermes core.
+Worthwhile scheduled results use the shared notification queue to the current profile's Bot Chat. The bot reads the prepared result and responds there. Ordinary async subtask callbacks still use Hermes's native parent-session return path.

@@ -4,7 +4,7 @@
 
 Hermes Muse is a personal assistant plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent), inspired by the proactive interactions in [Meta's Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/). It follows up on things you care about after the conversation ends, and gets in touch when something needs your attention.
 
-It uses Hermes memory, Cron, Skills and subagents with the user's existing model, memory backend and messaging configuration. Hindsight, Obsidian and other named services are optional. This is an independent project, unaffiliated with Meta/Muse; its code and prompts are independently written.
+It uses Hermes memory, Cron, Skills and subagents with the user's existing model and memory backend. Reminders go to the current profile's Bot Chat. Hindsight, Obsidian and other named services are optional. This is an independent project, unaffiliated with Meta/Muse; its code and prompts are independently written.
 
 ## Install
 
@@ -18,7 +18,7 @@ The system prompt section takes effect in new conversations. Background executio
 
 ## Feature comparison
 
-The plugin sets up its jobs and rules on first load, using the model, sources and messaging channels already configured in Hermes.
+The plugin sets up its jobs and rules on first load, using the existing Hermes model and sources, with notifications handled in the current profile's Bot Chat.
 
 | Muse feature | Native Hermes | With Hermes Muse |
 | --- | --- | --- |
@@ -123,6 +123,14 @@ Conversation hooks keep short user excerpts for upkeep. Unprocessed excerpts rem
 
 ## Use
 
+**Recommended: use Hermes Muse from the current profile's Bot Chat.** Discuss goals, interests and feedback there. When background work produces something worth bringing up, the bot picks it up:
+
+`Cron prepares a result → delivers to this profile's Bot Chat → the bot reads it → replies to the user in chat`
+
+Receiving the result runs an assistant turn on that profile's model. Hermes can create the Bot Chat on first delivery if it does not exist; its native queue handles a busy chat. Feed writing and routine upkeep stay silent. Only selected reminders enter this delivery flow.
+
+The official installer displays the plugin's after-install notes, but has no plugin-defined channel/session picker. This version uses Bot Chat by default and does not require an external channel such as Telegram.
+
 State a goal, request monitoring or give feedback in normal conversation. For example:
 
 ```text
@@ -134,7 +142,7 @@ List my current goals, interests and pending reminders.
 Search my Feed for urban gardening articles.
 ```
 
-The model identifies goals/interests and calls the state tool to record them. Formal goals require an explicit request. Temporary interests expire after 14 days by default and do not automatically create permanent monitoring. New user input can renew an interest; the assistant’s own research cannot. Without a notification route, candidates stay local. Ask the assistant to call `muse_manage status` for current records.
+The model identifies goals/interests and calls the state tool to record them. Formal goals require an explicit request. Temporary interests expire after 14 days by default and do not automatically create permanent monitoring. New user input can renew an interest; the assistant’s own research cannot. Delivery or model failures retain their state for inspection; there is no automatic resend to another channel. Ask the assistant to call `muse_manage status` for current records.
 
 ## Remove
 

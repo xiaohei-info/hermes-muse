@@ -4,7 +4,7 @@
 
 Hermes Muse 是 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的个人助理插件，受 [Meta Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) 的主动交互启发：让助手在聊完之后继续跟进你关心的事，有值得留意的变化时主动联系你。
 
-插件复用 Hermes 的记忆、Cron、Skill 和子任务。模型、记忆后端、聊天渠道沿用现有配置，不要求安装 Hindsight、Obsidian 或其他指定服务。本项目与 Meta/Muse 无官方关联，代码和提示词独立编写。
+插件复用 Hermes 的记忆、Cron、Skill 和子任务。模型和记忆后端沿用现有配置，提醒默认交给当前 profile 的 Bot Chat，不要求安装 Hindsight、Obsidian 或其他指定服务。本项目与 Meta/Muse 无官方关联，代码和提示词独立编写。
 
 ## 安装
 
@@ -18,7 +18,7 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 ## 功能对照
 
-插件在首次加载时配好任务和规则，模型、信息源和消息渠道沿用现有 Hermes 配置。
+插件在首次加载时配好任务和规则，模型和信息源沿用现有 Hermes 配置，通知默认在当前 profile 的 Bot Chat 中处理。
 
 | Muse 功能 | 原生 Hermes | 安装 Hermes Muse 后 |
 | --- | --- | --- |
@@ -123,6 +123,14 @@ $HERMES_HOME/
 
 ## 使用
 
+**推荐配合当前 profile 的 Bot Chat 使用。** 在这里聊目标、兴趣和反馈，后台有值得通知的结果时，Bot 会接着向你说明：
+
+`Cron 准备结果 → 投递到当前 profile 的 Bot Chat → Bot 阅读结果 → 在聊天中回复用户`
+
+Bot Chat 的接收会触发一轮助手处理，使用该 profile 的模型。没有 Bot Chat 会话时，Hermes 可在首次投递时自动创建；已有会话繁忙时由原生机制排队。Feed 和日常整理仍保持静默，只有筛选出的提醒进入这条流程。
+
+官方安装命令会显示插件的安装后说明，目前不提供插件自定义的渠道／会话选择菜单。本版默认使用 Bot Chat，不要求先接 Telegram 等外部渠道。
+
 直接提出目标、要求监控或反馈即可，例如：
 
 ```text
@@ -134,7 +142,7 @@ $HERMES_HOME/
 搜索 Feed 中关于城市园艺的文章。
 ```
 
-目标和兴趣由模型识别后调用状态工具记录。正式目标需要明确请求；临时兴趣默认 14 天到期，不自动创建长期监控。新的用户消息可以续期兴趣，助手自己的研究不能续期。没有可用通知渠道时，候选保留在本地。查看具体状态可以让助手调用 `muse_manage status`。
+目标和兴趣由模型识别后调用状态工具记录。正式目标需要明确请求；临时兴趣默认 14 天到期，不自动创建长期监控。新的用户消息可以续期兴趣，助手自己的研究不能续期。投递或模型处理失败时保留状态供检查，不自动换渠道重发。查看具体状态可以让助手调用 `muse_manage status`。
 
 ## 卸载
 
