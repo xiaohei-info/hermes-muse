@@ -79,6 +79,21 @@ Skill 随插件注册，文件保留在插件目录。主对话按需读取其�
 | muse-weekly-governance-review | 周日 21:15 | 产出、成本和调整建议的简短复盘 |
 | muse-monthly-system-audit | 每月 1 日 10:40 | 用户需求、提示词和运行流程的简短审计 |
 
+插件不会为固定任务指定模型或 provider。Hermes 每次执行时按这个顺序选择：**任务单独指定的模型 → 当前 profile 的 `cron.model` → profile 主模型**。不设 Cron 默认模型，每小时的后台工作也可能使用主对话的高成本模型，建议先配好再让调度器持续运行。
+
+例如，将下面的配置合并到当前 profile 的 `config.yaml`。模型和 provider 要换成自己实际可用的名称；这里的 `llm` 是已配置的 provider 名称：
+
+```yaml
+cron:
+  model: gpt-6-luna
+  model_provider: llm
+agent:
+  reasoning_overrides:
+    gpt-6-luna: high
+```
+
+推理级别依次取任务的 `reasoning_effort`、该模型的 override、全局 `agent.reasoning_effort`；已测试的 Hermes 版本不支持 `cron.reasoning_effort`。上例会将该 profile 中 Luna 的推理设为 `high`，也适用于使用 Luna 的普通会话。任务已有的单独模型和推理设置优先，插件重载时会保留。Cron 默认配置在下次运行时读取。Bot Chat 接收结果后使用自己的会话模型再处理一轮，仍会产生模型调用；`cron.model` 不控制这一轮的模型。插件安装不会替用户写入上述模型配置。
+
 频率使用 Hermes 当前时区。有明确截止时间的监控会在到期后停止。具体提醒、监控和通知投递可以产生额外 Cron，均记录到安装清单；六个是固定任务数量。
 
 主对话和后台整理共用目标、兴趣和反馈记录。后台可以根据已记录的真实用户表达继续处理；兴趣续期仍需要新的用户表达，助手自己的输出不会续期兴趣。监控使用 Hermes 原生调度规则。
