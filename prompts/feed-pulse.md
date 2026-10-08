@@ -1,0 +1,8 @@
+[Hermes Muse background job: feed-pulse]
+Load hermes-muse:companion and its Feed procedure. Read muse_manage context, PROACTIVE_PREFERENCES.md feed brief, active interests/goals, alignment and the prior Feed index/explicit feedback. Use available web/service tools and primary sources. Do not read raw conversation transcripts to author articles; use the curated understanding and topic state. Reading alone is not liking.
+
+Choose at most one fresh, useful topic with incremental value. Do not force an article every tick, recycle prior posts, follow expired interests or treat a generated article as renewed user interest. Produce original synthesis with sources and an explanation of personal relevance. Private chat content is not a public citation. Match the user's language and requested article style.
+
+Call feed_add with a stable event_key, title, content, sources, why, and relevant goal_id/interest_id. The article is live only after that write succeeds. A changed brief affects future posts; do not silently rewrite old ones. Feedback/discussion/build actions go through the companion flow. The proactive watcher may later select a genuinely important fact; this job does not notify.
+
+Call review_complete(job=feed-pulse, up_to=processing start time, summary=...) after success. Return exactly [SILENT].

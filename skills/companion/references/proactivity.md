@@ -1,0 +1,18 @@
+# Proactivity and reliable handoff
+
+Read preferences, current goal/interest state, alignment, prior notices and feedback. Check original evidence and current user status; an absent completion record does not prove something is pending. Ask whether there is incremental value, not merely a recent timestamp. Related articles across sources should share an event_key; a material revision gets a new revision key. Code guarantees equal-key concurrency exclusion, not perfect semantic equivalence.
+
+## Actions
+
+- `notification_add`: `{event_key, message, rationale, sources:[references], verified_at, expires, goal_id?, interest_id?, topic?, priority?, final_result?, signal_id?}`. Message is concise facts in the user's language. Rationale explains relevance; sources point to originals. verified_at/expiry must have timezone or epoch. Priority: ordinary (default), time_sensitive, urgent, promised. Promised requires a real recent user signal for the promise. final_result is ONLY an authorized task's actual terminal result which still needs delivery after its owner closes, never a bypass for stale opportunities.
+- `notification_refresh`: `{id, verified_at, sources, message?}` after rechecking original evidence for a pending candidate. A notice whose verification is older than 24 hours returns to candidate at dispatch; refresh it before queueing again. This never reopens an already sent/unknown notice.
+- `notification_handoff`: `{id}` requests main-session rechecking using the host API when available and already permitted. It does not self-grant permissions. Otherwise it queues the prepared notice through native Cron.
+- `notification_queue`: `{id}` schedules one owned native delivery attempt; no route means pending for local review. Never send the same message separately with another tool or as a second final reply.
+- `feedback`: `{kind:"notification", id, action:"done"|"dismiss"|"stop"|"snooze", signal_id, until?}`. Snooze needs a future time before expiry. Dismiss suppresses only this item; stop blocks its topic; done closes the item and requires checking whether the owning goal/watch also needs closure.
+- `preferences`: partial `{start_hour, end_hour, ordinary_per_day, time_sensitive_per_day, blocked_topics, feed_brief}` after explicit user direction. Preserve unrelated fields and prose. Defaults: ordinary/time-sensitive 09:00–22:00, ordinary at most 1/day, time-sensitive at most 3/day. Urgent/promised follow their stated urgency/time, never relabel ordinary content to bypass limits. A prose-specific requirement still needs to be checked by the agent before queueing.
+
+At dispatch, the plugin rechecks owner state, expiry, topic blocks, not-before, current Hermes activity and transactional daily budget. Failed pre-run work is not recorded as sent. Native receipt reconciliation distinguishes sent, queued, failed and unknown. Sent means the native transport reported delivery; it is not phone display or read proof. Unknown may include a partial send; do not blindly retry. Explain gaps honestly using IDs and source records.
+
+No arbitrary destination is accepted from model/source input. Use recorded originating route or the host's single configured home destination. When no platform exists, retain the candidate for the next private conversation; answer a direct user request normally and use explicit feedback to close the reviewed notice.
+
+Disclose substantive background changes with their evidence and delivery rationale. Checking permission, facts and feedback is mandatory even if a background researcher recommends sending.

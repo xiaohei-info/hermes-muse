@@ -1,0 +1,44 @@
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q hermes_muse tests
+  hermes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: a28a5d03a9fa60418db5f44f3436fa2aa029c8f2
+          path: hermes-core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -e ../hermes-core
+      - run: python tests/native_smoke.py
+      - name: Official plugin validation in a scratch profile
+        shell: bash
+        run: |
+          MUSE_TEST_HOME=$(mktemp -d)
+          HERMES_HOME="$MUSE_TEST_HOME" hermes plugins validate . --json
