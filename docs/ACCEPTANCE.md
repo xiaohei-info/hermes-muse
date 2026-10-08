@@ -8,7 +8,7 @@
 - Published-repository install/remove smoke test: `python tests/install_smoke.py` (network required, isolated home).
 - Official validation: `hermes plugins validate . --json`.
 
-Native integration runs under temporary homes and checks actual plugin registration, Skill lookup, bounded system prompt rendering, tool availability, four real Cron jobs, actual script gates, idempotent reload, preserved paused jobs/templates/native identity/memory, A -> B -> A profile switching and harmless launchers after removal. It makes no model calls and sends no real messages.
+Native integration runs under temporary homes and checks actual plugin registration, Skill lookup, bounded system prompt rendering, tool availability, four real Cron jobs, actual script gates, idempotent reload, preserved paused jobs/templates/native identity/memory, A -> B -> A profile switching and harmless launchers after removal. It also checks the Cron user-decision boundary with valid saved user signals, allowed background progress/watch stopping, watch prompt/rate limits, one-off schedules, bot-chat exclusion and normal interactive completion. These regressions are in tests/native_review_smoke.py and run as part of native_smoke.py. It makes no model calls and sends no real messages.
 
 Public upstream compatibility baseline: `NousResearch/hermes-agent` commit `a28a5d03a9fa60418db5f44f3436fa2aa029c8f2` (2026-10-08). Local Hermes 0.21.5 was also exercised. APIs move; a broad version range is not proof of compatibility with every future revision.
 

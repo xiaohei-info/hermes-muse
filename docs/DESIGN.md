@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.0
+# Hermes Muse design — v0.1.3
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -50,6 +50,10 @@ Exactly four fixed jobs, all inheriting host model/provider/timezone:
 | muse-feed-pulse | 0 * * * * | Opportunity to generate fresh content; not an article quota. |
 
 Four pre-run gates skip empty work without an LLM call. Failed work does not advance a successful processing cursor. A quiet-pass timer after substantial conversation can advance the existing memory-upkeep job; a new user turn cancels/restarts it and attempts are capped at three/day. No fifth permanent Cron. Explicit promised reminders and goal-owned watches create native jobs as required; notification delivery may use owned one-shot jobs. All dynamic jobs are recorded for closure and uninstall.
+
+## Background decision boundary
+
+The state tool refuses user-decision actions in Cron context even if an old real-user signal is supplied: goal creation, goal status/review-date changes, interest recording, watch creation, feedback, Feed edits/deletion, forgetting and preference updates. Research progress, Ideas, new Feed articles, notice preparation/revalidation and stopping an existing watch remain available. New watch prompts are limited to 4000 characters; recurring intervals must be at least 30 minutes. Cron clock slots are checked across midnight regardless of calendar sparsity, with random/hashed clock fields rejected. One-off schedules remain available below 30 minutes. Destination fallback excludes native BOT_CHAT_PLATFORM targets and uses a home only when exactly one gateway remains.
 
 ## Lifecycle contracts
 

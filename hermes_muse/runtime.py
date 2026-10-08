@@ -21,9 +21,10 @@ SCHEMA = {"name": "muse_manage", "description": "Manage companion goals, tempora
 
 def session_info():
     from gateway.session_context import get_session_env
+    from utils import is_truthy_value
     fields = {key: get_session_env("HERMES_SESSION_" + key.upper(), "") for key in
               ("id", "key", "platform", "chat_id", "chat_type", "thread_id", "user_id", "message_id", "scope_id", "parent_chat_id")}
-    fields["cron"] = get_session_env("HERMES_CRON_SESSION", "") == "1"
+    fields["cron"] = is_truthy_value(get_session_env("HERMES_CRON_SESSION", ""))
     return fields
 
 
@@ -60,6 +61,12 @@ class Runtime:
             action = args["action"]
             if action not in ACTIONS:
                 raise ValueError("Unknown Muse action")
+            # Saved user evidence is not permission for a scheduled run to make new decisions.
+            if info["cron"] and (
+                action in {"watch_create", "goal_create", "interest_record", "feedback", "feed_update", "forget", "preferences"}
+                or action == "goal_update" and ("status" in data or "research_review_at" in data)
+            ):
+                raise ValueError("This action requires a real user conversation; Cron cannot make user decisions")
             from agent.delegation_context import is_delegated_child_context
             if is_delegated_child_context() and action not in {"context", "status", "feed_list"}:
                 raise ValueError("A delegated child may read Muse context but must return proposed changes to its parent")

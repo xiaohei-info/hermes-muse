@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .service import Companion, DEFAULT_PREFERENCES
-from .store import PLUGIN, VERSION, Store, epoch, stamp
+from .store import PLUGIN, VERSION, Store, bounded, epoch, stamp
 
 JOBS = {"proactive-watch": "*/30 * * * *", "memory-upkeep": "0 * * * *",
         "nightly-review": "20 3 * * *", "feed-pulse": "0 * * * *"}
@@ -52,6 +52,33 @@ def file_lock(path):
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def validate_watch_schedule(value):
+    """Enforce 30-minute spacing; cron clock slots include the wrap at midnight."""
+    from cron.jobs import parse_schedule
+    schedule = parse_schedule(value)
+    if schedule["kind"] == "once":
+        return
+    if schedule["kind"] == "interval":
+        if schedule["minutes"] >= 30:
+            return
+    elif schedule["kind"] == "cron":
+        from croniter import croniter
+        fields = schedule["expr"].split()
+        clock_fields = fields[:2] + (fields[5:6] if len(fields) > 5 else [])
+        # Random/hashed clock fields cannot establish a fixed minimum interval.
+        if not any(char.isalpha() for field in clock_fields for char in field):
+            expanded, _ = croniter.expand(schedule["expr"])
+            minutes = range(60) if expanded[0] == ["*"] else expanded[0]
+            hours = range(24) if expanded[1] == ["*"] else expanded[1]
+            seconds = expanded[5] if len(expanded) > 5 else [0]
+            seconds = range(60) if seconds == ["*"] else seconds
+            if len(hours) * len(minutes) * len(seconds) <= 48:
+                times = sorted(h * 3600 + m * 60 + sec for h in hours for m in minutes for sec in seconds)
+                if all(b - a >= 1800 for a, b in zip(times, times[1:] + [times[0] + 86400])):
+                    return
+    raise ValueError("Recurring watches require at least 30 minutes between clock slots, including midnight")
 
 
 class HermesHost:
@@ -163,11 +190,11 @@ class HermesHost:
             route = session.get("route")
             if route and route.get("platform") and route.get("chat_id"):
                 return route
-        from cron.scheduler_delivery import cron_delivery_targets
+        from cron.scheduler_delivery import BOT_CHAT_PLATFORM, cron_delivery_targets
         with profile_scope(self.home):
             targets = cron_delivery_targets()
         # No fan-out and no arbitrary choice when more than one home destination exists.
-        homes = [r for r in targets if r.get("home_target_set") and not r["id"].startswith("bot:")]
+        homes = [r for r in targets if r.get("home_target_set") and not r["id"].startswith(BOT_CHAT_PLATFORM + ":")]
         if len(homes) == 1:
             return {"deliver": homes[0]["id"]}
         return None
@@ -181,6 +208,8 @@ class HermesHost:
         }, owner=notification.get("goal_id"), item=notification["id"])
 
     def watch(self, data):
+        instruction = bounded(data.get("prompt"), 4000)
+        validate_watch_schedule(data["schedule"])
         goal, _ = self.store.goal(data["goal_id"])
         if goal["status"] != "active":
             raise ValueError("A watch requires an active goal")
@@ -193,7 +222,7 @@ class HermesHost:
         prompt = ("Read hermes-muse:companion and muse_manage context. Work only on goal " + goal["id"] + ". "
                   "Check its status and your stop condition first. Never send directly; prepare evidence with notification_add and notification_queue. "
                   "Stop and call watch_stop when the promised condition is satisfied. Return [SILENT].\n"
-                  + str(data["prompt"]) + "\nStop condition: " + str(data["stop_condition"]))
+                  + instruction + "\nStop condition: " + str(data["stop_condition"]))
         return self._owned_job(key, {"name": "muse-" + key, "schedule": data["schedule"], "prompt": prompt,
                                    "skills": [f"{PLUGIN}:companion"], "deliver": "local"}, owner=goal["id"], expires=expires)
 
@@ -270,9 +299,9 @@ class HermesHost:
 
 def enabled(home):
     """Read host consent; removal/disable must make remaining launchers harmless."""
-    from hermes_cli.config import load_config
+    from hermes_cli.config import load_config_readonly
     with profile_scope(home):
-        cfg = load_config()
+        cfg = load_config_readonly()
     plugins = cfg.get("plugins", {})
     return PLUGIN in plugins.get("enabled", []) and PLUGIN not in plugins.get("disabled", [])
 

@@ -92,6 +92,8 @@ def main():
                 assert (home / "muse/install.json").exists()
                 # Host remove intentionally leaves native tasks for the documented cleanup flow.
                 assert len(list_jobs(include_disabled=True)) == 4
+        from native_review_smoke import run as review_checks
+        review_checks(base / "review")
         print("PASS: native registration, Skill, prompt, tools, four Cron jobs, real script gates, A->B->A isolation, idempotent reload, preserved native files and harmless removed-plugin launchers")
 
 

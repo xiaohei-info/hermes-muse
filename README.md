@@ -77,6 +77,8 @@ These hooks process private and local conversations, skipping groups, Cron and s
 
 Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Specific reminders, watches and notice deliveries can create additional recorded Cron jobs; four is the permanent job count.
 
+Background jobs may research, append progress, prepare reminders and stop completed watches. Creating goals or watches, renewing interests, changing goal status or preferences, applying user feedback and forgetting require a user conversation. New recurring watches need at least 30 minutes between runs and a prompt of at most 4000 characters; one-off reminders can be sooner.
+
 Pre-run scripts skip the model when there is no eligible work. An hourly Feed tick does not require an article on every run.
 
 ## Files
