@@ -1,6 +1,6 @@
 manifest_version: 2
 name: hermes-muse
-version: "0.1.1"
+version: "0.1.2"
 description: A provider-neutral companion assembly with goals, memory upkeep, proactive reminders and a silent Feed.
 author: xiaohei-info
 license: MIT
