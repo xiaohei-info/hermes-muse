@@ -18,7 +18,7 @@ If you maintain explicit `platform_toolsets` lists, include `muse` in the platfo
 
 Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and four conversation hooks, adds one system prompt section, and creates six recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
 
-The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Research and content generation use the existing model and tools at their normal cost.
+The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Scheduled checks, research and content generation use the existing model and tools at their normal cost.
 
 ## Feature comparison
 
@@ -26,13 +26,13 @@ The plugin sets up its jobs and rules on first load, using the existing Hermes m
 
 | Muse feature | Native Hermes | With Hermes Muse |
 | --- | --- | --- |
-| Remember preferences and recent context | Built-in memory and user notes retain facts. Scheduled relationship upkeep and nightly review need their own setup. | Memory upkeep is ready to use: regular updates to recent context and relationship notes, plus nightly review. |
+| Remember preferences and recent context | Built-in memory and user notes retain facts. Scheduled relationship upkeep and nightly review need their own setup. | Memory upkeep is ready to use: conversations, sourced facts and task outcomes inform relationship notes. A separate nightly review carries useful lessons into later conversations. |
 | Notice important changes | Cron, session heartbeats and messaging are built in. You configure what to watch, when to notify, deduplication and frequency limits. | A ready-to-use patrol checks connected mail, calendars, reminders and devices, then weighs changes against your recent context. Weather, travel and interest news can prompt a message when they are useful. |
-| Follow goals over time | Persistent tasks and a task board are built in. You organize long-term goals, progress, related watches and stopping conditions. | Create and follow goals in conversation. Progress and watches belong to the goal, and related checks stop when it closes. |
+| Follow goals over time | Persistent tasks and a task board are built in. You organize long-term goals, progress, related watches and stopping conditions. | Follow plans agreed in conversation across days and close them on verified outcomes. Closing a goal stops its watches while keeping any final result awaiting delivery. |
 | Prepare work in the background | Asynchronous subagents are built in. You configure which goals to research regularly and how to save and use the results. | Independent multi-step work goes to native asynchronous subagents while the main conversation stays available. Research batches finish and return without repeated status requests. |
 | Offer relevant suggestions | Can suggest next steps using conversation and memory. Ongoing research, selection and storage need their own setup. | Prepares suggestions from goals and verified personal context, records evidence and feedback, and leaves new proposals for the user to choose. Accepted work keeps moving. |
-| Personalized Feed | Search, writing and scheduled tasks are available. You assemble topic selection, article records, feedback and updates. | A local Feed is ready to use: articles follow your interests, with search, feedback and deletion through chat. |
-| Adjust reminders and stop following up | Can update preferences and stop jobs. You define how feedback affects reminders, goals and watches. | Say “done,” “later” or “stop bringing this up” to adjust reminders. Temporary interests expire after 14 days by default. |
+| Personalized Feed | Search, writing and scheduled tasks are available. You assemble topic selection, article records, feedback and updates. | A local Feed is ready to use: existing memory, interests and feedback guide quiet article generation without requiring a saved goal. Search, discuss or delete articles through chat. |
+| Adjust reminders and stop following up | Can update preferences and stop jobs. You define how feedback affects reminders, goals and watches. | “Done,” “later” and “stop bringing this up” have distinct effects. Completion, cancellation or rescheduling prompts a fresh check of pending reminders; temporary interests expire after 14 days. |
 | Handle everyday errands | Can use browser and external tools. Calling, booking and payment services and workflows need to be connected and configured. | The plugin does not supply calling, booking or payment workflows. Existing tools remain available. |
 
 Feed has no dedicated page. New research batches use native Hermes execution and result callbacks; restart recovery depends on the host, and unknown outcomes are never automatically replayed. Memory upkeep, verification and writing depend on the configured model and tools; see the [implementation details](docs/FEATURE-COVERAGE.md).
@@ -41,8 +41,8 @@ Feed has no dedicated page. New research batches use native Hermes execution and
 
 | Name | Purpose |
 | --- | --- |
-| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: goals and interests, reminders and feedback, memory and relationships, Feed, research, and weekly/monthly reviews. |
-| muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, and handle expiry, stopping and delivery state. |
+| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: connection and device checks, goals and interests, reminders and feedback, memory and relationships, Feed, delegation, and weekly/monthly reviews. |
+| muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, distinguish successful, failed and incomplete source checks, and maintain expiry, stopping and delivery state. |
 
 The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all six recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
 
@@ -52,13 +52,13 @@ The plugin includes seven prompt files:
 
 | File | Purpose |
 | --- | --- |
-| [system.md](prompts/system.md) | Conversation rules: when to read the Skill and current state, record goals, handle feedback, verify reminders and delegate background work. |
-| [proactive-watch.md](prompts/proactive-watch.md) | Look for relevant changes, check sources, prior reminders and expiry, then decide whether to notify. |
-| [memory-upkeep.md](prompts/memory-upkeep.md) | Process new user information, update facts and relationship notes, and record what has been processed. |
-| [nightly-review.md](prompts/nightly-review.md) | Update alignment notes, study active goals, prepare suggestions and review skills. |
-| [feed-pulse.md](prompts/feed-pulse.md) | Write articles from interests and feedback, and save the content and index. |
-| [weekly-governance-review.md](prompts/weekly-governance-review.md) | Review useful outcomes, avoidable effort and next-week adjustments. |
-| [monthly-system-audit.md](prompts/monthly-system-audit.md) | Check whether instructions and recurring work still serve the user; suggest what to move, simplify or remove. |
+| [system.md](prompts/system.md) | Keep the main conversation available for new input and coordination; delegate independent multi-step work and retain unfinished commitments. |
+| [proactive-watch.md](prompts/proactive-watch.md) | Discover available connections/devices, check changes and approaching deadlines, record source coverage, then verify and notify or remain silent. |
+| [memory-upkeep.md](prompts/memory-upkeep.md) | Process new conversations, sourced facts and task outcomes; update memory, relationships and processing progress. |
+| [nightly-review.md](prompts/nightly-review.md) | Review conversations independently of hourly upkeep; update alignment, research goals and suggestions, check closure, and review working lessons and skills. |
+| [feed-pulse.md](prompts/feed-pulse.md) | Use native memory, preferences, current context and real sources to choose topics; quietly write only when there is new value. |
+| [weekly-governance-review.md](prompts/weekly-governance-review.md) | Review outcomes and effort, missed sources, unfinished work and repeated reminders; suggest next-week adjustments. |
+| [monthly-system-audit.md](prompts/monthly-system-audit.md) | Check whether instructions and recurring work still help, look for duplicate workflows and work that should have stopped, and suggest simplifications. |
 
 Hermes appends `system.md` after the memory section through its plugin API; it takes effect in new conversations. The other six files become the corresponding Cron job prompts and are used when those jobs run. Each plugin load refreshes these job prompts while preserving the user's schedule, model and pause settings.
 
@@ -77,7 +77,7 @@ User-signal hooks process private and local conversations, skipping groups, Cron
 
 | Job | Default schedule | Output |
 | --- | --- | --- |
-| muse-proactive-watch | Every 30 minutes | Reminder candidates, evidence and delivery records |
+| muse-proactive-watch | Every 30 minutes | Source coverage, worthwhile reminders, evidence and delivery state |
 | muse-memory-upkeep | Hourly | New facts and people/group notes |
 | muse-nightly-review | Daily at 03:20 | Alignment, goal research, Ideas, working lessons and skill review |
 | muse-feed-pulse | Hourly | Local Feed articles |
@@ -99,13 +99,15 @@ agent:
 
 Hermes currently resolves reasoning from a per-job `reasoning_effort`, then the model-specific override, then `agent.reasoning_effort`; `cron.reasoning_effort` is not a supported setting on the tested baseline. The example sets `high` for Luna in this profile, including ordinary conversations that use Luna. Existing per-job model/reasoning choices take priority and survive plugin reloads. Cron defaults are read on the next run. Bot Chat’s receiving turn uses its own conversation model configuration and adds another model call; `cron.model` does not select that receiving model. The plugin does not write these model settings for you.
 
-Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Explicitly requested timed reminders and watches can create additional recorded Cron jobs; six is the permanent job count. A patrol delivers approved notices in its own final response, with no extra delivery Cron. Deferred candidates stay for the next patrol. Each patrol discovers available connections and devices, reads recent mail/calendar/task changes, and records source coverage or failures. With a known location, plan or interest, it may also check weather affecting a trip, useful local opportunities or substantive news. Routine forecast updates and repeated headlines do not merit a message.
+Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Explicitly requested timed reminders and watches can create additional recorded Cron jobs; six is the permanent job count. A patrol delivers approved notices in its own final response, with no extra delivery Cron. Deferred candidates stay for the next patrol.
 
-Follow-up should bring a checked result, comparison or draft, not just repeat a headline or chase a task. A concrete plan can be recognized in conversation without a formal “create a goal” command; temporary interests still expire. Ordinary proactive messages focus on one useful item and do not repeat a question because the user stayed silent. These are model instructions; judgment depends on the model and available evidence.
+All six fixed jobs call the model on schedule to inspect the information relevant to their work. Each patrol discovers available connections and devices and checks mail, calendars, reminders and other sources even without saved goals or interests. Failed or partial reads are recorded separately, not treated as no change, and do not advance that source's successful checkpoint. Checks consume model calls; tools and subagents can add usage.
 
-Conversations and background upkeep share goals, interests and feedback records. Background work can continue from recorded user input; renewing an interest still requires a newer user signal, never the assistant's own output. Watches use native Hermes scheduling rules.
+A patrol checks the facts and prepares useful help before deciding to interrupt. Examples include weather affecting a trip, a moved meeting, substantive news on an interest, or an event, exhibition or booking window relevant to a known plan. Location, dates and personal relevance need evidence; routine forecasts and repeated headlines do not merit a message. Nothing worthwhile means silence. Ordinary proactive messages focus on one useful item and do not chase a reply because the user stayed quiet. These are model instructions; judgment depends on the model and available sources.
 
-All six fixed jobs call the model on schedule to inspect the information relevant to their work. An empty goal or interest list no longer suppresses a patrol; silence follows a check with nothing worth reporting. Scheduled checks consume model calls, with additional usage for tools and subagents. An hourly Feed tick does not require an article on every run. Weekly and monthly reviews run at their scheduled times, state any evidence gaps, and deliver a short report to Bot Chat. They suggest changes without applying them and do not run a separate Skill audit. Existing user-created reviews are left in place.
+Conversations and background work share goals, interests and feedback. Accepted work can continue across days and close on verified outcomes; criteria that require user confirmation still require it. Completed, cancelled or rescheduled items are rechecked so stale pending reminders can be retired. Renewing an interest requires new user input, never the assistant's own research; snoozing does not extend its original expiry.
+
+Hourly upkeep and nightly review keep separate processing progress, so hourly processing does not hide a conversation from nightly reflection. Feed uses existing memory and current understanding; its hourly check does not require an article every time. Weekly and monthly jobs deliver short reports to Bot Chat. They propose changes without applying them and do not run a separate Skill audit. Existing user-created reviews remain in place.
 
 The latest review summaries are available through `muse_manage status`; full outputs stay in native Cron history. The next review can use them to check whether earlier suggestions led to useful changes.
 
@@ -124,9 +126,9 @@ $HERMES_HOME/
 ├── muse/
 │   ├── install.json                # job IDs and owned files
 │   ├── install.lock
-│   ├── state.db                    # source checks, interests, notices, budgets, Feed, reviews
+│   ├── state.db                    # source checks, cursors, interests, notices, Feed, research, reviews
 │   ├── AGENTS.md
-│   ├── TOOLS.md
+│   ├── TOOLS.md                    # confirmed connections, devices and limits
 │   ├── PROACTIVE_PREFERENCES.md
 │   ├── memory/
 │   │   ├── YYYY-MM-DD.md
@@ -161,18 +163,20 @@ Receiving the result runs an assistant turn on that profile's model. Hermes can 
 
 The official installer displays the plugin's after-install notes, but has no plugin-defined channel/session picker. This version uses Bot Chat by default and does not require an external channel such as Telegram.
 
-State a goal, request monitoring or give feedback in normal conversation. For example:
+Talk about plans, interests and feedback normally. Patrols do not require you to create a goal first. For example:
 
 ```text
 Create a bicycle-purchase goal, with a budget of $1,000 and a decision by month-end.
 Check for a reply to this message until Friday.
+I’m visiting Hangzhou this weekend. Let me know if the weather changes enough to affect the trip.
+I follow space exploration. Important developments are welcome; I don’t need a daily news digest.
 This reminder is done.
 Stop reminders about this topic.
 List my current goals, interests and pending reminders.
 Search my Feed for urban gardening articles.
 ```
 
-The model identifies goals/interests and calls the state tool to record them. Formal goals require an explicit request. Temporary interests expire after 14 days by default and do not automatically create permanent monitoring. New user input can renew an interest; the assistant’s own research cannot. Delivery or model failures retain their state for inspection; there is no automatic resend to another channel. Ask the assistant to call `muse_manage status` for current records.
+The model identifies goals/interests and calls the state tool to record them. Goals need a clear user plan or commitment, without requiring the words “create a goal.” Temporary interests expire after 14 days by default and do not automatically create permanent monitoring. New user input can renew an interest; the assistant’s own research cannot. Delivery or model failures retain their state for inspection; there is no automatic resend to another channel. Ask what was checked, what failed or what remains open; the assistant can use `muse_manage status` to inspect the records.
 
 ## Remove
 
