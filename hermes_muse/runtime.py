@@ -111,7 +111,7 @@ class Runtime:
                     "Read it and reply once in this Bot Chat. Do not queue the same notice again; "
                     "Weekly/monthly recommendations remain proposals until the user asks to apply them; "
                     "any state changes still need the existing evidence required by the Skill."}
-        if text.startswith("[Hermes Muse background evidence]"):
+        if text.startswith(('[Cronjob "', "[Hermes Muse background evidence]")):
             return None
         if not session_id or not turn_id or not text.strip():
             return None

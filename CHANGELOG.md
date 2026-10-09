@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+
+- Exclude all native Cron deliveries from user-signal collection, including existing jobs outside Muse. Keeps background results from creating or renewing interests as if the user had spoken. No change to allowed background state operations.
+- Resolve macOS temporary-directory aliases in the native integration test.
+- Document explicit profile selection, Cron model defaults and the `muse` toolset requirement when platform tool lists are configured.
+
 ## 0.1.5
 
 - Add weekly outcome/cost review and monthly instruction/workflow audit, using the shared Skill and current-profile Bot Chat. Reports propose changes, save summaries for follow-up, and exclude a separate Skill audit.
