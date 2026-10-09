@@ -7,3 +7,5 @@ Selected reminders and scheduled weekly/monthly reports go to that profile's Bot
 First plugin load sets up one Skill, one state tool, three conversation hooks, seven prompts and six recurring Cron jobs. Start a new conversation to load the system prompt section; keep the Hermes scheduler running for background work.
 
 No external messaging channel is required. This installer does not present a channel/session picker. See README.md or README.zh-CN.md for the workflow and uninstall instructions.
+
+If this profile has explicit `platform_toolsets` lists, include `muse` in the relevant platform lists so the assistant can call `muse_manage`.

@@ -14,6 +14,8 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 安装到当前选定的 profile。明确安装到 default：`hermes -p default plugins install xiaohei-info/hermes-muse --enable`；安装到其他 profile 时，将 `default` 换成 `architect` 等名称。每个启用插件的 profile 独立保存状态、创建 6 个任务并投递到自己的 Bot Chat；省略 `-p` 会沿用当前 profile 选择。
 
+如果自行配置了 `platform_toolsets` 白名单，请在使用插件的平台列表中加入 `muse`，否则可能已加载提示词，却无法调用状态工具。
+
 需要 Hermes 0.21.5 及相关插件接口，已测试版本见[验收清单](docs/ACCEPTANCE.md)。首次加载会自动创建工作区，注册 1 个 Skill、1 个状态工具和 3 个会话钩子，追加 1 段系统提示词，并建立 6 个固定 Cron，无须选择功能或另行初始化。没有运行中的宿主时，下次启动 Hermes 才会加载。
 
 新增系统规则在新会话生效。后台执行需要 Hermes 调度器在线、模型可用；实际研究和内容生成使用现有模型与工具，按相应服务计费。

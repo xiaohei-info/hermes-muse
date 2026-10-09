@@ -14,6 +14,8 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 Installation uses the selected profile. Use `hermes -p default plugins install xiaohei-info/hermes-muse --enable` for default, or replace `default` with a profile name such as `architect`. Each enabled profile gets its own state, six jobs and Bot Chat delivery; omitting `-p` follows the current profile selection.
 
+If you maintain explicit `platform_toolsets` lists, include `muse` in the platforms where you use the plugin. An enabled plugin can otherwise load its prompts while its state tool remains unavailable.
+
 Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and three conversation hooks, adds one system prompt section, and creates six recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
 
 The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Research and content generation use the existing model and tools at their normal cost.
