@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.8
+# Hermes Muse design — v0.1.9
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -29,6 +29,12 @@ Paths below are relative to the active `HERMES_HOME`; resolve per call or explic
 - `muse/workspace/your_files/feed/<id>.md`: durable Feed articles; state.db owns indexing and feedback.
 - `scripts/hermes-muse-*.py`: native Cron entrypoints, installed from plugin-owned code, recorded for cleanup. The scheduling host restricts scripts to this directory; symlink escapes are not used.
 - Native `cron/jobs.json`, `cron/executions.db`, output and delivery records stay host-owned; use their APIs, never hand-edit them.
+
+## Proactive behavior
+
+The existing Skill connects conversational intent, memory upkeep, goal research and patrol delivery. Concrete user plans can become goals without a formal creation command; wishes remain expiring interests. Within existing scope, prepare useful results before offering help. Prefer one strong ordinary proactive item, assess changed understanding rather than publication timestamps, avoid silence-driven status chasing, and preserve specific promised schedules and feedback distinctions. This is prompt-level behavior, not a new permission or scheduler.
+
+Nightly review may maintain a small Working lessons section in the companion workspace AGENTS.md when verified reusable experience exists. It preserves user-written conventions and ownership rules, does not copy personal facts or task logs, and leaves the file unchanged when nothing new was learned. Existing workspaces gain that section through the procedure, not an installer overwrite.
 
 ## Execution graph
 

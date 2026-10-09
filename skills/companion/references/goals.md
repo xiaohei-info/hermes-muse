@@ -1,6 +1,6 @@
 # Goals and interest lifecycle
 
-Read context before acting. Explicit commitment to an outcome permits a goal; a passing mention permits only a temporary interest. Never assume a suggestion was accepted. An existing external task/goal stays authoritative: record its reference, use its tools to verify changes, and do not invent a competing completion state.
+Read context before acting. A clear user commitment or concrete plan permits a goal even when phrased as conversation rather than “create a goal”; a passing mention or speculative wish permits only a temporary interest. Preserve the user's actual scope and outcome, and check for an existing goal before creating another. Never assume a suggestion was accepted. An existing external task/goal stays authoritative: record its reference, use its tools to verify changes, and do not invent a competing completion state.
 
 ## Actions
 

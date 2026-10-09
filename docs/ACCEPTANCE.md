@@ -28,3 +28,5 @@ Public upstream compatibility baseline: `NousResearch/hermes-agent` commit `a28a
 These acceptance checks depend on the user's actual model, configured tools and messaging adapter. Unit/integration tests do not establish model judgment quality or real external delivery. Planning coverage percentages are not release pass rates.
 
 For weekly/monthly review acceptance, inspect a real scheduled report: it should cite available outcomes, state missing evidence, offer concise recommendations and leave SOUL/configuration/skills/jobs unchanged. Confirm Bot Chat receives it once and the next review can retrieve its summary. Model judgment and report quality require this live acceptance; automated tests do not prove them.
+
+For proactive behavior acceptance, distinguish a committed near-term plan from a speculative wish; confirm an existing in-scope next step is prepared before a generic offer; reject unchanged repeats after silence; distinguish dismiss/snooze/stop-topic; and verify nightly Working lessons updates preserve user instructions and avoid personal facts/task logs. This needs model-level review; keyword or template checks do not establish the behavior.

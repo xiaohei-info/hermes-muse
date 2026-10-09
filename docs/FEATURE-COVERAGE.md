@@ -89,3 +89,5 @@ Configured procedures are not programmatic guarantees of model behavior. Actual 
 
 The 14-day temporary-interest expiry and 30-day research review for undated goals are this project's rules, not verified Muse defaults. A new user signal can renew an interest; assistant research and old memories cannot. A research review does not automatically cancel an explicitly promised reminder.
 
+
+Proactive behavior instructions also cover concrete conversational plans, useful preparation before interruption, one strongest ordinary item, feedback-sensitive follow-up and bounded working lessons in the companion AGENTS.md. These are model-led procedures, not additional Cron jobs or programmatic guarantees of judgment.

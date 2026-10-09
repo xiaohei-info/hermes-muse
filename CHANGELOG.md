@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9
+
+- Expand proactive behavior instructions: notice concrete conversational plans, prepare useful work before interrupting, select one strongest ordinary item, and avoid status chasing or repeated offers.
+- Connect memory, goal research, patrol selection and feedback/expiry rules without new Skills, hooks or Cron jobs. Existing execution and permission checks are unchanged.
+- Add natural conversation and evidence-first follow-through guidance, plus bounded working lessons maintained in the companion workspace AGENTS.md during nightly review. Existing user instructions and SOUL are preserved.
+
 ## 0.1.8
 
 - Fix the live-acceptance failure in 0.1.7 where the model returned a dispatch-status summary instead of the notice body. A narrowly scoped native transform_llm_output hook now finalizes patrol/watch output from approved records.

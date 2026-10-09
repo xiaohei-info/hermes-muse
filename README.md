@@ -27,7 +27,7 @@ The plugin sets up its jobs and rules on first load, using the existing Hermes m
 | Muse feature | Native Hermes | With Hermes Muse |
 | --- | --- | --- |
 | Remember preferences and recent context | Built-in memory and user notes retain facts. Scheduled relationship upkeep and nightly review need their own setup. | Memory upkeep is ready to use: regular updates to recent context and relationship notes, plus nightly review. |
-| Notice important changes | Cron, session heartbeats and messaging are built in. You configure what to watch, when to notify, deduplication and frequency limits. | Proactive reminders are ready to use: checks follow goals and interests, with source verification, delivery hours and frequency limits already set up. |
+| Notice important changes | Cron, session heartbeats and messaging are built in. You configure what to watch, when to notify, deduplication and frequency limits. | Proactive follow-up is ready to use: recorded plans, interests and recent context guide useful preparation; reminders need new value and respect delivery hours and frequency limits. |
 | Follow goals over time | Persistent tasks and a task board are built in. You organize long-term goals, progress, related watches and stopping conditions. | Create and follow goals in conversation. Progress and watches belong to the goal, and related checks stop when it closes. |
 | Prepare work in the background | Asynchronous subagents are built in. You configure which goals to research regularly and how to save and use the results. | Scheduled goal research and briefing storage are set up. Research can run while the main conversation continues. |
 | Offer relevant suggestions | Can suggest next steps using conversation and memory. Ongoing research, selection and storage need their own setup. | Regularly prepares suggestions for active goals, records candidates and feedback, and waits for the user to decide what to pursue. |
@@ -79,7 +79,7 @@ User-signal hooks process private and local conversations, skipping groups, Cron
 | --- | --- | --- |
 | muse-proactive-watch | Every 30 minutes | Reminder candidates, evidence and delivery records |
 | muse-memory-upkeep | Hourly | New facts and people/group notes |
-| muse-nightly-review | Daily at 03:20 | Alignment, goal research, Ideas and skill review |
+| muse-nightly-review | Daily at 03:20 | Alignment, goal research, Ideas, working lessons and skill review |
 | muse-feed-pulse | Hourly | Local Feed articles |
 | muse-weekly-governance-review | Sunday at 21:15 | A short review of outcomes, costs and proposed adjustments |
 | muse-monthly-system-audit | First day of the month at 10:40 | A short audit of priorities, instructions and recurring work |
@@ -100,6 +100,8 @@ agent:
 Hermes currently resolves reasoning from a per-job `reasoning_effort`, then the model-specific override, then `agent.reasoning_effort`; `cron.reasoning_effort` is not a supported setting on the tested baseline. The example sets `high` for Luna in this profile, including ordinary conversations that use Luna. Existing per-job model/reasoning choices take priority and survive plugin reloads. Cron defaults are read on the next run. Bot Chat’s receiving turn uses its own conversation model configuration and adds another model call; `cron.model` does not select that receiving model. The plugin does not write these model settings for you.
 
 Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Explicitly requested timed reminders and watches can create additional recorded Cron jobs; six is the permanent job count. A patrol delivers approved notices in its own final response, with no extra delivery Cron. Deferred candidates stay for the next patrol.
+
+Follow-up should bring a checked result, comparison or draft, not just repeat a headline or chase a task. A concrete plan can be recognized in conversation without a formal “create a goal” command; temporary interests still expire. Ordinary proactive messages focus on one useful item and do not repeat a question because the user stayed silent. These are model instructions; judgment depends on the model and available evidence.
 
 Conversations and background upkeep share goals, interests and feedback records. Background work can continue from recorded user input; renewing an interest still requires a newer user signal, never the assistant's own output. Watches use native Hermes scheduling rules.
 
@@ -142,6 +144,8 @@ $HERMES_HOME/
 ```
 
 The memory, dreams and goal directories borrow Muse's organization. The ownership record, SQLite state, Feed storage and native memory paths are Hermes adaptations. First load adds missing workspace templates; goals, notes and articles are created during use. Reloading does not duplicate the recurring jobs.
+
+Nightly review can also maintain a short Working lessons section in `muse/AGENTS.md`, merging duplicate methods and updating stale ones while preserving user-written conventions. Personal facts and task logs stay in memory and goal records. Existing installations add the section only when useful; the whole file is not replaced.
 
 Installation does not rewrite Hermes core, SOUL, native USER/MEMORY files, user project AGENTS files or the configured `agent.system_prompt` value. During use, the assistant saves new facts through existing memory tools.
 
