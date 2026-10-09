@@ -74,6 +74,97 @@ class CompanionTests(unittest.TestCase):
         self.service.finalize_delivery(binding)
         return text
 
+    def test_review_returns_remaining_snapshot_and_preserves_new_arrivals(self):
+        for i in range(53):
+            self.now += 1
+            self.user("Feedback " + str(i))
+        through = self.now
+        batch = self.service.context(view="nightly-review")["nightly_user_signals"]
+        self.now += 1
+        newer = self.user("This belongs to the next run")
+        processed = []
+        while batch:
+            processed.extend(r["id"] for r in batch)
+            result = self.service.review_complete({"job": "nightly-review", "through": through,
+                "up_to": batch[-1]["created"], "summary": "Saved this batch"})
+            batch = result["next_user_signals"]
+            self.assertEqual(result["complete"], result["remaining"] == 0)
+        self.assertEqual(len(set(processed)), 54)
+        self.assertNotIn(newer, processed)
+        self.assertEqual([r["id"] for r in self.service.context()["nightly_user_signals"]], [newer])
+        self.assertTrue(self.store.read("meta", "last_review:nightly-review")["complete"])
+
+    def test_review_timestamp_ties_are_not_lost(self):
+        for i in range(30):
+            self.user("Same timestamp " + str(i))
+        batch = self.service.context()["new_user_signals"]
+        self.assertEqual(len(batch), 31)
+        result = self.service.review_complete({"job": "memory-upkeep", "through": self.now,
+            "up_to": self.now, "summary": "Saved all tied messages"})
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["next_user_signals"], [])
+
+    def test_pending_explains_quiet_hours_and_evidence_can_change_urgency(self):
+        self.now = datetime(2026, 10, 8, 23, tzinfo=timezone.utc).timestamp()
+        row = self.notice(priority="time_sensitive", expires=self.now + 3600)
+        self.assertFalse(self.dispatch(row["id"]))
+        gate = self.service.context()["notifications"][0]["delivery_gate"]
+        self.assertEqual(gate["blocked_by"], ["quiet_hours"])
+        self.assertEqual(gate["next_eligible_at"], "2026-10-09T09:00:00+00:00")
+        self.assertTrue(gate["expires_before_eligible"])
+        data = {"id": row["id"], "priority": "urgent", "verified_at": self.now, "sources": ["trusted incident alert"]}
+        with self.assertRaises(ValueError):
+            self.service.notification_refresh(data)
+        updated = self.service.notification_refresh({**data, "priority_reason": "Original provider alert confirms an ongoing account takeover; waiting risks harm"})
+        self.assertEqual(updated["priority_reviews"][0]["from"], "time_sensitive")
+        self.assertTrue(self.dispatch(row["id"]))
+        self.assertEqual(self.store.all("budget"), [])
+
+    def test_urgent_reassessment_preserves_snooze_and_cannot_invent_promise(self):
+        row = self.notice(priority="time_sensitive")
+        self.service.feedback({"kind": "notification", "id": row["id"], "action": "snooze", "until": self.now+3600, "signal_id": self.signal})
+        data = {"id": row["id"], "priority": "urgent", "verified_at": self.now, "sources": ["trusted alert"], "priority_reason": "Verified immediate risk"}
+        self.service.notification_refresh(data)
+        self.assertFalse(self.dispatch(row["id"]))
+        self.assertIn("snoozed", self.store.read("notification", row["id"])["delivery_gate"]["blocked_by"])
+        with self.assertRaises(ValueError):
+            self.service.notification_refresh({**data, "priority": "promised"})
+
+    def test_pending_budget_reset_respects_next_window_and_overnight_preferences(self):
+        row = self.notice()
+        day = self.host.local_now(self.now).date().isoformat()
+        self.store.write("budget", day+":ordinary", 1)
+        self.assertFalse(self.dispatch(row["id"]))
+        gate = self.store.read("notification", row["id"])["delivery_gate"]
+        self.assertEqual(gate["blocked_by"], ["daily_limit"])
+        self.assertEqual(gate["next_eligible_at"], "2026-10-09T09:00:00+00:00")
+        self.service.preference_update({"start_hour": 22, "end_hour": 7})
+        self.store.write("budget", day+":ordinary", 0)
+        gate = self.service.context()["notifications"][0]["delivery_gate"]
+        self.assertEqual(gate["next_eligible_at"], "2026-10-08T22:00:00+00:00")
+        self.service.preference_update({"ordinary_per_day": 0})
+        self.assertIsNone(self.service.context()["notifications"][0]["delivery_gate"]["next_eligible_at"])
+
+    def test_verified_source_alias_archives_duplicate_and_keeps_canonical_checkpoint(self):
+        data = {"source": {"connection": "pim.contacts", "account": "device-a", "resource": "contacts:all"},
+            "scope": "Read contacts", "started_at": self.now, "status": "checked", "summary": "Read verified resource", "cursor": "canonical-page",
+            "expected_resources": ["contacts"], "checked_resources": ["contacts"]}
+        canonical = self.service.source_check(data)
+        other = {**data, "source": {**data["source"], "connection": "pim.status"}, "cursor": "incompatible-page"}
+        duplicate = self.service.source_check(other)
+        self.now += 1
+        merged = self.service.source_check({**other, "started_at": self.now, "source_id": canonical["id"],
+            "alias_reason": "Tool inventory identifies the same contact store", "status": "unavailable", "checked_resources": []})
+        self.assertEqual(merged["id"], canonical["id"])
+        self.assertEqual(merged["cursor"], "canonical-page")
+        self.assertEqual(len(self.store.all("source_check")), 1)
+        self.assertEqual(self.store.read("source_check_alias_history", duplicate["id"])["cursor"], "incompatible-page")
+        again = self.service.source_check({**other, "started_at": self.now, "status": "partial", "checked_resources": []})
+        self.assertEqual(again["id"], canonical["id"])
+        with self.assertRaises(ValueError):
+            self.service.source_check({**other, "source": {**other["source"], "account": "device-b"},
+                "source_id": canonical["id"], "alias_reason": "Must not cross accounts"})
+
     def test_source_checks_preserve_success_on_failure_and_stale_completion(self):
         data = {"source": {"connection": "calendar-tool", "account": "account-a", "resource": "calendars:all"},
                 "scope": "main calendar, upcoming week", "expected_resources": ["primary"], "checked_resources": ["primary"],

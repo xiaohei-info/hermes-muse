@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, is_background_message, stamp
 
@@ -225,6 +225,11 @@ class Companion:
                 return False
         return row.get("expires", now + 1) > now
 
+    @staticmethod
+    def signal_batch(signals):
+        # Include timestamp ties so advancing a timestamp cursor cannot lose a sibling.
+        return [r for r in signals if r["created"] <= signals[24]["created"]] if len(signals) > 25 else signals
+
     def context(self, view=None):
         now = self.clock()
         goals = self.store.goals()
@@ -233,6 +238,10 @@ class Companion:
         cursor = self.store.read("cursor", "memory-upkeep", 0)
         nightly_cursor = self.store.read("cursor", "nightly-review", 0)
         notices = self.store.all("notification")
+        with self.store.transaction() as db:
+            for row in notices:
+                if row["status"] in {"candidate", "pending"} and row["expires"] > now:
+                    row["delivery_gate"] = self.delivery_gate(row, db, now, self.preferences())
         live = [r for r in notices if r["status"] in {"candidate", "pending", "queued", "dispatching", "transport_queued", "unknown", "failed"}
                 and (r["expires"] > now or r["status"] not in {"candidate", "pending"})]
         history = sorted((r for r in notices if r not in live), key=lambda r: r["created"], reverse=True)[:30]
@@ -240,8 +249,10 @@ class Companion:
                 "goals": [g for g in goals if g["status"] == "active" and g["research_review_at"] > now],
                 "goals_needing_review": [g for g in goals if g["status"] == "active" and g["research_review_at"] <= now],
                 "interests_and_ideas": interests,
-                "new_user_signals": [r for r in signals if r["created"] > cursor][:25] if view in {None, "memory-upkeep"} else [],
-                "nightly_user_signals": [r for r in signals if r["created"] > nightly_cursor][:25] if view in {None, "nightly-review"} else [],
+                "new_user_signals": self.signal_batch([r for r in signals if r["created"] > cursor]) if view in {None, "memory-upkeep"} else [],
+                "nightly_user_signals": self.signal_batch([r for r in signals if r["created"] > nightly_cursor]) if view in {None, "nightly-review"} else [],
+                "review_backlog": {job: {"remaining": sum(r["created"] > value for r in signals), "through": stamp(now)}
+                                   for job, value in (("memory-upkeep", cursor), ("nightly-review", nightly_cursor))},
                 "recent_user_context": [r for r in signals if r["created"] > now - DAY]
                                        if view == "proactive-watch" or str(view).startswith("watch-") else [],
                 "review_cursors": {job: self.store.read("cursor", job, 0) for job in ("memory-upkeep", "nightly-review", "proactive-watch", "feed-pulse")},
@@ -259,17 +270,22 @@ class Companion:
             raise ValueError("Unknown review job")
         up_to = epoch(data["up_to"])
         now = self.clock()
-        if up_to > now:
-            raise ValueError("Cannot advance a cursor into the future")
+        through = epoch(data.get("through", now))
+        if up_to > through or through > now:
+            raise ValueError("Review cursor must not exceed its snapshot or the current time")
         with self.store.transaction() as db:
             old = self.store.get(db, "cursor", job, 0)
             if job in {"memory-upkeep", "nightly-review"}:
                 pending = sorted((s for s in self.store.rows(db, "signal") if s["created"] > old and not is_background_message(s.get("text"))), key=lambda s: s["created"])
-                if len(pending) > 25 and up_to > pending[24]["created"]:
+                if len(pending) > 25 and up_to > self.signal_batch(pending)[-1]["created"]:
                     raise ValueError("Cursor skips unseen signals; process the returned batch first")
+            remaining = [r for r in pending if max(old, up_to) < r["created"] <= through] if job in {"memory-upkeep", "nightly-review"} else []
             self.store.put(db, "cursor", job, max(old, up_to))
-            self.store.put(db, "meta", "last_review:" + job, {"at": now, "summary": bounded(data["summary"], 2000)})
-        return {"job": job, "processed_through": stamp(max(old, up_to))}
+            self.store.put(db, "meta", "last_review:" + job, {"at": now, "summary": bounded(data["summary"], 2000),
+                                                           "complete": not remaining, "remaining": len(remaining)})
+        return {"job": job, "processed_through": stamp(max(old, up_to)), "through": stamp(through),
+                "complete": not remaining, "remaining": len(remaining), "next_user_signals": self.signal_batch(remaining),
+                "instruction": "Process next_user_signals now and call review_complete again with the same through; do not finish this run yet." if remaining else "This snapshot is complete."}
 
     def source_check(self, data):
         """Stable source identity and explicit coverage, independent of scan dates/prose."""
@@ -303,6 +319,19 @@ class Companion:
         if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 4000):
             raise ValueError("Source cursor must be text up to 4000 characters")
         with self.store.transaction() as db:
+            alias = self.store.get(db, "source_alias", key)
+            target = data.get("source_id") or (alias or {}).get("target")
+            if target and target != key:
+                canonical = self.store.get(db, "source_check", identifier(target))
+                if not canonical or any(canonical["source"][f] != source[f] for f in ("account", "resource")):
+                    raise ValueError("source_id must identify the same account and resource; never merge different accounts/collections")
+                reason = (alias or {}).get("reason") or bounded(data.get("alias_reason"), 1000)
+                self.store.put(db, "source_alias", key, {"target": target, "source": source, "reason": reason})
+                duplicate = self.store.get(db, "source_check", key)
+                if duplicate:
+                    self.store.put(db, "source_check_alias_history", key, duplicate)
+                    self.store.delete(db, "source_check", key)
+                key, source = target, canonical["source"]
             old = self.store.get(db, "source_check", key, {})
             if started < old.get("started_at", 0):
                 return old
@@ -379,6 +408,14 @@ class Companion:
             row = self.store.get(db, "notification", key)
             if not row or row["status"] not in {"candidate", "pending"}:
                 raise ValueError("Only a pending, not-yet-dispatched candidate can be reverified")
+            if "priority" in data and data["priority"] != row["priority"]:
+                priority = data["priority"]
+                if priority not in {"ordinary", "time_sensitive", "urgent"} or row["priority"] == "promised":
+                    raise ValueError("Reassessment cannot create or remove a user promise")
+                reason = bounded(data.get("priority_reason"), 2000)
+                row["priority_reviews"] = row.get("priority_reviews", []) + [{"from": row["priority"], "to": priority,
+                    "reason": reason, "verified_at": verified, "sources": sources}]
+                row["priority"] = priority
             row.update(verified_at=verified, sources=sources)
             if "message" in data:
                 row["message"] = bounded(data["message"], 6000)
@@ -407,7 +444,6 @@ class Companion:
         """Native output hook: emit verified notice bodies, never a model's status summary."""
         now = self.clock()
         prefs = self.preferences()
-        local = self.host.local_now(now)
         with self.store.transaction() as db:
             for row in self.store.rows(db, "notification"):
                 if (not row.get("direct_delivery") or row.get("execution_id") != delivery["execution_id"]
@@ -420,18 +456,11 @@ class Companion:
                 elif row["topic"] in prefs["blocked_topics"]:
                     row["status"] = "dismissed"
                 else:
-                    start, end = prefs["start_hour"], prefs["end_hour"]
-                    waking = start <= local.hour < end if start < end else local.hour >= start or local.hour < end
                     if row.get("interest_id"):
                         interest = self.store.get(db, "interest", row["interest_id"], {})
                         row["not_before"] = max(row["not_before"], interest.get("not_before", 0))
-                    allowed = row["not_before"] <= now
-                    if row["priority"] in {"ordinary", "time_sensitive"}:
-                        allowed &= waking
-                    if row["priority"] == "ordinary":
-                        allowed &= not any(s.get("active") and s.get("last_signal", 0) > now - 15 * 60
-                                           for s in self.store.rows(db, "session"))
-                    if not allowed:
+                    row["delivery_gate"] = self.delivery_gate(row, db, now, prefs, check_budget=False)
+                    if row["delivery_gate"]["blocked_by"]:
                         row.update(status="pending", job_id=None)
                     elif row["verified_at"] < now - DAY:
                         row.update(status="candidate", job_id=None, needs_reverification=True)
@@ -454,6 +483,47 @@ class Companion:
             parts.append("[Hermes Muse notification " + row["id"] + "]\n"
                          "Why: " + row["rationale"] + "\nSources: " + ", ".join(row["sources"]) + "\n\n" + row["message"])
         return "\n\n".join(parts)
+
+    def delivery_gate(self, row, db, now, prefs, *, check_budget=True):
+        """Explain policy eligibility, not a promise of scheduled or successful delivery."""
+        reasons, eligible = [], max(now, row["not_before"])
+        if row.get("interest_id"):
+            interest = self.store.get(db, "interest", row["interest_id"], {})
+            eligible = max(eligible, interest.get("not_before", 0))
+        if eligible > now:
+            reasons.append("snoozed")
+        limited = row["priority"] in {"ordinary", "time_sensitive"}
+        if row["priority"] == "ordinary":
+            active_until = max((s.get("last_signal", 0) + 900 for s in self.store.rows(db, "session") if s.get("active")), default=0)
+            if active_until > now:
+                reasons.append("active_conversation")
+                eligible = max(eligible, active_until)
+        if limited:
+            local = self.host.local_now(now)
+            if check_budget:
+                limit = prefs[row["priority"] + "_per_day"]
+                if self.store.get(db, "budget", local.date().isoformat() + ":" + row["priority"], 0) >= limit:
+                    reasons.append("daily_limit")
+                    if limit == 0:
+                        return {"blocked_by": reasons, "next_eligible_at": None, "expires_before_eligible": True,
+                                "note": "This priority is disabled by the current daily allowance."}
+                    eligible = max(eligible, (local + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            start, end = prefs["start_hour"], prefs["end_hour"]
+            def next_open(ts):
+                at = self.host.local_now(ts)
+                waking = start <= at.hour < end if start < end else at.hour >= start or at.hour < end
+                if waking:
+                    return ts
+                opening = at.replace(hour=start, minute=0, second=0, microsecond=0)
+                if opening.timestamp() <= ts:
+                    opening += timedelta(days=1)
+                return opening.timestamp()
+            if next_open(now) > now:
+                reasons.append("quiet_hours")
+            eligible = next_open(eligible)
+        return {"blocked_by": reasons, "next_eligible_at": stamp(eligible),
+                "expires_before_eligible": eligible >= row["expires"],
+                "note": "Earliest policy eligibility only; the next patrol must reverify and deliver. No extra Cron is created."}
 
     def delivery_text(self, key, delivery=None):
         now = self.clock()
@@ -481,24 +551,14 @@ class Companion:
                 row["status"] = "dismissed"
                 self.store.put(db, "notification", key, row)
                 return ""
-            local = self.host.local_now(now)
-            allowed = row["not_before"] <= now
-            if row["priority"] in {"ordinary", "time_sensitive"}:
-                start, end = prefs["start_hour"], prefs["end_hour"]
-                waking = start <= local.hour < end if start < end else local.hour >= start or local.hour < end
-                allowed &= waking
-                if row["priority"] == "ordinary":
-                    sessions = self.store.rows(db, "session")
-                    allowed &= not any(s.get("active") and s.get("last_signal", 0) > now - 15 * 60 for s in sessions)
-                budget_key = local.date().isoformat() + ":" + row["priority"]
-                used = self.store.get(db, "budget", budget_key, 0)
-                allowed &= used < prefs[row["priority"] + "_per_day"]
-            if not allowed:
+            row["delivery_gate"] = self.delivery_gate(row, db, now, prefs)
+            if row["delivery_gate"]["blocked_by"]:
                 row.update(status="pending", job_id=None)
                 self.store.put(db, "notification", key, row)
                 return ""
             if row["priority"] in {"ordinary", "time_sensitive"}:
-                self.store.put(db, "budget", budget_key, used + 1)
+                budget_key = self.host.local_now(now).date().isoformat() + ":" + row["priority"]
+                self.store.put(db, "budget", budget_key, self.store.get(db, "budget", budget_key, 0) + 1)
                 row["budget_key"] = budget_key
             row.update(status="dispatching", dispatched_at=now)
             if delivery:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.13
+
+- Return remaining review batches directly so hourly/nightly work can finish its snapshot in one run; preserve timestamp ties and truthful partial progress.
+- Explain pending notification blockers and earliest eligibility; allow evidence-backed urgency reassessment without bypassing user snoozes or inventing promises.
+- Bind verified tool aliases to existing source IDs and archive duplicate observations without transferring success checkpoints.
+
+
 ## 0.1.12
 
 - Preserve all recorded real-user context from the last day for patrols, removing the 0.1.11 eight-message/1,000-character excerpt cap. Earlier context remains available through native memory/session retrieval.

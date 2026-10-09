@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.12
+# Hermes Muse design — v0.1.13
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -87,3 +87,11 @@ Use standard-library unit tests for actual invariants: idempotent initialization
 Evidence-backed completion may close an already accepted goal after days without a fresh user turn; cancellation, reopening and scope/review extension still need user evidence. The model must match the original completion criteria, including any required user confirmation. External authoritative goals still require external verification. Independent Ideas can cite personal/source context without a fabricated goal and expire without becoming tasks. Unsent notices can be retired from verified source evidence; this does not relabel uncertain deliveries or grant a topic-wide opt-out.
 
 Substantive content, sound judgment, proactive interaction, coverage, timely follow-through and user context take priority over lowering usage; optimization must preserve these behaviors. Source identity is a digest of exact connection/account/resource fields, independent of scan timestamps or prose. Reported expected/checked resource sets gate successful checkpoints; semantic truth still depends on actual tool use. Older free-form checkpoints are archived, not guessed into new identities. Native async result envelopes are excluded at ingestion, processing and signal authorization; historical misclassified rows move to background_signal without losing their content. Cron context uses its host task identity to provide only the appropriate hourly/nightly signal batch; patrols get all recorded real-user signals from the last day, without an additional message-count or per-excerpt cap, Feed gets no raw signal batches. Tested integration recipes are reused while live discovery and source reads continue every patrol.
+
+## Review completion and pending delivery
+
+Signal pages include timestamp ties. Each review snapshots its initial context time, persists successful batch work, and receives the next page/count directly from review_complete until that snapshot is complete. New arrivals wait; interruptions retain truthful partial progress. This is a model-directed loop with explicit tool state, not an independent model scheduler.
+
+Preparation and finalization share delivery_gate. Its reasons and next_eligible_at describe policy eligibility only, not transport success or the scheduler's next run. Reverification can change non-promised priorities with recorded source/reason history. Genuine urgency bypasses ordinary quiet hours/budgets, never snooze, expiry, dedup or topic opt-out. Existing user preferences are preserved.
+
+source_check accepts a canonical source_id and evidence-based alias_reason for different tool entry points into the same account/resource. Exact observed alias bindings persist; duplicate observations are archived without transferring success cursors. No automatic fuzzy/provider equivalence is inferred.
