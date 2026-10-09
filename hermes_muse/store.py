@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "0.1.10"
+VERSION = "0.1.11"
 PLUGIN = "hermes-muse"
 DAY = 86400
 GOVERNANCE_JOBS = ("weekly-governance-review", "monthly-system-audit")
@@ -48,6 +48,13 @@ def bounded(value, limit=8000):
     return value.strip()
 
 
+def is_background_message(text):
+    return isinstance(text, str) and text.lstrip().startswith((
+        '[Cronjob "', '[ASYNC DELEGATION ', '[Hermes Muse notification ',
+        '[Hermes Muse background evidence]',
+    ))
+
+
 class Store:
     def __init__(self, home):
         self.home = Path(home).resolve()
@@ -63,6 +70,19 @@ class Store:
             if version > 1:
                 raise ValueError("State schema is newer than this plugin; upgrade before opening")
             db.execute("PRAGMA user_version=1")
+            # Preserve old observations as evidence, outside active user signals/checkpoints.
+            for row in self.rows(db, "signal"):
+                if is_background_message(row.get("text")):
+                    self.put(db, "background_signal", row["id"], row)
+                    self.delete(db, "signal", row["id"])
+                    session = self.get(db, "session", row.get("session_id"), {})
+                    if session.get("turn_id") == row["id"]:
+                        session["active"] = False
+                        self.put(db, "session", row["session_id"], session)
+            for row in self.rows(db, "source_check"):
+                if not row.get("source"):
+                    self.put(db, "source_check_legacy", row["id"], row)
+                    self.delete(db, "source_check", row["id"])
         os.chmod(self.root / "state.db", 0o600)
 
     def path(self, relative):

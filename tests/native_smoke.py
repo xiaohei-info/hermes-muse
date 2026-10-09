@@ -109,6 +109,17 @@ def main():
                 agent = SimpleNamespace(session_id="native-patrol", model="test", platform="cron")
                 final, changed, _ = apply_llm_output_transform(agent, "Status: dispatching", turn_id="native-turn")
                 assert changed and final == prepared["final_response"] and "Verified test body." in final
+                # Compare our read-only receipt lookup with the actual host producer key.
+                from cron.scheduler_delivery import _deliver_to_bot_chat
+                from hermes_muse.host import bot_receipt_key
+                with patch("tools.bot_live_delivery.read_delivery_result", return_value=None), \
+                     patch("cron.bot_chat_delivery.read_pending", return_value=None), \
+                     patch("tools.bot_live_delivery.find_canonical_live_owner", return_value={"test": True}), \
+                     patch("tools.bot_live_delivery.deliver_to_live_owner", side_effect=lambda home, owner, message, **kw: {"status": "queued", "message": message}) as deliver:
+                    _deliver_to_bot_chat({"id": patrol, "name": "muse-proactive-watch", "execution_id": attempt["id"]}, final, "")
+                    assert deliver.call_args.kwargs["delivery_id"] == bot_receipt_key(home, patrol, attempt["id"])
+                context = json.loads(entry.handler({"action": "context"}, task_id="cron:" + patrol + ":" + attempt["id"]))["result"]
+                assert context["nightly_user_signals"] == []
                 finish_execution(attempt["id"], success=True, delivery_outcome="delivered")
                 runtime.host.reconcile()
                 assert runtime.store.read("notification", notice["id"])["status"] == "sent"

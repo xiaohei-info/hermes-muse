@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime
 
-from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, stamp
+from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, is_background_message, stamp
 
 DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": 1,
                        "time_sensitive_per_day": 3, "blocked_topics": [], "feed_brief": ""}
@@ -55,6 +55,8 @@ class Companion:
         return prefs
 
     def signal(self, turn_id, session_id, text, route=None):
+        if is_background_message(text):
+            return
         now = self.clock()
         with self.store.transaction() as db:
             if self.store.get(db, "signal", turn_id):
@@ -73,7 +75,7 @@ class Companion:
 
     def require_signal(self, db, signal_id):
         row = self.store.get(db, "signal", bounded(signal_id, 160))
-        if not row or row["created"] < self.clock() - DAY:
+        if not row or is_background_message(row.get("text")) or row["created"] < self.clock() - DAY:
             raise ValueError("A real user signal from the last 24 hours is required")
         return row
 
@@ -223,11 +225,11 @@ class Companion:
                 return False
         return row.get("expires", now + 1) > now
 
-    def context(self):
+    def context(self, view=None):
         now = self.clock()
         goals = self.store.goals()
         interests = [r for r in self.store.all("interest") if r["expires"] > now and r.get("not_before", 0) <= now and r["status"] in {"active", "candidate", "accepted"}]
-        signals = sorted(self.store.all("signal"), key=lambda r: r["created"])
+        signals = sorted((r for r in self.store.all("signal") if not is_background_message(r.get("text"))), key=lambda r: r["created"])
         cursor = self.store.read("cursor", "memory-upkeep", 0)
         nightly_cursor = self.store.read("cursor", "nightly-review", 0)
         notices = self.store.all("notification")
@@ -238,10 +240,13 @@ class Companion:
                 "goals": [g for g in goals if g["status"] == "active" and g["research_review_at"] > now],
                 "goals_needing_review": [g for g in goals if g["status"] == "active" and g["research_review_at"] <= now],
                 "interests_and_ideas": interests,
-                "new_user_signals": [r for r in signals if r["created"] > cursor][:25],
-                "nightly_user_signals": [r for r in signals if r["created"] > nightly_cursor][:25],
+                "new_user_signals": [r for r in signals if r["created"] > cursor][:25] if view in {None, "memory-upkeep"} else [],
+                "nightly_user_signals": [r for r in signals if r["created"] > nightly_cursor][:25] if view in {None, "nightly-review"} else [],
+                "recent_user_context": [{**r, "text": r["text"][:1000]} for r in signals if r["created"] > now - DAY][-8:]
+                                       if view == "proactive-watch" or str(view).startswith("watch-") else [],
                 "review_cursors": {job: self.store.read("cursor", job, 0) for job in ("memory-upkeep", "nightly-review", "proactive-watch", "feed-pulse")},
                 "source_checks": self.store.all("source_check"),
+                "legacy_source_checks": len(self.store.all("source_check_legacy")),
                 "research": [{"id": b["id"], "goal_id": b.get("goal_id"), "mode": b.get("mode", "legacy"),
                               "created": b["created"]} for b in sorted(self.store.all("research"), key=lambda x: x["created"], reverse=True)[:20]],
                 "notifications": live,
@@ -259,7 +264,7 @@ class Companion:
         with self.store.transaction() as db:
             old = self.store.get(db, "cursor", job, 0)
             if job in {"memory-upkeep", "nightly-review"}:
-                pending = sorted((s for s in self.store.rows(db, "signal") if s["created"] > old), key=lambda s: s["created"])
+                pending = sorted((s for s in self.store.rows(db, "signal") if s["created"] > old and not is_background_message(s.get("text"))), key=lambda s: s["created"])
                 if len(pending) > 25 and up_to > pending[24]["created"]:
                     raise ValueError("Cursor skips unseen signals; process the returned batch first")
             self.store.put(db, "cursor", job, max(old, up_to))
@@ -267,8 +272,13 @@ class Companion:
         return {"job": job, "processed_through": stamp(max(old, up_to))}
 
     def source_check(self, data):
-        """Record a real source query; failed/partial reads never advance its watermark."""
-        key = identifier(data["id"])
+        """Stable source identity and explicit coverage, independent of scan dates/prose."""
+        source = data.get("source")
+        fields = {"connection", "account", "resource"}
+        if not isinstance(source, dict) or set(source) != fields:
+            raise ValueError("source needs connection, account and resource (stable tool/account/resource IDs, no scan dates)")
+        source = {k: bounded(source[k], 500) for k in sorted(fields)}
+        key = "source-" + digest(json.dumps(source, sort_keys=True, ensure_ascii=False, separators=(",", ":")))
         started = epoch(data["started_at"])
         now = self.clock()
         if not 0 < started <= now:
@@ -278,17 +288,27 @@ class Companion:
             raise ValueError("Invalid source check status")
         scope = bounded(data["scope"], 1000)
         summary = bounded(data["summary"], 2000)
+        coverage = {}
+        for field in ("expected_resources", "checked_resources"):
+            values = data.get(field, [])
+            if not isinstance(values, list) or len(values) > 500:
+                raise ValueError(field + " must be a list of resource IDs")
+            coverage[field] = sorted(set(bounded(v, 1000) for v in values))
+        expected, checked = coverage["expected_resources"], coverage["checked_resources"]
+        if not set(checked).issubset(expected):
+            raise ValueError("checked_resources must belong to expected_resources")
+        if status == "checked" and (not expected or checked != expected):
+            status = "partial"  # A listed calendar is not a queried calendar.
         cursor = data.get("cursor")
         if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 4000):
             raise ValueError("Source cursor must be text up to 4000 characters")
         with self.store.transaction() as db:
             old = self.store.get(db, "source_check", key, {})
-            if old and old["scope"] != scope:
-                raise ValueError("Use a new source ID for a different account or query scope")
             if started < old.get("started_at", 0):
-                return old  # A slower old scan cannot overwrite a newer observation.
-            row = {**old, "id": key, "scope": scope, "started_at": started,
-                   "finished_at": now, "status": status, "summary": summary}
+                return old
+            row = {**old, "id": key, "source": source, "scope": scope, "started_at": started,
+                   "finished_at": now, "status": status, "summary": summary, **coverage}
+            row["missing_resources"] = sorted(set(expected) - set(checked))
             if status == "checked":
                 row.update(last_success=started, cursor=cursor)
             self.store.put(db, "source_check", key, row)

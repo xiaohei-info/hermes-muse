@@ -75,7 +75,8 @@ class CompanionTests(unittest.TestCase):
         return text
 
     def test_source_checks_preserve_success_on_failure_and_stale_completion(self):
-        data = {"id": "calendar-main", "scope": "main calendar, upcoming week",
+        data = {"source": {"connection": "calendar-tool", "account": "account-a", "resource": "calendars:all"},
+                "scope": "main calendar, upcoming week", "expected_resources": ["primary"], "checked_resources": ["primary"],
                 "started_at": self.now, "status": "checked", "summary": "Read calendar fixture", "cursor": "revision-1"}
         first = self.service.source_check(data)
         self.now += 60
@@ -84,12 +85,65 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(failed["cursor"], "revision-1")
         late = self.service.source_check({**data, "cursor": "stale"})
         self.assertEqual(late, failed)
-        with self.assertRaises(ValueError):
-            self.service.source_check({**data, "scope": "another account"})
         self.now += 60
         recovered = self.service.source_check({**data, "started_at": self.now, "cursor": "revision-2"})
         self.assertEqual(recovered["last_success"], self.now)
         self.assertEqual(self.service.context()["source_checks"], [recovered])
+
+    def test_source_identity_ignores_scan_labels_and_checks_actual_resource_coverage(self):
+        data = {"source": {"connection": "calendar", "account": "a", "resource": "calendars:all"},
+                "scope": "Next week", "expected_resources": ["primary", "family"], "checked_resources": ["primary", "family"],
+                "started_at": self.now, "status": "checked", "summary": "Both queried", "cursor": "initial"}
+        first = self.service.source_check(data)
+        self.now += 60
+        partial = self.service.source_check({**data, "id": "patrol-20261010", "scope": "Next rolling week, new wording",
+            "started_at": self.now, "checked_resources": ["primary"], "summary": "Only primary queried", "cursor": "do-not-advance"})
+        self.assertEqual(partial["id"], first["id"])
+        self.assertEqual(len(self.store.all("source_check")), 1)
+        self.assertEqual(partial["status"], "partial")
+        self.assertEqual(partial["missing_resources"], ["family"])
+        self.assertEqual(partial["last_success"], first["last_success"])
+        self.assertEqual(partial["cursor"], "initial")
+        self.now += 60
+        done = self.service.source_check({**data, "started_at": self.now})
+        self.assertEqual(done["last_success"], self.now)
+        other = self.service.source_check({**data, "source": {**data["source"], "account": "b"}})
+        self.assertNotEqual(other["id"], done["id"])
+        with self.assertRaises(ValueError):
+            self.service.source_check({**data, "checked_resources": ["foreign-calendar"]})
+        empty = self.service.source_check({**data, "started_at": self.now, "expected_resources": [], "checked_resources": []})
+        self.assertEqual(empty["status"], "partial")
+
+    def test_upgrade_preserves_background_and_legacy_source_evidence_outside_active_state(self):
+        row = {"id": "async", "session_id": "s", "created": self.now,
+               "text": "[ASYNC DELEGATION BATCH COMPLETE — deleg_123]\nGenerated research"}
+        self.store.write("signal", "async", row)
+        self.store.write("source_check", "dated-source", {"id": "dated-source", "status": "checked", "summary": "Legacy observation"})
+        with self.store.transaction() as db:
+            with self.assertRaises(ValueError):
+                self.service.require_signal(db, "async")
+        self.assertNotIn("async", [r["id"] for r in self.service.context()["new_user_signals"]])
+        updated = Store(self.temp.name)
+        self.assertIsNone(updated.read("signal", "async"))
+        self.assertEqual(updated.read("background_signal", "async"), row)
+        self.assertEqual(updated.read("source_check_legacy", "dated-source")["summary"], "Legacy observation")
+        self.assertEqual(updated.all("source_check"), [])
+        self.assertIsNotNone(updated.read("signal", self.signal))
+        Store(self.temp.name)
+        self.assertEqual(len(updated.all("background_signal")), 1)
+
+    def test_cron_context_limits_raw_signals_to_its_own_purpose(self):
+        for n in range(12):
+            self.now += 1
+            self.user("Long user context " + str(n) + "x" * 1500)
+        patrol = self.service.context(view="proactive-watch")
+        self.assertEqual(patrol["new_user_signals"], [])
+        self.assertEqual(patrol["nightly_user_signals"], [])
+        self.assertEqual(len(patrol["recent_user_context"]), 8)
+        self.assertTrue(all(len(r["text"]) <= 1000 for r in patrol["recent_user_context"]))
+        feed = self.service.context(view="feed-pulse")
+        self.assertFalse(feed["recent_user_context"] or feed["new_user_signals"] or feed["nightly_user_signals"])
+        self.assertTrue(self.service.context(view="nightly-review")["nightly_user_signals"])
 
     def test_source_change_without_goal_and_cancellation_before_delivery(self):
         self.assertEqual(self.service.context()["goals"], [])
@@ -425,6 +479,29 @@ class CompanionTests(unittest.TestCase):
                 modules["cron.jobs"].get_job = lambda job: {
                     "last_delivery_queued": {"bot-chat:(own)": {"delivery_id": "receipt-one"}}}
 
+    def test_settled_exact_receipt_repairs_unknown_after_later_run_without_resend(self):
+        import sys, types
+        from hermes_muse.host import HermesHost, bot_receipt_key
+        self.host.destination = {"deliver": "bot-chat"}
+        row = self.notice(priority="urgent")
+        self.dispatch(row["id"])
+        row = self.store.read("notification", row["id"])
+        row["status"] = "unknown"
+        self.store.write("notification", row["id"], row)
+        key = bot_receipt_key(self.temp.name, "patrol", "attempt-one")
+        modules = {name: types.ModuleType(name) for name in
+            ("cron.executions", "cron.jobs", "cron.bot_chat_delivery", "tools.bot_live_delivery")}
+        modules["cron.executions"].get_execution = lambda eid: {"id": eid, "status": "completed", "delivery_outcome": "queued"}
+        modules["cron.executions"].latest_execution = lambda jid: {"id": "later-run", "status": "completed", "delivery_outcome": "delivered"}
+        modules["cron.jobs"].get_job = lambda jid: {"last_delivery_queued": None}
+        modules["cron.bot_chat_delivery"].read_pending = lambda k: None
+        modules["tools.bot_live_delivery"].read_delivery_result = lambda home, k: {"status": "settled"} if k == key else None
+        with patch.dict(sys.modules, modules), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
+            HermesHost(self.store).reconcile()
+            self.assertEqual(self.store.read("notification", row["id"])["status"], "sent")
+            self.assertEqual(HermesHost(self.store).bot_delivery_status("patrol", "unrelated-attempt"), "unknown")
+        self.assertEqual(self.host.jobs, [])
+
     def test_prepare_returns_current_run_output_and_defers_other_contexts(self):
         row = self.notice(priority="urgent")
         staged = self.service.notification_queue({"id": row["id"]})
@@ -544,6 +621,23 @@ class HookTests(unittest.TestCase):
                 self.assertFalse(runtime.timers)
                 runtime.pre_turn(session_id="bot", turn_id="human", user_message="I am interested in cycling.")
                 self.assertEqual([r["id"] for r in runtime.store.all("signal")], ["human"])
+
+    def test_async_completion_cannot_become_user_signal_or_schedule_quiet_pass(self):
+        from hermes_muse.runtime import Runtime
+        with tempfile.TemporaryDirectory() as home:
+            prepare(home)
+            runtime = Runtime(object(), home)
+            self.addCleanup(runtime.close)
+            info = {"cron": False, "chat_type": "private", "platform": "", "chat_id": ""}
+            with patch("hermes_muse.runtime.session_info", return_value=info):
+                for n, prefix in enumerate(("[ASYNC DELEGATION COMPLETE — deleg_a]", "[ASYNC DELEGATION BATCH COMPLETE — deleg_b]")):
+                    result = runtime.pre_turn(session_id="bot", turn_id=str(n), user_message=prefix + "\n" + "generated " * 20)
+                    self.assertIsNone(result)
+                    runtime.post_turn(session_id="bot", turn_id=str(n))
+                self.assertEqual(runtime.store.all("signal"), [])
+                self.assertFalse(runtime.timers)
+                runtime.pre_turn(session_id="bot", turn_id="human", user_message="Explain the [ASYNC DELEGATION COMPLETE] message")
+                self.assertEqual(len(runtime.store.all("signal")), 1)
 
     def test_background_group_and_child_turns_do_not_renew_interest(self):
         from hermes_muse.runtime import Runtime

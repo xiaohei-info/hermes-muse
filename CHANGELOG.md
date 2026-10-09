@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11
+
+- Exclude native async-completion envelopes from user signals and signal-backed actions. Preserve historical misclassified messages as background audit evidence.
+- Derive source IDs from connection/account/resource identity; track expected and checked resources separately. Incomplete coverage cannot advance the successful checkpoint. Archive old free-form source records without guessing their identities.
+- Read the native same-profile Bot Chat receipt by its execution-specific key. Repair finalized unknown outcomes when that exact receipt settles, even after later patrols overwrite the latest-job pointer; never resend.
+- Give each Cron only its relevant signal context. Patrols reuse tested read recipes, batch independent reads and use source checkpoints while continuing live source inspection on every tick.
+
 ## 0.1.10
 
 - Run all six fixed jobs on schedule instead of treating empty local goals/interests as proof there is no work. Patrols discover connected services/devices, inspect changes and upcoming deadlines, then stay silent when nothing merits a notice. This increases scheduled model usage.

@@ -42,7 +42,7 @@ Feed has no dedicated page. New research batches use native Hermes execution and
 | Name | Purpose |
 | --- | --- |
 | [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: connection and device checks, goals and interests, reminders and feedback, memory and relationships, Feed, delegation, and weekly/monthly reviews. |
-| muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, distinguish successful, failed and incomplete source checks, and maintain expiry, stopping and delivery state. |
+| muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, keep source progress by connection, account and resource, distinguish complete, partial and failed checks, and maintain expiry, stopping and delivery state. |
 
 The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all six recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
 
@@ -71,7 +71,7 @@ Hermes appends `system.md` after the memory section through its plugin API; it t
 | transform_llm_output | For a patrol/watch that used the state tool, replaces the final response with approved notice bodies or `[SILENT]`. Ordinary conversations and review reports are unchanged. |
 | on_session_end | Clears the current turn's busy flag so later reminders do not keep waiting on a conversation that has ended. |
 
-User-signal hooks process private and local conversations, skipping groups, Cron and subagent input. The output hook applies only to the current owned patrol/watch execution. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
+User-signal hooks process private and local conversations, skipping groups, Cron, subagent input and completion callbacks. Older misclassified background messages remain as audit evidence outside the user-signal inbox. The output hook applies only to the current owned patrol/watch execution. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
 
 ## Six recurring Cron jobs
 
@@ -99,9 +99,9 @@ agent:
 
 Hermes currently resolves reasoning from a per-job `reasoning_effort`, then the model-specific override, then `agent.reasoning_effort`; `cron.reasoning_effort` is not a supported setting on the tested baseline. The example sets `high` for Luna in this profile, including ordinary conversations that use Luna. Existing per-job model/reasoning choices take priority and survive plugin reloads. Cron defaults are read on the next run. Bot Chat’s receiving turn uses its own conversation model configuration and adds another model call; `cron.model` does not select that receiving model. The plugin does not write these model settings for you.
 
-Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Explicitly requested timed reminders and watches can create additional recorded Cron jobs; six is the permanent job count. A patrol delivers approved notices in its own final response, with no extra delivery Cron. Deferred candidates stay for the next patrol.
+Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Explicitly requested timed reminders and watches can create additional recorded Cron jobs; six is the permanent job count. A patrol delivers approved notices in its own final response, with no extra delivery Cron. Deferred candidates stay for the next patrol. Delivery is checked against that execution’s persistent receipt, independently of later patrols.
 
-All six fixed jobs call the model on schedule to inspect the information relevant to their work. Each patrol discovers available connections and devices and checks mail, calendars, reminders and other sources even without saved goals or interests. Failed or partial reads are recorded separately, not treated as no change, and do not advance that source's successful checkpoint. Checks consume model calls; tools and subagents can add usage.
+All six fixed jobs call the model on schedule to inspect the information relevant to their work. Each patrol discovers available connections and devices and checks mail, calendars, reminders and other sources even without saved goals or interests. Each source reuses a stable record and a tested read recipe. Expected and checked resources are recorded separately; a missing calendar, unfinished page or failed read cannot advance the successful checkpoint. Checks consume model calls; tools and subagents can add usage.
 
 A patrol checks the facts and prepares useful help before deciding to interrupt. Examples include weather affecting a trip, a moved meeting, substantive news on an interest, or an event, exhibition or booking window relevant to a known plan. Location, dates and personal relevance need evidence; routine forecasts and repeated headlines do not merit a message. Nothing worthwhile means silence. Ordinary proactive messages focus on one useful item and do not chase a reply because the user stayed quiet. These are model instructions; judgment depends on the model and available sources.
 

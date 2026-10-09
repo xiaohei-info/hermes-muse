@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .host import HermesHost, JOBS, ROOT, profile_scope
 from .service import Companion
-from .store import GOVERNANCE_JOBS, PLUGIN, Store, stamp
+from .store import GOVERNANCE_JOBS, PLUGIN, Store, is_background_message, stamp
 
 log = logging.getLogger(__name__)
 ACTIONS = ("context", "status", "goal_create", "goal_update", "interest_record", "idea_add", "feedback",
@@ -71,7 +71,11 @@ class Runtime:
                         self.delivery_turns[kwargs["session_id"]] = delivery
                 if action in {"context", "status"}:
                     self.host.reconcile()
-                    result = self.service.context()
+                    parts = str(kwargs.get("task_id") or "").split(":", 2)
+                    view = None
+                    if len(parts) == 3 and parts[0] == "cron":
+                        view = self.host.manifest()["jobs"].get(parts[1], {}).get("key")
+                    result = self.service.context(view=view)
                     if action == "status":
                         result["installation"] = self.host.manifest()
                         result["reviews"] = {job: self.store.read("meta", "last_review:" + job)
@@ -124,7 +128,7 @@ class Runtime:
                     "Read it and reply once in this Bot Chat. Do not queue the same notice again; "
                     "Weekly/monthly recommendations remain proposals until the user asks to apply them; "
                     "any state changes still need the existing evidence required by the Skill."}
-        if text.startswith(('[Cronjob "', "[Hermes Muse background evidence]")):
+        if is_background_message(text):
             return None
         if not session_id or not turn_id or not text.strip():
             return None

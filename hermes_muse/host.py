@@ -1,6 +1,7 @@
 """Narrow Hermes integration. Cron owns scheduling and transport."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -261,7 +262,9 @@ class HermesHost:
         from cron.executions import latest_execution
         updates = []
         for row in self.store.all("notification"):
-            if row["status"] not in {"dispatching", "queued", "transport_queued"} or not row.get("job_id"):
+            reconcilable = row["status"] in {"dispatching", "queued", "transport_queued"}
+            reconcilable |= (row["status"] == "unknown" and row.get("direct_delivery") and row.get("output_finalized"))
+            if not reconcilable or not row.get("job_id"):
                 continue
             with profile_scope(self.home):
                 if row.get("direct_delivery"):
@@ -289,11 +292,12 @@ class HermesHost:
                 status = "sent" if queue_status == "delivered" else "unknown" if queue_status in {"failed", "unknown", "suppressed"} else "transport_queued"
             else:
                 status = "unknown"  # including partial sends/timeouts: never blindly replay
+            row_before_status = row["status"]
             row.update(status=status, execution_id=execution["id"], delivery_outcome=outcome,
                        delivery_note="Native transport report; not a phone display/read receipt.")
             with self.store.transaction() as db:
                 current = self.store.get(db, "notification", row["id"])
-                if current and current["status"] in {"dispatching", "queued", "transport_queued"}:
+                if current and current["status"] == row_before_status:
                     self.store.put(db, "notification", row["id"], row)
             updates.append(row)
         return updates
@@ -304,10 +308,16 @@ class HermesHost:
         from tools.bot_live_delivery import read_delivery_result
         with profile_scope(self.home):
             if execution_id:
+                # Mirrors the native same-profile Bot Chat key on the tested Hermes baseline.
+                # Read only: a missing/changed host receipt never authorizes a resend.
+                key = bot_receipt_key(self.home, job_id, execution_id)
+                actual = read_delivery_result(self.home, key) or read_pending(key)
+                if actual:
+                    return bot_receipt_status([actual.get("status")])
                 from cron.executions import latest_execution
                 latest = latest_execution(job_id)
                 if not latest or latest["id"] != execution_id:
-                    return "unknown"  # a later run may have overwritten the job-level receipt pointer
+                    return "unknown"
             job = get_job(job_id)
             if not job:
                 return "unknown"
@@ -321,16 +331,26 @@ class HermesHost:
                     return "unknown"
                 actual = read_delivery_result(self.home, key) or read_pending(key) or {}
                 states.append(actual.get("status"))
-        if all(state == "settled" for state in states):
-            return "sent"
-        if all(state in {"settled", "queued", "claimed", "transferred"} for state in states):
-            return "transport_queued"
-        return "unknown"
+        return bot_receipt_status(states)
 
     def local_now(self, timestamp):
         from hermes_time import now
         with profile_scope(self.home):
             return datetime.fromtimestamp(timestamp, now().tzinfo)
+
+
+def bot_receipt_key(home, job_id, execution_id):
+    home = str(Path(home).resolve())
+    return hashlib.sha256(json.dumps([home, job_id, str(execution_id), home],
+                                    ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
+def bot_receipt_status(states):
+    if states and all(state == "settled" for state in states):
+        return "sent"
+    if states and all(state in {"settled", "queued", "claimed", "transferred"} for state in states):
+        return "transport_queued"
+    return "unknown"
 
 
 def enabled(home):
