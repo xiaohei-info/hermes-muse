@@ -25,11 +25,6 @@ class Host:
     def route(self, session_id=None):
         return self.destination
 
-    def delivery_job(self, row, route):
-        job = {"id": uuid.uuid4().hex[:12]}
-        self.jobs.append(job)
-        return job
-
     def pause_owner(self, owner):
         self.paused.append(owner)
 
@@ -73,12 +68,16 @@ class CompanionTests(unittest.TestCase):
     def notice(self, key="event-a", **kw):
         return self.service.notification_add({"event_key": key, "message": "A relevant fact changed.", "rationale": "Matches the active goal", "sources": ["https://example.org/announcement"], "verified_at": self.now, "expires": self.now + DAY, **kw})
 
-    def test_concurrent_dedup_and_queue_create_one_native_job(self):
+    def dispatch(self, key):
+        return self.service.delivery_text(key, delivery={"job_id": "patrol", "execution_id": "attempt-one",
+                                                        "route": self.host.destination})
+
+    def test_concurrent_dedup_stages_without_creating_jobs(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             rows = list(pool.map(lambda _: self.notice(), range(12)))
             queued = list(pool.map(lambda _: self.service.notification_queue({"id": rows[0]["id"]}), range(12)))
         self.assertEqual(len(self.store.all("notification")), 1)
-        self.assertEqual(len(self.host.jobs), 1)
+        self.assertEqual(len(self.host.jobs), 0)
         self.assertEqual(len({r["job_id"] for r in queued}), 1)
 
     def test_concurrent_daily_budget_and_no_second_dispatch(self):
@@ -86,9 +85,9 @@ class CompanionTests(unittest.TestCase):
         for row in rows:
             self.service.notification_queue({"id": row["id"]})
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            messages = list(pool.map(lambda r: self.service.delivery_text(r["id"]), rows))
+            messages = list(pool.map(lambda r: self.dispatch(r["id"]), rows))
         self.assertEqual(sum(bool(s) for s in messages), 1)
-        self.assertEqual(sum(bool(self.service.delivery_text(r["id"])) for r in rows), 0)
+        self.assertEqual(sum(bool(self.dispatch(r["id"])) for r in rows), 0)
         self.assertTrue(all(r["status"] != "sent" for r in self.store.all("notification")))
 
     def test_closed_goal_stops_watches_but_keeps_final_result(self):
@@ -99,8 +98,8 @@ class CompanionTests(unittest.TestCase):
             self.service.notification_queue({"id": row["id"]})
         self.service.goal_update({"id": "bicycle", "status": "completed", "signal_id": self.signal})
         self.assertEqual(self.host.paused, ["bicycle"])
-        self.assertEqual(self.service.delivery_text(old["id"]), "")
-        self.assertEqual(self.service.delivery_text(final["id"]), final["message"])
+        self.assertEqual(self.dispatch(old["id"]), "")
+        self.assertEqual(self.dispatch(final["id"]), final["message"])
 
     def test_interest_expiry_is_not_renewed_by_background(self):
         row = self.service.interest_record({"id": "cycling", "title": "Cycling", "signal_id": self.signal})
@@ -119,19 +118,19 @@ class CompanionTests(unittest.TestCase):
         row = self.notice(interest_id="topic")
         self.service.notification_queue({"id": row["id"]})
         self.now += 31
-        self.assertEqual(self.service.delivery_text(row["id"]), "")
+        self.assertEqual(self.dispatch(row["id"]), "")
 
     def test_late_cancel_and_feedback_no_repeat(self):
         row = self.notice(topic="cycling")
         self.service.notification_queue({"id": row["id"]})
         self.service.feedback({"kind": "notification", "id": row["id"], "action": "dismiss", "signal_id": self.signal})
-        self.assertEqual(self.service.delivery_text(row["id"]), "")
+        self.assertEqual(self.dispatch(row["id"]), "")
         self.assertEqual(self.notice()["status"], "dismissed")
         next_row = self.notice("event-next", topic="cycling")
         self.service.feedback({"kind": "notification", "id": next_row["id"], "action": "stop", "signal_id": self.signal})
         future = self.notice("event-future", topic="cycling")
         self.service.notification_queue({"id": future["id"]})
-        self.assertEqual(self.service.delivery_text(future["id"]), "")
+        self.assertEqual(self.dispatch(future["id"]), "")
 
     def test_no_route_keeps_pending_and_no_fake_receipt(self):
         self.host.destination = None
@@ -146,8 +145,8 @@ class CompanionTests(unittest.TestCase):
         urgent = self.notice("urgent", priority="urgent")
         for row in (ordinary, urgent):
             self.service.notification_queue({"id": row["id"]})
-        self.assertFalse(self.service.delivery_text(ordinary["id"]))
-        self.assertTrue(self.service.delivery_text(urgent["id"]))
+        self.assertFalse(self.dispatch(ordinary["id"]))
+        self.assertTrue(self.dispatch(urgent["id"]))
 
     def test_goal_review_boundary_does_not_complete_or_stop_subscription(self):
         self.goal()
@@ -233,11 +232,11 @@ class CompanionTests(unittest.TestCase):
         row = self.notice(expires=self.now + 5 * DAY, priority="urgent")
         self.service.notification_queue({"id": row["id"]})
         self.now += 2 * DAY
-        self.assertFalse(self.service.delivery_text(row["id"]))
+        self.assertFalse(self.dispatch(row["id"]))
         self.assertEqual(self.store.read("notification", row["id"])["status"], "candidate")
         self.service.notification_refresh({"id": row["id"], "verified_at": self.now, "sources": ["rechecked original"]})
         self.service.notification_queue({"id": row["id"]})
-        self.assertTrue(self.service.delivery_text(row["id"]))
+        self.assertTrue(self.dispatch(row["id"]))
 
     def test_cursor_cannot_skip_unseen_batch(self):
         for i in range(30):
@@ -256,15 +255,17 @@ class CompanionTests(unittest.TestCase):
         from hermes_muse.host import HermesHost
         row = self.notice(priority="urgent")
         self.service.notification_queue({"id": row["id"]})
-        self.service.delivery_text(row["id"])
+        self.dispatch(row["id"])
         ledger = types.ModuleType("cron.executions")
-        ledger.latest_execution = lambda job: {"id": "attempt-one", "status": "unknown", "delivery_outcome": None}
+        ledger.get_execution = lambda execution_id: {"id": "attempt-one", "status": "unknown", "delivery_outcome": None}
+        if not hasattr(ledger, "latest_execution"):
+            ledger.latest_execution = ledger.get_execution
         with patch.dict(sys.modules, {"cron.executions": ledger}), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
             HermesHost(self.store).reconcile()
         current = self.store.read("notification", row["id"])
         self.assertEqual(current["status"], "unknown")
         self.service.notification_queue({"id": row["id"]})
-        self.assertEqual(len(self.host.jobs), 1)
+        self.assertEqual(len(self.host.jobs), 0)
 
     def test_native_queue_ack_is_not_final_delivery(self):
         import sys
@@ -272,9 +273,10 @@ class CompanionTests(unittest.TestCase):
         from hermes_muse.host import HermesHost
         row = self.notice(priority="urgent")
         self.service.notification_queue({"id": row["id"]})
-        self.service.delivery_text(row["id"])
+        self.dispatch(row["id"])
         ledger = types.ModuleType("cron.executions")
-        ledger.latest_execution = lambda job: {"id": "attempt-one", "status": "completed", "delivery_outcome": "queued"}
+        ledger.get_execution = lambda execution_id: {"id": "attempt-one", "status": "completed", "delivery_outcome": "queued"}
+        ledger.latest_execution = ledger.get_execution
         queue = types.ModuleType("cron.delivery_queue")
         queue.get_status = lambda execution_id: {"status": "pending"}
         with patch.dict(sys.modules, {"cron.executions": ledger, "cron.delivery_queue": queue}), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
@@ -291,14 +293,15 @@ class CompanionTests(unittest.TestCase):
         self.host.destination = {"deliver": "bot-chat"}
         modules = {name: types.ModuleType(name) for name in
                    ("cron.executions", "cron.jobs", "cron.bot_chat_delivery", "tools.bot_live_delivery")}
-        modules["cron.executions"].latest_execution = lambda job: {
-            "id": "bot-attempt", "status": "completed", "delivery_outcome": "queued"}
+        modules["cron.executions"].get_execution = lambda execution_id: {
+            "id": "attempt-one", "status": "completed", "delivery_outcome": "queued"}
+        modules["cron.executions"].latest_execution = modules["cron.executions"].get_execution
         modules["cron.jobs"].get_job = lambda job: {
             "last_delivery_queued": {"bot-chat:(own)": {"delivery_id": "receipt-one"}}}
         for deferred in (False, True):
             row = self.notice("bot-" + str(deferred), priority="urgent")
             self.service.notification_queue({"id": row["id"]})
-            self.service.delivery_text(row["id"])
+            self.dispatch(row["id"])
             receipt = {"status": "queued"}
             modules["tools.bot_live_delivery"].read_delivery_result = lambda home, key: None if deferred else receipt
             modules["cron.bot_chat_delivery"].read_pending = lambda key: receipt if deferred else None
@@ -315,6 +318,35 @@ class CompanionTests(unittest.TestCase):
                 self.assertEqual(HermesHost(self.store).bot_delivery_status(row["job_id"]), "unknown")
                 modules["cron.jobs"].get_job = lambda job: {
                     "last_delivery_queued": {"bot-chat:(own)": {"delivery_id": "receipt-one"}}}
+
+    def test_prepare_returns_current_run_output_and_defers_other_contexts(self):
+        row = self.notice(priority="urgent")
+        staged = self.service.notification_queue({"id": row["id"]})
+        self.assertEqual(staged["status"], "pending")
+        self.assertEqual(staged["final_response"], "[SILENT]")
+        binding = {"job_id": "patrol", "execution_id": "run-one", "route": {"deliver": "bot-chat"}}
+        first = self.service.notification_queue({"id": row["id"]}, binding)
+        self.assertIn(row["message"], first["final_response"])
+        self.assertEqual(first["execution_id"], "run-one")
+        self.assertEqual(self.service.notification_queue({"id": row["id"]}, binding)["final_response"], first["final_response"])
+        later = self.service.notification_queue({"id": row["id"]}, dict(binding, execution_id="run-two"))
+        self.assertEqual(later["final_response"], "[SILENT]")
+        self.assertEqual(self.host.jobs, [])
+
+    def test_direct_receipt_does_not_use_later_patrol_success(self):
+        import sys
+        import types
+        from hermes_muse.host import HermesHost
+        row = self.notice(priority="urgent")
+        self.dispatch(row["id"])
+        ledger = types.ModuleType("cron.executions")
+        ledger.get_execution = lambda key: {"id": key, "status": "failed", "delivery_outcome": "failed"}
+        ledger.latest_execution = lambda job: {"id": "later-run", "status": "completed", "delivery_outcome": "delivered"}
+        if not hasattr(ledger, "latest_execution"):
+            ledger.latest_execution = ledger.get_execution
+        with patch.dict(sys.modules, {"cron.executions": ledger}), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
+            HermesHost(self.store).reconcile()
+        self.assertEqual(self.store.read("notification", row["id"])["status"], "unknown")
 
     def test_preference_failure_preserves_file(self):
         before = self.store.path("PROACTIVE_PREFERENCES.md").read_bytes()

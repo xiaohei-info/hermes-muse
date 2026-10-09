@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7
+
+- Deliver selected reminders in the patrol/watch Cron's own final response; no additional delivery-only Cron is created. Deferred candidates remain for the next patrol.
+- Keep lifecycle, freshness, deduplication and attention checks; bind native receipts to the exact preparing execution instead of the recurring job's latest run.
+- Migrate the old silent patrol and unchanged generated monitoring instructions once; preserve schedules, pauses and user-selected destinations. Existing delivery-only jobs can finish through their original path.
+
 ## 0.1.6
 
 - Exclude all native Cron deliveries from user-signal collection, including existing jobs outside Muse. Keeps background results from creating or renewing interests as if the user had spoken. No change to allowed background state operations.

@@ -280,30 +280,42 @@ class Companion:
             self.store.put(db, "notification", key, row)
         return row
 
-    def notification_queue(self, data):
+    def notification_queue(self, data, delivery=None):
+        """Prepare in the current patrol/watch, or leave a candidate for the next patrol."""
         key = identifier(data["id"])
-        snapshot = self.store.read("notification", key, {})
-        route = self.host.route(snapshot.get("session_id"))
         with self.store.transaction() as db:
             row = self.store.get(db, "notification", key)
             if not row:
                 raise ValueError("Unknown notification")
-            if row["status"] not in {"candidate", "pending"}:
-                return row
-            if not route:
-                row["status"] = "pending"
-            else:
-                # Local host mutation under the state lock serializes competing queue requests.
-                job = self.host.delivery_job(row, route)
-                row.update(status="queued", job_id=job["id"], route=route)
-            self.store.put(db, "notification", key, row)
-        return row
+            if row["status"] in {"candidate", "pending"}:
+                row.update(status="pending", job_id=None)
+                self.store.put(db, "notification", key, row)
+        if delivery:
+            self.delivery_text(key, delivery=delivery)
+        result = dict(self.store.read("notification", key))
+        result["final_response"] = self.prepared_response(delivery) if delivery else "[SILENT]"
+        result["instruction"] = ("Return final_response as this Cron's final answer. No extra send or Cron." if delivery
+                                 else "Saved for the next patrol; no delivery task was created.")
+        return result
 
-    def delivery_text(self, key):
+    def prepared_response(self, delivery):
+        rows = [row for row in self.store.all("notification")
+                if row.get("direct_delivery") and row.get("execution_id") == delivery["execution_id"]
+                and row["status"] == "dispatching"]
+        if not rows:
+            return "[SILENT]"
+        parts = []
+        for row in rows:
+            parts.append("[Hermes Muse notification " + row["id"] + "]\n"
+                         "Why: " + row["rationale"] + "\nSources: " + ", ".join(row["sources"]) + "\n\n" + row["message"])
+        return "\n\n".join(parts)
+
+    def delivery_text(self, key, delivery=None):
         now = self.clock()
         with self.store.transaction() as db:
             row = self.store.get(db, "notification", key)
-            if not row or row["status"] != "queued":
+            allowed_states = {"candidate", "pending"} if delivery else {"queued"}
+            if not row or row["status"] not in allowed_states:
                 return ""
             if row.get("interest_id"):
                 row["_interest"] = self.store.get(db, "interest", row["interest_id"], {})
@@ -341,6 +353,8 @@ class Companion:
             if row["priority"] in {"ordinary", "time_sensitive"}:
                 self.store.put(db, "budget", budget_key, used + 1)
             row.update(status="dispatching", dispatched_at=now)
+            if delivery:
+                row.update(delivery, direct_delivery=True)
             self.store.put(db, "notification", key, row)
             return row["message"]
 

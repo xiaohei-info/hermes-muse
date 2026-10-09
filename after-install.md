@@ -2,7 +2,7 @@
 
 Recommended: use the current profile's **Bot Chat** for your goals, interests and follow-up.
 
-Selected reminders and scheduled weekly/monthly reports go to that profile's Bot Chat. The bot reads them and replies there, using the profile's model. Hermes can create a missing Bot Chat on first delivery.
+Patrols deliver selected reminders themselves, without extra delivery Cron jobs. Scheduled weekly/monthly reports also go to that profile's Bot Chat. The bot reads them and replies there, using the profile's model. Hermes can create a missing Bot Chat on first delivery.
 
 First plugin load sets up one Skill, one state tool, three conversation hooks, seven prompts and six recurring Cron jobs. Start a new conversation to load the system prompt section; keep the Hermes scheduler running for background work.
 

@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Manage goals and expiring interests, proactive reminders, feedback, memory and relationships, nightly alignment, silent Feed and bounded parallel research using the current Hermes profile.
-version: 0.1.6
+version: 0.1.7
 ---
 
 # Companion
@@ -27,6 +27,6 @@ Main conversation owns explicit user goals, preferences and feedback; incrementa
 
 ## Universal completion contract
 
-A promise is open until its actual result reaches the user or the user cancels it. Evidence prepared, job queued, main-session wake accepted and message generated are different events. Preserve unknown delivery outcomes and do not repeat irreversible actions. Research/Feed never extend interests themselves. Use original user signal IDs; do not manufacture them from old summaries or cron prompts. Installation grants no new external service authority.
+A promise is open until its actual result reaches the user or the user cancels it. A candidate saved, a final response prepared and a native delivery completed are different events. Preserve unknown delivery outcomes and do not repeat irreversible actions. Research/Feed never extend interests themselves. Use original user signal IDs; do not manufacture them from old summaries or cron prompts. Installation grants no new external service authority.
 
 `review_complete`: data `{job, up_to, summary}`. Job is one of proactive-watch, memory-upkeep, nightly-review, feed-pulse, weekly-governance-review, monthly-system-audit. `up_to` is a timezone-aware ISO timestamp or numeric epoch; for memory use the last successfully processed signal's created value. Advance only after every dependent write succeeds; a partial batch advances only through its contiguous successful prefix.

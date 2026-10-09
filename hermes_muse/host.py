@@ -145,8 +145,31 @@ class HermesHost:
             prompt = (self.root / "prompts" / f"{key}.md").read_text(encoding="utf-8")
             self._owned_job(key, {"name": "muse-" + key, "schedule": schedule,
                                   "prompt": prompt, "skills": [f"{PLUGIN}:companion"],
-                                  "deliver": "bot-chat" if key in GOVERNANCE_JOBS else "local",
+                                  "deliver": "bot-chat" if key in (*GOVERNANCE_JOBS, "proactive-watch") else "local",
                                   "attach_to_session": False}, fixed=True)
+        # Upgrade the old silent patrol once; later user destination changes are preserved.
+        from cron.jobs import get_job, update_job
+        with profile_scope(self.home), file_lock(self.store.path("install.lock")):
+            record = self.manifest()
+            if not record.get("direct_patrol_delivery"):
+                job = get_job(record["fixed"]["proactive-watch"])
+                if job and job.get("deliver") == "local":
+                    update_job(job["id"], {"deliver": "bot-chat"})
+                old = ("Check its status and your stop condition first. Never send directly; prepare evidence with notification_add and notification_queue. "
+                       "Stop and call watch_stop when the promised condition is satisfied. Return [SILENT].\n")
+                new = ("Check its status and your stop condition first. Prepare evidence with notification_add. "
+                       "Stop and call watch_stop when the promised condition is satisfied. "
+                       "As your last step call notification_prepare and return its final_response exactly; "
+                       "this job delivers that response. With nothing approved return [SILENT].\n")
+                for job_id, owned in record["jobs"].items():
+                    if not owned["key"].startswith("watch-"):
+                        continue
+                    watch = get_job(job_id)
+                    if watch and old in watch.get("prompt", ""):
+                        update_job(job_id, {"prompt": watch["prompt"].replace(old, new, 1),
+                                            "deliver": "bot-chat" if watch.get("deliver") == "local" else watch.get("deliver")})
+                record["direct_patrol_delivery"] = True
+                self.save_manifest(record)
         return self.manifest()
 
     def wake(self, key):
@@ -164,13 +187,24 @@ class HermesHost:
         # Bare bot-chat resolves against this job's profile, never another profile's Bot Chat.
         return {"deliver": BOT_CHAT_PLATFORM}
 
-    def delivery_job(self, notification, route):
-        return self._owned_job("deliver-" + notification["id"], {
-            "name": "muse-delivery-" + notification["id"], "schedule": stamp(time.time() + 60),
-            "prompt": "Deliver the plugin's revalidated prepared notice; the script owns the output.",
-            "no_agent": True, "deliver": route.get("deliver", "origin"),
-            "origin": route if route.get("chat_id") else None, "attach_to_session": True,
-        }, owner=notification.get("goal_id"), item=notification["id"])
+    def current_delivery(self, task_id):
+        """Bind a prepared notice to the host-supplied, currently running Cron attempt."""
+        from cron.executions import get_execution
+        from cron.jobs import get_job
+        parts = str(task_id or "").split(":", 2)
+        if len(parts) != 3 or parts[0] != "cron":
+            return None
+        _, job_id, execution_id = parts
+        owned = self.manifest()["jobs"].get(job_id, {})
+        key = owned.get("key", "")
+        if key != "proactive-watch" and not key.startswith("watch-"):
+            return None
+        with profile_scope(self.home):
+            job, execution = get_job(job_id), get_execution(execution_id)
+        if (not job or job.get("deliver") in (None, "local") or not execution
+                or execution.get("job_id") != job_id or execution.get("status") != "running"):
+            return None
+        return {"job_id": job_id, "execution_id": execution_id, "route": {"deliver": job["deliver"]}}
 
     def watch(self, data):
         goal, _ = self.store.goal(data["goal_id"])
@@ -183,11 +217,13 @@ class HermesHost:
             raise ValueError("Watch expiry must be in the future")
         key = "watch-" + uuid.uuid4().hex[:12]
         prompt = ("Read hermes-muse:companion and muse_manage context. Work only on goal " + goal["id"] + ". "
-                  "Check its status and your stop condition first. Never send directly; prepare evidence with notification_add and notification_queue. "
-                  "Stop and call watch_stop when the promised condition is satisfied. Return [SILENT].\n"
+                  "Check its status and your stop condition first. Prepare evidence with notification_add. "
+                  "Stop and call watch_stop when the promised condition is satisfied. "
+                  "As your last step call notification_prepare and return its final_response exactly; "
+                  "this job delivers that response. With nothing approved return [SILENT].\n"
                   + str(data["prompt"]) + "\nStop condition: " + str(data["stop_condition"]))
         return self._owned_job(key, {"name": "muse-" + key, "schedule": data["schedule"], "prompt": prompt,
-                                   "skills": [f"{PLUGIN}:companion"], "deliver": "local"}, owner=goal["id"], expires=expires)
+                                   "skills": [f"{PLUGIN}:companion"], "deliver": "bot-chat"}, owner=goal["id"], expires=expires)
 
     def is_active_watch(self, job_id, goal_id):
         from cron.jobs import get_job
@@ -228,7 +264,11 @@ class HermesHost:
             if row["status"] not in {"dispatching", "queued", "transport_queued"} or not row.get("job_id"):
                 continue
             with profile_scope(self.home):
-                execution = latest_execution(row["job_id"])
+                if row.get("direct_delivery"):
+                    from cron.executions import get_execution
+                    execution = get_execution(row["execution_id"])
+                else:
+                    execution = latest_execution(row["job_id"])
             if not execution or execution["status"] in {"claimed", "running"}:
                 continue
             outcome = execution.get("delivery_outcome")
@@ -238,7 +278,7 @@ class HermesHost:
             elif execution["status"] == "completed" and outcome == "delivered":
                 status = "sent"
             elif outcome == "queued" and row.get("route", {}).get("deliver") == "bot-chat":
-                status = self.bot_delivery_status(row["job_id"])
+                status = self.bot_delivery_status(row["job_id"], row.get("execution_id") if row.get("direct_delivery") else None)
             elif outcome == "queued":
                 from cron.delivery_queue import get_status
                 with profile_scope(self.home):
@@ -256,11 +296,16 @@ class HermesHost:
             updates.append(row)
         return updates
 
-    def bot_delivery_status(self, job_id):
+    def bot_delivery_status(self, job_id, execution_id=None):
         from cron.jobs import get_job
         from cron.bot_chat_delivery import read_pending
         from tools.bot_live_delivery import read_delivery_result
         with profile_scope(self.home):
+            if execution_id:
+                from cron.executions import latest_execution
+                latest = latest_execution(job_id)
+                if not latest or latest["id"] != execution_id:
+                    return "unknown"  # a later run may have overwritten the job-level receipt pointer
             job = get_job(job_id)
             if not job:
                 return "unknown"
@@ -342,10 +387,9 @@ def cron_run(home, key):
         fresh = any(s["created"] > nightly_cursor for s in store.all("signal"))
         wake = bool(fresh or context["goals"] or context["goals_needing_review"] or context["interests_and_ideas"])
     else:
-        # Retry only deferred selection, never unknown/dispatching sends.
-        for row in context["notifications"]:
-            if row["status"] == "pending" and row["not_before"] <= now and row["expires"] > now:
-                service.notification_queue({"id": row["id"]})
-        wake = bool(context["goals"] or context["interests_and_ideas"] or any(r["status"] == "candidate" for r in context["notifications"]))
+        # Pending notices are rechecked by this run; never spawn a second delivery job.
+        ready = any(r["status"] in {"candidate", "pending"} and r["not_before"] <= now
+                    and r["expires"] > now for r in context["notifications"])
+        wake = bool(context["goals"] or context["interests_and_ideas"] or ready)
     return {"wakeAgent": wake, "job": key, "started_at": stamp(now),
             "instruction": "Call muse_manage context for current facts, then follow this job's Skill procedure. Advance review_complete only after successful writes."}

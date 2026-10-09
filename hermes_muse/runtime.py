@@ -13,7 +13,7 @@ from .store import GOVERNANCE_JOBS, PLUGIN, Store, stamp
 
 log = logging.getLogger(__name__)
 ACTIONS = ("context", "status", "goal_create", "goal_update", "interest_record", "idea_add", "feedback",
-           "preferences", "notification_add", "notification_refresh", "notification_queue", "notification_handoff", "feed_add", "feed_list",
+           "preferences", "notification_add", "notification_refresh", "notification_queue", "notification_handoff", "notification_prepare", "feed_add", "feed_list",
            "feed_update", "review_complete", "watch_create", "watch_stop", "research_start", "research_status", "forget")
 SCHEMA = {"name": "muse_manage", "description": "Manage companion goals, temporary interests, reminders, Feed and background research. First read hermes-muse:companion for action-specific data fields. context returns live state and real user signal IDs. Never invent a signal ID, delivery receipt or authorization.",
           "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": list(ACTIONS)}, "data": {"type": "object", "description": "Action arguments documented by the companion Skill; omit for context/status."}}, "required": ["action"], "additionalProperties": False}}
@@ -80,8 +80,8 @@ class Runtime:
                 elif action in {"research_start", "research_status"}:
                     from .research import start, poll
                     result = (start if action == "research_start" else poll)(self.store, self.ctx, data)
-                elif action == "notification_handoff":
-                    result = self.handoff(data["id"])
+                elif action in {"notification_prepare", "notification_queue", "notification_handoff"}:
+                    result = self.service.notification_queue(data, self.host.current_delivery(kwargs.get("task_id")))
                 else:
                     if action == "notification_add" and not data.get("session_id"):
                         data = dict(data)
@@ -105,7 +105,7 @@ class Runtime:
         if self.closed or parent_session_id or info["cron"] or platform in {"cron", "delegate", "subagent", "webhook", "msgraph_webhook", "kanban"} or not private_session(info):
             return None
         text = user_message if isinstance(user_message, str) else json.dumps(user_message, ensure_ascii=False)
-        if (text.startswith('[Cronjob "muse-delivery-') or text.startswith("[Hermes Muse notification ")
+        if (text.startswith(('[Cronjob "muse-delivery-', '[Cronjob "muse-proactive-watch"', '[Cronjob "muse-watch-')) or text.startswith("[Hermes Muse notification ")
                 or any(text.startswith('[Cronjob "muse-' + job + '"') for job in GOVERNANCE_JOBS)):
             return {"context": "This is a prepared Hermes Muse result, not a new user message. "
                     "Read it and reply once in this Bot Chat. Do not queue the same notice again; "

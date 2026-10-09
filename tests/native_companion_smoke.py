@@ -88,16 +88,52 @@ def run(home):
             "event_key": "delivery", "message": "A bicycle is available.", "rationale": "Matches the goal",
             "sources": ["https://example.org/source"], "verified_at": now,
             "expires": now + 3600, "priority": "urgent", "goal_id": "bicycle"})
-        queued = runtime.handoff(notice["id"])
-        job = get_job(queued["job_id"])
-        assert job["deliver"] == "bot-chat" and job["no_agent"], job
-        payload = cron_run(home, "deliver-" + notice["id"])
+        from cron.executions import create_execution, mark_execution_running, finish_execution
+        from cron.jobs import update_job
+        patrol_id = runtime.host.manifest()["fixed"]["proactive-watch"]
+        assert get_job(patrol_id)["deliver"] == "bot-chat"
+        # Upgrade a pre-direct installation once, without resuming paused jobs.
+        record = runtime.host.manifest()
+        record.pop("direct_patrol_delivery")
+        runtime.host.save_manifest(record)
+        update_job(patrol_id, {"deliver": "local"})
+        watch_before = get_job(owned["id"])
+        new_header = ("Check its status and your stop condition first. Prepare evidence with notification_add. "
+                      "Stop and call watch_stop when the promised condition is satisfied. "
+                      "As your last step call notification_prepare and return its final_response exactly; "
+                      "this job delivers that response. With nothing approved return [SILENT].\n")
+        old_header = ("Check its status and your stop condition first. Never send directly; prepare evidence with notification_add and notification_queue. "
+                      "Stop and call watch_stop when the promised condition is satisfied. Return [SILENT].\n")
+        assert new_header in watch_before["prompt"]
+        update_job(owned["id"], {"prompt": watch_before["prompt"].replace(new_header, old_header),
+                                "deliver": "local", "enabled": False})
+        runtime.host.initialize()
+        migrated = get_job(owned["id"])
+        assert new_header in migrated["prompt"] and migrated["deliver"] == "bot-chat"
+        assert not migrated["enabled"] and migrated["schedule"] == watch_before["schedule"]
+        assert get_job(patrol_id)["deliver"] == "bot-chat"
+        before = len(list_jobs(True))
+        staged = runtime.handoff(notice["id"])
+        assert staged["status"] == "pending" and staged["job_id"] is None
+        assert cron_run(home, "proactive-watch")["wakeAgent"]
+        execution = create_execution(patrol_id, source="test")
+        mark_execution_running(execution["id"])
+        task_id = "cron:" + patrol_id + ":" + execution["id"]
+        prepared = json.loads(runtime.handle({"action": "notification_prepare", "data": {"id": notice["id"]}},
+                                             task_id=task_id))["result"]
+        assert len(list_jobs(True)) == before, "Preparing a notice must not create a delivery Cron"
+        assert prepared["execution_id"] == execution["id"] and prepared["job_id"] == patrol_id
+        payload = prepared["final_response"]
         assert payload.startswith("[Hermes Muse notification ") and "A bicycle is available." in payload
+        finish_execution(execution["id"], success=True, delivery_outcome="delivered")
+        runtime.host.reconcile()
+        assert runtime.store.read("notification", notice["id"])["status"] == "sent"
+        assert runtime.host.current_delivery(task_id) is None, "A finished run cannot prepare another notice"
         tokens = set_session_vars(session_id="bot-session", chat_type="private", cron_session="")
         try:
             count = len(runtime.store.all("signal"))
             context = runtime.pre_turn(session_id="bot-session", turn_id="delivery-turn",
-                                       user_message='[Cronjob "muse-delivery-test" output]\n\n' + payload)
+                                       user_message='[Cronjob "muse-proactive-watch" output]\n\n' + payload)
             assert context and "Bot Chat" in context["context"]
             assert len(runtime.store.all("signal")) == count
             for review in ("weekly-governance-review", "monthly-system-audit"):
