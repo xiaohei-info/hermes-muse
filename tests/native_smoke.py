@@ -79,6 +79,26 @@ def main():
                 status = json.loads(entry.handler({"action": "context"}))
                 assert status["ok"], status
                 assert status["result"]["workspace"] == str(home / "muse")
+                # Exercise the actual native finalizer with the registered plugin hook.
+                from types import SimpleNamespace
+                import time, uuid
+                from cron.executions import create_execution, mark_execution_running, finish_execution
+                from agent.turn_finalizer import apply_llm_output_transform
+                runtime = entry.handler.__self__
+                notice = runtime.service.notification_add({"event_key": uuid.uuid4().hex, "message": "Verified test body.",
+                    "rationale": "Isolated native test", "sources": ["test fixture"], "verified_at": time.time(),
+                    "expires": time.time() + 3600, "priority": "urgent"})
+                patrol = runtime.host.manifest()["fixed"]["proactive-watch"]
+                attempt = create_execution(patrol, source="test")
+                mark_execution_running(attempt["id"])
+                prepared = json.loads(entry.handler({"action": "notification_prepare", "data": {"id": notice["id"]}},
+                    task_id="cron:" + patrol + ":" + attempt["id"], session_id="native-patrol"))["result"]
+                agent = SimpleNamespace(session_id="native-patrol", model="test", platform="cron")
+                final, changed, _ = apply_llm_output_transform(agent, "Status: dispatching", turn_id="native-turn")
+                assert changed and final == prepared["final_response"] and "Verified test body." in final
+                finish_execution(attempt["id"], success=True, delivery_outcome="delivered")
+                runtime.host.reconcile()
+                assert runtime.store.read("notification", notice["id"])["status"] == "sent"
                 ok, gate = _run_job_script("hermes-muse-memory-upkeep.py", workdir=str(home / "muse"))
                 assert ok and not _parse_wake_gate(gate), (ok, gate)
                 assert (home / "SOUL.md").read_text() == "Keep this identity exactly.\n"

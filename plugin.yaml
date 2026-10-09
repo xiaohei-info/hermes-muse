@@ -1,6 +1,6 @@
 manifest_version: 2
 name: hermes-muse
-version: "0.1.7"
+version: "0.1.8"
 description: A provider-neutral companion assembly with goals, memory upkeep, proactive reminders and a silent Feed.
 author: xiaohei-info
 license: MIT
@@ -9,4 +9,4 @@ kind: standalone
 requires_hermes: ">=0.21.5"
 tags: [automation, memory, companion]
 provides_tools: [muse_manage]
-provides_hooks: [pre_llm_call, post_llm_call, on_session_end]
+provides_hooks: [pre_llm_call, post_llm_call, transform_llm_output, on_session_end]

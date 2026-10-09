@@ -298,6 +298,43 @@ class Companion:
                                  else "Saved for the next patrol; no delivery task was created.")
         return result
 
+    def finalize_delivery(self, delivery):
+        """Native output hook: emit verified notice bodies, never a model's status summary."""
+        now = self.clock()
+        prefs = self.preferences()
+        local = self.host.local_now(now)
+        with self.store.transaction() as db:
+            for row in self.store.rows(db, "notification"):
+                if (not row.get("direct_delivery") or row.get("execution_id") != delivery["execution_id"]
+                        or row.get("output_finalized")):
+                    continue
+                if row["status"] != "dispatching":
+                    pass
+                elif not self.owner_valid(row):
+                    row["status"] = "expired"
+                elif row["topic"] in prefs["blocked_topics"]:
+                    row["status"] = "dismissed"
+                else:
+                    start, end = prefs["start_hour"], prefs["end_hour"]
+                    waking = start <= local.hour < end if start < end else local.hour >= start or local.hour < end
+                    allowed = row["not_before"] <= now
+                    if row["priority"] in {"ordinary", "time_sensitive"}:
+                        allowed &= waking
+                    if row["priority"] == "ordinary":
+                        allowed &= not any(s.get("active") and s.get("last_signal", 0) > now - 15 * 60
+                                           for s in self.store.rows(db, "session"))
+                    if not allowed:
+                        row.update(status="pending", job_id=None)
+                    elif row["verified_at"] < now - DAY:
+                        row.update(status="candidate", job_id=None, needs_reverification=True)
+                    else:
+                        row["output_finalized"] = True
+                if row["status"] != "dispatching" and row.get("budget_key"):
+                    key = row.pop("budget_key")
+                    self.store.put(db, "budget", key, max(0, self.store.get(db, "budget", key, 0) - 1))
+                self.store.put(db, "notification", row["id"], row)
+        return self.prepared_response(delivery)
+
     def prepared_response(self, delivery):
         rows = [row for row in self.store.all("notification")
                 if row.get("direct_delivery") and row.get("execution_id") == delivery["execution_id"]
@@ -352,9 +389,10 @@ class Companion:
                 return ""
             if row["priority"] in {"ordinary", "time_sensitive"}:
                 self.store.put(db, "budget", budget_key, used + 1)
+                row["budget_key"] = budget_key
             row.update(status="dispatching", dispatched_at=now)
             if delivery:
-                row.update(delivery, direct_delivery=True)
+                row.update(delivery, direct_delivery=True, output_finalized=False)
             self.store.put(db, "notification", key, row)
             return row["message"]
 

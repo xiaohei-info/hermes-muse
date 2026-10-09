@@ -120,11 +120,12 @@ def run(home):
         mark_execution_running(execution["id"])
         task_id = "cron:" + patrol_id + ":" + execution["id"]
         prepared = json.loads(runtime.handle({"action": "notification_prepare", "data": {"id": notice["id"]}},
-                                             task_id=task_id))["result"]
+                                             task_id=task_id, session_id="patrol-session"))["result"]
         assert len(list_jobs(True)) == before, "Preparing a notice must not create a delivery Cron"
         assert prepared["execution_id"] == execution["id"] and prepared["job_id"] == patrol_id
         payload = prepared["final_response"]
         assert payload.startswith("[Hermes Muse notification ") and "A bicycle is available." in payload
+        assert runtime.transform_output("Status: dispatching", session_id="patrol-session") == payload
         finish_execution(execution["id"], success=True, delivery_outcome="delivered")
         runtime.host.reconcile()
         assert runtime.store.read("notification", notice["id"])["status"] == "sent"

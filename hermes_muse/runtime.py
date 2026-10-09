@@ -44,6 +44,7 @@ class Runtime:
         self.host = HermesHost(self.store, plugin_root=plugin_root)
         self.service = Companion(self.store, self.host)
         self.timers = {}
+        self.delivery_turns = {}
         self.lock = threading.RLock()
         self.closed = False
 
@@ -64,6 +65,10 @@ class Runtime:
             if is_delegated_child_context() and action not in {"context", "status", "feed_list"}:
                 raise ValueError("A delegated child may read Muse context but must return proposed changes to its parent")
             with profile_scope(self.home):
+                delivery = self.host.current_delivery(kwargs.get("task_id"))
+                if delivery and kwargs.get("session_id"):
+                    with self.lock:
+                        self.delivery_turns[kwargs["session_id"]] = delivery
                 if action in {"context", "status"}:
                     self.host.reconcile()
                     result = self.service.context()
@@ -81,7 +86,7 @@ class Runtime:
                     from .research import start, poll
                     result = (start if action == "research_start" else poll)(self.store, self.ctx, data)
                 elif action in {"notification_prepare", "notification_queue", "notification_handoff"}:
-                    result = self.service.notification_queue(data, self.host.current_delivery(kwargs.get("task_id")))
+                    result = self.service.notification_queue(data, delivery)
                 else:
                     if action == "notification_add" and not data.get("session_id"):
                         data = dict(data)
@@ -96,6 +101,14 @@ class Runtime:
         except Exception as exc:
             log.warning("Hermes Muse action %s failed: %s", args.get("action"), exc)
             return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
+
+    def transform_output(self, response_text="", session_id="", **kwargs):
+        with self.lock:
+            delivery = self.delivery_turns.pop(session_id, None)
+        if self.closed or not delivery:
+            return None
+        with profile_scope(self.home):
+            return self.service.finalize_delivery(delivery)
 
     def handoff(self, key):
         return self.service.notification_queue({"id": key})
@@ -163,6 +176,8 @@ class Runtime:
             self.timers.pop(session_id, None)
 
     def end_turn(self, session_id="", turn_id="", **kwargs):
+        with self.lock:
+            self.delivery_turns.pop(session_id, None)
         # Failed/interrupted turns must also release the local attention hold.
         with self.store.transaction() as db:
             row = self.store.get(db, "session", session_id)
@@ -176,6 +191,7 @@ class Runtime:
             for timer in self.timers.values():
                 timer.cancel()
             self.timers.clear()
+            self.delivery_turns.clear()
 
 
 def register(ctx, *, plugin_root=ROOT):
@@ -191,5 +207,6 @@ def register(ctx, *, plugin_root=ROOT):
     ctx.register_tool(name="muse_manage", toolset="muse", schema=SCHEMA, handler=runtime.handle)
     ctx.register_hook("pre_llm_call", runtime.pre_turn)
     ctx.register_hook("post_llm_call", runtime.post_turn)
+    ctx.register_hook("transform_llm_output", runtime.transform_output)
     ctx.register_hook("on_session_end", runtime.end_turn)
     ctx.on_unload(runtime.close)

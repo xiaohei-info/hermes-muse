@@ -16,7 +16,7 @@ Installation uses the selected profile. Use `hermes -p default plugins install x
 
 If you maintain explicit `platform_toolsets` lists, include `muse` in the platforms where you use the plugin. An enabled plugin can otherwise load its prompts while its state tool remains unavailable.
 
-Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and three conversation hooks, adds one system prompt section, and creates six recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
+Requires Hermes 0.21.5 and the relevant plugin APIs; see the [tested baseline](docs/ACCEPTANCE.md). First load creates the workspace, registers one Skill, one state tool and four conversation hooks, adds one system prompt section, and creates six recurring Cron jobs. There is no feature selection or separate initialization command. Without a running host, loading happens at the next Hermes start.
 
 The system prompt section takes effect in new conversations. Background execution requires a running scheduler and an available model. Research and content generation use the existing model and tools at their normal cost.
 
@@ -68,9 +68,10 @@ Hermes appends `system.md` after the memory section through its plugin API; it t
 | --- | --- |
 | pre_llm_call | Before the reply, records a short user excerpt and its source session, and adds a state-tool pointer to the current turn for goals, interests and feedback. |
 | post_llm_call | After replying to a user message of at least 80 characters, waits for five quiet minutes before scheduling memory upkeep. New input cancels the pending timer; at most three early triggers per day. |
+| transform_llm_output | For a patrol/watch that used the state tool, replaces the final response with approved notice bodies or `[SILENT]`. Ordinary conversations and review reports are unchanged. |
 | on_session_end | Clears the current turn's busy flag so later reminders do not keep waiting on a conversation that has ended. |
 
-These hooks process private and local conversations, skipping groups, Cron and subagent input. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
+User-signal hooks process private and local conversations, skipping groups, Cron and subagent input. The output hook applies only to the current owned patrol/watch execution. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
 
 ## Six recurring Cron jobs
 

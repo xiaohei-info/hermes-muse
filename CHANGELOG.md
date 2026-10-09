@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Fix the live-acceptance failure in 0.1.7 where the model returned a dispatch-status summary instead of the notice body. A narrowly scoped native transform_llm_output hook now finalizes patrol/watch output from approved records.
+- Recheck lifecycle and attention conditions at final output; require that finalization before recognizing a direct notice as sent. Other conversations and review reports are unchanged.
+- Registers four hooks; still one Skill, seven prompt files and six fixed Cron jobs. No delivery-only Cron is created.
+
 ## 0.1.7
 
 - Deliver selected reminders in the patrol/watch Cron's own final response; no additional delivery-only Cron is created. Deferred candidates remain for the next patrol.

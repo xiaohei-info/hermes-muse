@@ -69,8 +69,10 @@ class CompanionTests(unittest.TestCase):
         return self.service.notification_add({"event_key": key, "message": "A relevant fact changed.", "rationale": "Matches the active goal", "sources": ["https://example.org/announcement"], "verified_at": self.now, "expires": self.now + DAY, **kw})
 
     def dispatch(self, key):
-        return self.service.delivery_text(key, delivery={"job_id": "patrol", "execution_id": "attempt-one",
-                                                        "route": self.host.destination})
+        binding = {"job_id": "patrol", "execution_id": "attempt-one", "route": self.host.destination}
+        text = self.service.delivery_text(key, delivery=binding)
+        self.service.finalize_delivery(binding)
+        return text
 
     def test_concurrent_dedup_stages_without_creating_jobs(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
@@ -347,6 +349,56 @@ class CompanionTests(unittest.TestCase):
         with patch.dict(sys.modules, {"cron.executions": ledger}), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
             HermesHost(self.store).reconcile()
         self.assertEqual(self.store.read("notification", row["id"])["status"], "unknown")
+
+    def test_unfinalized_status_summary_cannot_count_as_notice_sent(self):
+        import sys
+        import types
+        from hermes_muse.host import HermesHost
+        row = self.notice(priority="urgent")
+        self.service.notification_queue({"id": row["id"]},
+            {"job_id": "patrol", "execution_id": "run", "route": {"deliver": "bot-chat"}})
+        ledger = types.ModuleType("cron.executions")
+        ledger.get_execution = lambda key: {"id": key, "status": "completed", "delivery_outcome": "delivered"}
+        ledger.latest_execution = ledger.get_execution
+        with patch.dict(sys.modules, {"cron.executions": ledger}), patch("hermes_muse.host.profile_scope", lambda home: contextlib.nullcontext()):
+            HermesHost(self.store).reconcile()
+        self.assertEqual(self.store.read("notification", row["id"])["status"], "unknown")
+
+    def test_finalization_rechecks_cancellation_and_replaces_status_text(self):
+        from hermes_muse.runtime import Runtime
+        runtime = Runtime(object(), self.temp.name)
+        self.addCleanup(runtime.close)
+        runtime.service = self.service
+        binding = {"job_id": "patrol", "execution_id": "run", "route": {"deliver": "bot-chat"}}
+        first = self.notice(priority="urgent")
+        self.service.notification_queue({"id": first["id"]}, binding)
+        runtime.delivery_turns["cron-session"] = binding
+        with patch("hermes_muse.runtime.profile_scope", lambda home: contextlib.nullcontext()):
+            self.assertIsNone(runtime.transform_output("Ordinary reply", session_id="other-session"))
+            output = runtime.transform_output("Status: dispatching", session_id="cron-session")
+        self.assertIn(first["message"], output)
+        self.assertTrue(self.store.read("notification", first["id"])["output_finalized"])
+        second = self.notice("cancelled", priority="urgent")
+        other = dict(binding, execution_id="other-run")
+        self.service.notification_queue({"id": second["id"]}, other)
+        self.service.feedback({"kind": "notification", "id": second["id"], "action": "dismiss", "signal_id": self.signal})
+        self.assertEqual(self.service.finalize_delivery(other), "[SILENT]")
+
+    def test_late_attention_deferral_releases_unsent_budget(self):
+        row = self.notice()
+        binding = {"job_id": "patrol", "execution_id": "run", "route": {"deliver": "bot-chat"}}
+        self.service.notification_queue({"id": row["id"]}, binding)
+        session = self.store.read("session", "session-a")
+        session["active"] = True
+        self.store.write("session", "session-a", session)
+        self.assertEqual(self.service.finalize_delivery(binding), "[SILENT]")
+        self.assertEqual(self.store.read("notification", row["id"])["status"], "pending")
+        session["active"] = False
+        self.store.write("session", "session-a", session)
+        later = dict(binding, execution_id="later")
+        result = self.service.notification_queue({"id": row["id"]}, later)
+        self.assertIn(row["message"], result["final_response"])
+        self.assertIn(row["message"], self.service.finalize_delivery(later))
 
     def test_preference_failure_preserves_file(self):
         before = self.store.path("PROACTIVE_PREFERENCES.md").read_bytes()

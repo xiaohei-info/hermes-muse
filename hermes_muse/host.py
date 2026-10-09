@@ -272,7 +272,9 @@ class HermesHost:
             if not execution or execution["status"] in {"claimed", "running"}:
                 continue
             outcome = execution.get("delivery_outcome")
-            if row["status"] == "queued":
+            if row.get("direct_delivery") and not row.get("output_finalized"):
+                status = "unknown"  # a delivered status summary is not delivery of the notice body
+            elif row["status"] == "queued":
                 # The script was never entered: preparation failed, no receipt is implied.
                 status = "failed" if execution["status"] == "failed" else "unknown"
             elif execution["status"] == "completed" and outcome == "delivered":
