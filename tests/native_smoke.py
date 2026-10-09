@@ -20,7 +20,7 @@ if os.environ.get("HERMES_SOURCE"):
 
 def main():
     with tempfile.TemporaryDirectory(prefix="hermes-muse-integration-") as temporary:
-        base = Path(temporary)
+        base = Path(temporary).resolve()
         homes = [base / "a", base / "b"]
         for home in homes:
             home.mkdir()
