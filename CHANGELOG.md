@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12
+
+- Preserve all recorded real-user context from the last day for patrols, removing the 0.1.11 eight-message/1,000-character excerpt cap. Earlier context remains available through native memory/session retrieval.
+- Make coverage, timely follow-through and user experience the priority; reuse tools and source records only without reducing useful checks or context. The 0.1.11 source, signal and receipt fixes remain.
+
 ## 0.1.11
 
 - Exclude native async-completion envelopes from user signals and signal-backed actions. Preserve historical misclassified messages as background audit evidence.

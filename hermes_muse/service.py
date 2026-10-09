@@ -242,7 +242,7 @@ class Companion:
                 "interests_and_ideas": interests,
                 "new_user_signals": [r for r in signals if r["created"] > cursor][:25] if view in {None, "memory-upkeep"} else [],
                 "nightly_user_signals": [r for r in signals if r["created"] > nightly_cursor][:25] if view in {None, "nightly-review"} else [],
-                "recent_user_context": [{**r, "text": r["text"][:1000]} for r in signals if r["created"] > now - DAY][-8:]
+                "recent_user_context": [r for r in signals if r["created"] > now - DAY]
                                        if view == "proactive-watch" or str(view).startswith("watch-") else [],
                 "review_cursors": {job: self.store.read("cursor", job, 0) for job in ("memory-upkeep", "nightly-review", "proactive-watch", "feed-pulse")},
                 "source_checks": self.store.all("source_check"),
