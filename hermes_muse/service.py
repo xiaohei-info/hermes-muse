@@ -320,8 +320,18 @@ class Companion:
             raise ValueError("Source cursor must be text up to 4000 characters")
         with self.store.transaction() as db:
             alias = self.store.get(db, "source_alias", key)
-            target = data.get("source_id") or (alias or {}).get("target")
-            if target and target != key:
+            target = data.get("source_id") or key
+            # In-flight patrols may still hold the ID of an already merged alias.
+            seen = set()
+            while target not in seen:
+                seen.add(target)
+                binding = self.store.get(db, "source_alias", target)
+                if not binding:
+                    break
+                target = binding["target"]
+            else:
+                raise ValueError("Source alias cycle; inspect recorded identities before continuing")
+            if target != key:
                 canonical = self.store.get(db, "source_check", identifier(target))
                 if not canonical or any(canonical["source"][f] != source[f] for f in ("account", "resource")):
                     raise ValueError("source_id must identify the same account and resource; never merge different accounts/collections")

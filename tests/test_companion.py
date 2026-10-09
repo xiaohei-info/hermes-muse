@@ -161,6 +161,10 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(self.store.read("source_check_alias_history", duplicate["id"])["cursor"], "incompatible-page")
         again = self.service.source_check({**other, "started_at": self.now, "status": "partial", "checked_resources": []})
         self.assertEqual(again["id"], canonical["id"])
+        stale_id = self.service.source_check({**other, "source_id": duplicate["id"], "started_at": self.now,
+            "status": "partial", "checked_resources": []})
+        self.assertEqual(stale_id["id"], canonical["id"])
+        self.assertEqual(len(self.store.all("source_check")), 1)
         with self.assertRaises(ValueError):
             self.service.source_check({**other, "source": {**other["source"], "account": "device-b"},
                 "source_id": canonical["id"], "alias_reason": "Must not cross accounts"})

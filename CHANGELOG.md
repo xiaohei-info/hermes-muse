@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.14
+
+- Resolve previously merged source IDs still held by in-flight patrols, so stale context cannot recreate duplicates.
+
 ## 0.1.13
 
 - Return remaining review batches directly so hourly/nightly work can finish its snapshot in one run; preserve timestamp ties and truthful partial progress.

@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.13
+# Hermes Muse design — v0.1.14
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
