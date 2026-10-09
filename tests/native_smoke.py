@@ -60,6 +60,10 @@ def main():
                     assert "hermes-muse:companion" in str(job), job
                     ok, gate = _run_job_script("hermes-muse-" + key + ".py", workdir=str(home / "muse"))
                     assert ok and _parse_wake_gate(gate), (ok, gate)
+                # Empty local state is not evidence that connections or native memory have no changes.
+                for key in ("proactive-watch", "memory-upkeep", "nightly-review", "feed-pulse"):
+                    ok, gate = _run_job_script("hermes-muse-" + key + ".py", workdir=str(home / "muse"))
+                    assert ok and _parse_wake_gate(gate), (key, ok, gate)
                 assert not any("skill-audit" in j["name"] for j in jobs)
                 ids = {j["id"] for j in jobs}
                 if index == 0 and first_ids is not None:
@@ -85,6 +89,15 @@ def main():
                 from cron.executions import create_execution, mark_execution_running, finish_execution
                 from agent.turn_finalizer import apply_llm_output_transform
                 runtime = entry.handler.__self__
+                from agent.subagent_lifecycle import bind_subagent_parent
+                from unittest.mock import patch
+                from hermes_muse.research import start as start_research
+                parent = SimpleNamespace(valid_tool_names={"delegate_task"})
+                with bind_subagent_parent(parent), patch("tools.delegate_tool.delegate_task", return_value=json.dumps({"status": "dispatched", "delegation_id": "isolated-native"})) as dispatch:
+                    batch = start_research(runtime.store, runtime.ctx, {"items": ["Check fixture A", "Check fixture B"]})
+                    assert batch["total"] == 2
+                    assert dispatch.call_args.kwargs["parent_agent"] is parent
+                    assert dispatch.call_args.kwargs["background"] is True
                 notice = runtime.service.notification_add({"event_key": uuid.uuid4().hex, "message": "Verified test body.",
                     "rationale": "Isolated native test", "sources": ["test fixture"], "verified_at": time.time(),
                     "expires": time.time() + 3600, "priority": "urgent"})
@@ -100,7 +113,7 @@ def main():
                 runtime.host.reconcile()
                 assert runtime.store.read("notification", notice["id"])["status"] == "sent"
                 ok, gate = _run_job_script("hermes-muse-memory-upkeep.py", workdir=str(home / "muse"))
-                assert ok and not _parse_wake_gate(gate), (ok, gate)
+                assert ok and _parse_wake_gate(gate), (ok, gate)
                 assert (home / "SOUL.md").read_text() == "Keep this identity exactly.\n"
                 assert (home / "memories/USER.md").read_text() == "Existing private information.\n"
                 assert (home / "memories/MEMORY.md").read_text() == "Existing private information.\n"

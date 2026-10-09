@@ -74,6 +74,110 @@ class CompanionTests(unittest.TestCase):
         self.service.finalize_delivery(binding)
         return text
 
+    def test_source_checks_preserve_success_on_failure_and_stale_completion(self):
+        data = {"id": "calendar-main", "scope": "main calendar, upcoming week",
+                "started_at": self.now, "status": "checked", "summary": "Read calendar fixture", "cursor": "revision-1"}
+        first = self.service.source_check(data)
+        self.now += 60
+        failed = self.service.source_check({**data, "started_at": self.now, "status": "error", "summary": "Provider timed out", "cursor": "must-not-advance"})
+        self.assertEqual(failed["last_success"], first["last_success"])
+        self.assertEqual(failed["cursor"], "revision-1")
+        late = self.service.source_check({**data, "cursor": "stale"})
+        self.assertEqual(late, failed)
+        with self.assertRaises(ValueError):
+            self.service.source_check({**data, "scope": "another account"})
+        self.now += 60
+        recovered = self.service.source_check({**data, "started_at": self.now, "cursor": "revision-2"})
+        self.assertEqual(recovered["last_success"], self.now)
+        self.assertEqual(self.service.context()["source_checks"], [recovered])
+
+    def test_source_change_without_goal_and_cancellation_before_delivery(self):
+        self.assertEqual(self.service.context()["goals"], [])
+        notice = self.notice("calendar-meeting-time-revision-1", priority="time_sensitive")
+        self.service.notification_queue({"id": notice["id"]})
+        self.now += 60
+        self.service.notification_resolve({"id": notice["id"], "verified_at": self.now,
+            "sources": ["calendar://meeting/cancelled"], "reason": "Source now shows cancellation"})
+        self.assertFalse(self.dispatch(notice["id"]))
+        self.assertEqual(self.notice("calendar-meeting-time-revision-1")["status"], "cancelled")
+        replacement = self.notice("calendar-meeting-time-revision-2", priority="time_sensitive")
+        self.assertTrue(self.dispatch(replacement["id"]))
+        with self.assertRaises(ValueError):
+            self.service.notification_resolve({"id": replacement["id"], "verified_at": self.now,
+                "sources": ["source"], "reason": "Cannot erase a dispatched outcome"})
+
+    def test_nightly_signals_survive_hourly_cursor_and_do_not_skip_batches(self):
+        self.service.review_complete({"job": "memory-upkeep", "up_to": self.now, "summary": "hourly done"})
+        self.assertEqual(self.service.context()["new_user_signals"], [])
+        self.assertEqual(self.service.context()["nightly_user_signals"][0]["id"], self.signal)
+        for i in range(30):
+            self.now += 1
+            self.user("Signal " + str(i))
+        with self.assertRaises(ValueError):
+            self.service.review_complete({"job": "nightly-review", "up_to": self.now, "summary": "skip"})
+        batch = self.service.context()["nightly_user_signals"]
+        self.service.review_complete({"job": "nightly-review", "up_to": batch[-1]["created"], "summary": "first batch"})
+        self.assertEqual(len(self.service.context()["nightly_user_signals"]), 6)
+
+    def test_pending_notices_not_hidden_by_recent_terminal_history(self):
+        pending = self.notice("pending")
+        for n in range(35):
+            self.now += 1
+            row = self.notice("sent-" + str(n))
+            row["status"] = "sent"
+            self.store.write("notification", row["id"], row)
+        context = self.service.context()
+        self.assertEqual([r["id"] for r in context["notifications"]], [pending["id"]])
+        self.assertEqual(len(context["notification_history"]), 30)
+
+    def test_interest_snooze_returns_without_renewing_expiry(self):
+        interest = self.service.interest_record({"id": "topic", "title": "Topic", "signal_id": self.signal})
+        self.service.feedback({"kind": "interest", "id": interest["id"], "action": "snooze", "until": self.now + 60, "signal_id": self.signal})
+        self.assertEqual(self.service.context()["interests_and_ideas"], [])
+        notice = self.notice("snoozed-interest", interest_id=interest["id"], priority="urgent")
+        self.assertFalse(self.dispatch(notice["id"]))
+        self.assertEqual(self.store.read("notification", notice["id"])["status"], "pending")
+        self.now += 61
+        self.assertTrue(self.dispatch(notice["id"]))
+        current = self.service.context()["interests_and_ideas"][0]
+        self.assertEqual(current["expires"], interest["expires"])
+        self.assertEqual(current["status"], "active")
+
+    def test_accepted_goal_can_complete_days_later_with_actual_evidence(self):
+        self.goal()
+        self.now += 3 * DAY
+        with self.assertRaises(ValueError):
+            self.service.goal_update({"id": "bicycle", "status": "completed"})
+        result = self.service.goal_update({"id": "bicycle", "status": "completed",
+            "outcome_evidence": {"verified_at": self.now, "sources": ["source://confirmed-outcome"], "summary": "Verified accepted completion criteria"}})
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(self.host.paused, ["bicycle"])
+        with self.assertRaises(ValueError):
+            self.service.goal_update({"id": "bicycle", "status": "active", "outcome_evidence": result["outcome_evidence"]})
+
+    def test_external_cancellation_requires_verified_source_even_days_later(self):
+        self.goal(external_ref="calendar://event")
+        self.now += 3 * DAY
+        update = {"id": "bicycle", "status": "cancelled", "outcome_evidence": {
+            "sources": ["calendar://event/cancelled"], "verified_at": self.now, "summary": "Authoritative event cancelled"}}
+        with self.assertRaises(ValueError):
+            self.service.goal_update(update)
+        self.assertEqual(self.store.goal("bicycle")[0]["status"], "active")
+        self.assertEqual(self.service.goal_update({**update, "external_status_verified": True})["status"], "cancelled")
+
+    def test_independent_idea_has_evidence_expiry_and_no_implicit_goal(self):
+        args = {"title": "An upcoming local exhibition", "rationale": "Matches known preferences",
+                "sources": ["source://event", "memory://preference"], "expires": self.now + DAY}
+        idea = self.service.idea_add(args)
+        self.assertIsNone(idea["goal_id"])
+        self.assertEqual(self.service.context()["goals"], [])
+        self.now += DAY + 1
+        self.assertEqual(self.service.context()["interests_and_ideas"], [])
+        args.pop("expires")
+        self.assertEqual(self.service.idea_add(args)["expires"], idea["expires"])
+        with self.assertRaises(ValueError):
+            self.service.idea_add({"title": "Unfounded", "rationale": "No evidence"})
+
     def test_concurrent_dedup_stages_without_creating_jobs(self):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             rows = list(pool.map(lambda _: self.notice(), range(12)))

@@ -1,6 +1,6 @@
 # Silent Feed
 
-Use the curated interest/goal state, explicit Feed brief and feedback. Do not use raw chat as a public source. Produce authored explanations, comparisons or useful discovery with traceable original sources and a short reason for personal relevance. No hourly output quota; quiet when nothing adds value.
+Use the curated interest/goal state, explicit Feed brief and feedback, existing native memory and current curated context. Empty local tracking lists do not mean the user has no known interests. Do not revive expired/stopped topics from old memory or manufacture an interest record just to author an article. Do not use raw chat as a public source. Produce authored explanations, comparisons or useful discovery with traceable original sources and a short reason for personal relevance. No hourly output quota; quiet when nothing adds value.
 
 - `feed_add`: `{event_key, title, content, sources:[references], why, goal_id?, interest_id?}`. Stable key deduplicates the same authored event/theme revision. Content is Markdown; the write/index must succeed before calling it available. Generated articles never renew interest.
 - `feed_list`: `{query?}` returns an ordered index and article paths; use normal read tools for full content. query searches titles/body. Return only what the user asks to see.

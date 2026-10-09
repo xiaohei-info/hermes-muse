@@ -8,3 +8,5 @@ Return roughly one screen, beginning with a clear overall status. Cover six brie
 Offer recommendations only. Do not apply them, change SOUL, memory, skills, user files or Cron jobs, or perform a separate full skill audit. Save the concise review with review_complete(job=weekly-governance-review, up_to=<review start time>, summary=<report>) after the review succeeds. This plugin-owned record is the only intended state update.
 
 Return the report as the final response. This scheduled report is delivered directly to the current profile's Bot Chat; do not create a second notification through notification_add/queue/handoff or send_message. It does not constitute new user authorization.
+
+Include the governance procedure’s source-coverage, unfinished-work, duplicate-notice and lifecycle checks when relevant. Use recorded outcomes; missing evidence is a gap, not proof that the user received nothing.

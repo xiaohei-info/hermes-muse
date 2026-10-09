@@ -14,7 +14,7 @@ from .store import GOVERNANCE_JOBS, PLUGIN, Store, stamp
 log = logging.getLogger(__name__)
 ACTIONS = ("context", "status", "goal_create", "goal_update", "interest_record", "idea_add", "feedback",
            "preferences", "notification_add", "notification_refresh", "notification_queue", "notification_handoff", "notification_prepare", "feed_add", "feed_list",
-           "feed_update", "review_complete", "watch_create", "watch_stop", "research_start", "research_status", "forget")
+           "feed_update", "source_check", "notification_resolve", "review_complete", "watch_create", "watch_stop", "research_start", "research_status", "forget")
 SCHEMA = {"name": "muse_manage", "description": "Manage companion goals, temporary interests, reminders, Feed and background research. First read hermes-muse:companion for action-specific data fields. context returns live state and real user signal IDs. Never invent a signal ID, delivery receipt or authorization.",
           "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": list(ACTIONS)}, "data": {"type": "object", "description": "Action arguments documented by the companion Skill; omit for context/status."}}, "required": ["action"], "additionalProperties": False}}
 

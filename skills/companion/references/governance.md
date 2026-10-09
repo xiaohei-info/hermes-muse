@@ -17,3 +17,5 @@ Keep each report around one screen and under 2000 characters for review_complete
 Save only the plugin's review summary/cursor via review_complete. Native Cron retains each run's full output and delivery record. The two scheduled reports go directly to this profile's Bot Chat; do not also use the ordinary proactive-notice queue. Bot Chat explains the result to the user, and the report never becomes a new user signal.
 
 Defaults use the current Hermes timezone: weekly-governance-review runs Sunday at 21:15; monthly-system-audit runs on the first day of each month at 10:40. They are installed with the rest of the plugin. Existing unrelated review jobs remain user-owned.
+
+Check source_checks for missed/partial reads and repeated failures, compare native run history with claimed coverage, inspect unfinished native research and final deliveries, and look for repeated notices or work continuing after closure. Checking many sources and sending many messages are not success metrics. Weather/news selection follows the same value and evidence tests.

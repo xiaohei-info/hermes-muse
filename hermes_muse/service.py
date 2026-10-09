@@ -111,8 +111,22 @@ class Companion:
             status = data.get("status", record["status"])
             if status not in {"active", "completed", "cancelled"}:
                 raise ValueError("Goal status must be active, completed or cancelled")
-            if status != record["status"] or "research_review_at" in data:
+            terminal_outcome = status == "completed" or (status == "cancelled" and record.get("external_ref"))
+            if "research_review_at" in data or (status != record["status"] and not terminal_outcome):
                 self.require_signal(db, data.get("signal_id"))
+            if terminal_outcome and status != record["status"]:
+                if data.get("signal_id"):
+                    self.require_signal(db, data["signal_id"])
+                else:
+                    evidence = data.get("outcome_evidence") or {}
+                    refs = evidence.get("sources")
+                    verified = epoch(evidence.get("verified_at"))
+                    if (not isinstance(refs, list) or not refs
+                            or any(not isinstance(x, str) or not x.strip() or len(x) > 2000 for x in refs)
+                            or not now - DAY <= verified <= now):
+                        raise ValueError("A terminal outcome needs recent original evidence satisfying the accepted criteria")
+                    record["outcome_evidence"] = {"sources": refs, "verified_at": verified,
+                                                      "summary": bounded(evidence.get("summary"), 2000)}
             if status != "active" and record.get("external_ref") and not data.get("external_status_verified"):
                 raise ValueError("Read/update the external authoritative goal first and confirm its status")
             if data.get("progress"):
@@ -165,22 +179,34 @@ class Companion:
         return record
 
     def idea_add(self, data):
-        # Research may propose an Idea without inventing a new user signal or starting execution.
-        goal, _ = self.store.goal(data["goal_id"])
-        if goal["status"] != "active" or goal["research_review_at"] <= self.clock():
-            raise ValueError("Goal is inactive or needs review")
-        key = digest(data["goal_id"] + bounded(data["title"], 300))
+        # Ideas may come from connected-source context without inventing a user commitment.
+        goal = None
+        sources = data.get("sources", [])
+        if data.get("goal_id"):
+            goal, _ = self.store.goal(data["goal_id"])
+            if goal["status"] != "active" or goal["research_review_at"] <= self.clock():
+                raise ValueError("Goal is inactive or needs review")
+        elif not sources:
+            raise ValueError("An independent Idea needs original context/evidence references")
+        if not isinstance(sources, list) or any(not isinstance(x, str) or not x.strip() or len(x) > 2000 for x in sources):
+            raise ValueError("Idea sources must be reference strings")
+        title = bounded(data["title"], 300)
+        expires = min(epoch(data["expires"]), self.clock() + 14 * DAY) if data.get("expires") else self.clock() + 14 * DAY
+        if expires <= self.clock():
+            raise ValueError("Idea already expired")
+        key = digest((goal["id"] if goal else "context:") + title)
         with self.store.transaction() as db:
             existing = self.store.get(db, "interest", key)
             if existing or self.store.get(db, "forgotten", "interest:" + key):
                 return existing or {"id": key, "status": "forgotten"}
-            row = {"id": key, "kind": "idea", "title": data["title"], "goal_id": goal["id"],
-                   "session_id": goal["session_id"], "last_signal": 0, "expires": self.clock() + 14 * DAY,
-                   "status": "candidate", "rationale": bounded(data["rationale"], 2000)}
+            row = {"id": key, "kind": "idea", "title": title, "goal_id": goal["id"] if goal else None,
+                   "session_id": goal["session_id"] if goal else None, "sources": sources,
+                   "last_signal": 0, "expires": expires, "status": "candidate",
+                   "rationale": bounded(data["rationale"], 2000)}
             self.store.put(db, "interest", key, row)
         return row
 
-    def owner_valid(self, row):
+    def owner_valid(self, row, db=None):
         now = self.clock()
         if row.get("goal_id"):
             goal, _ = self.store.goal(row["goal_id"])
@@ -190,23 +216,36 @@ class Companion:
             # Caller can be in a transaction; use its snapshot when supplied.
             interest = row.get("_interest")
             if interest is None:
-                interest = self.store.read("interest", row["interest_id"])
-            if not interest or interest["status"] not in {"active", "accepted"} or interest["expires"] <= now:
+                interest = (self.store.get(db, "interest", row["interest_id"]) if db is not None
+                            else self.store.read("interest", row["interest_id"]))
+            if (not interest or interest["status"] not in {"active", "accepted"}
+                    or interest["expires"] <= now):
                 return False
         return row.get("expires", now + 1) > now
 
     def context(self):
         now = self.clock()
         goals = self.store.goals()
-        interests = [r for r in self.store.all("interest") if r["expires"] > now and r["status"] in {"active", "candidate", "accepted"}]
+        interests = [r for r in self.store.all("interest") if r["expires"] > now and r.get("not_before", 0) <= now and r["status"] in {"active", "candidate", "accepted"}]
         signals = sorted(self.store.all("signal"), key=lambda r: r["created"])
         cursor = self.store.read("cursor", "memory-upkeep", 0)
+        nightly_cursor = self.store.read("cursor", "nightly-review", 0)
+        notices = self.store.all("notification")
+        live = [r for r in notices if r["status"] in {"candidate", "pending", "queued", "dispatching", "transport_queued", "unknown", "failed"}
+                and (r["expires"] > now or r["status"] not in {"candidate", "pending"})]
+        history = sorted((r for r in notices if r not in live), key=lambda r: r["created"], reverse=True)[:30]
         return {"now": stamp(now), "workspace": str(self.store.root), "preferences": self.preferences(),
                 "goals": [g for g in goals if g["status"] == "active" and g["research_review_at"] > now],
                 "goals_needing_review": [g for g in goals if g["status"] == "active" and g["research_review_at"] <= now],
                 "interests_and_ideas": interests,
                 "new_user_signals": [r for r in signals if r["created"] > cursor][:25],
-                "notifications": [r for r in self.store.all("notification") if r["status"] not in {"cancelled", "dismissed", "done", "expired"}][-30:],
+                "nightly_user_signals": [r for r in signals if r["created"] > nightly_cursor][:25],
+                "review_cursors": {job: self.store.read("cursor", job, 0) for job in ("memory-upkeep", "nightly-review", "proactive-watch", "feed-pulse")},
+                "source_checks": self.store.all("source_check"),
+                "research": [{"id": b["id"], "goal_id": b.get("goal_id"), "mode": b.get("mode", "legacy"),
+                              "created": b["created"]} for b in sorted(self.store.all("research"), key=lambda x: x["created"], reverse=True)[:20]],
+                "notifications": live,
+                "notification_history": history,
                 "feed": self.feed_list({})[:15]}
 
     def review_complete(self, data):
@@ -219,13 +258,59 @@ class Companion:
             raise ValueError("Cannot advance a cursor into the future")
         with self.store.transaction() as db:
             old = self.store.get(db, "cursor", job, 0)
-            if job == "memory-upkeep":
+            if job in {"memory-upkeep", "nightly-review"}:
                 pending = sorted((s for s in self.store.rows(db, "signal") if s["created"] > old), key=lambda s: s["created"])
                 if len(pending) > 25 and up_to > pending[24]["created"]:
                     raise ValueError("Cursor skips unseen signals; process the returned batch first")
             self.store.put(db, "cursor", job, max(old, up_to))
             self.store.put(db, "meta", "last_review:" + job, {"at": now, "summary": bounded(data["summary"], 2000)})
         return {"job": job, "processed_through": stamp(max(old, up_to))}
+
+    def source_check(self, data):
+        """Record a real source query; failed/partial reads never advance its watermark."""
+        key = identifier(data["id"])
+        started = epoch(data["started_at"])
+        now = self.clock()
+        if not 0 < started <= now:
+            raise ValueError("Source check start must be a past or current timestamp")
+        status = data["status"]
+        if status not in {"checked", "partial", "error", "unavailable"}:
+            raise ValueError("Invalid source check status")
+        scope = bounded(data["scope"], 1000)
+        summary = bounded(data["summary"], 2000)
+        cursor = data.get("cursor")
+        if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 4000):
+            raise ValueError("Source cursor must be text up to 4000 characters")
+        with self.store.transaction() as db:
+            old = self.store.get(db, "source_check", key, {})
+            if old and old["scope"] != scope:
+                raise ValueError("Use a new source ID for a different account or query scope")
+            if started < old.get("started_at", 0):
+                return old  # A slower old scan cannot overwrite a newer observation.
+            row = {**old, "id": key, "scope": scope, "started_at": started,
+                   "finished_at": now, "status": status, "summary": summary}
+            if status == "checked":
+                row.update(last_success=started, cursor=cursor)
+            self.store.put(db, "source_check", key, row)
+        return row
+
+    def notification_resolve(self, data):
+        """Retire an unsent notice after verifying that its source no longer warrants it."""
+        key = identifier(data["id"])
+        verified = epoch(data["verified_at"])
+        if not self.clock() - DAY <= verified <= self.clock():
+            raise ValueError("Resolution needs recent source verification")
+        sources = data.get("sources")
+        if not isinstance(sources, list) or not sources or any(not isinstance(s, str) or len(s) > 2000 for s in sources):
+            raise ValueError("Supply original resolution evidence")
+        reason = bounded(data["reason"], 2000)
+        with self.store.transaction() as db:
+            row = self.store.get(db, "notification", key)
+            if not row or row["status"] not in {"candidate", "pending"}:
+                raise ValueError("Only an unsent candidate can be resolved from source evidence")
+            row.update(status="cancelled", resolution={"verified_at": verified, "sources": sources, "reason": reason})
+            self.store.put(db, "notification", key, row)
+        return row
 
     def notification_add(self, data):
         now = self.clock()
@@ -310,13 +395,16 @@ class Companion:
                     continue
                 if row["status"] != "dispatching":
                     pass
-                elif not self.owner_valid(row):
+                elif not self.owner_valid(row, db):
                     row["status"] = "expired"
                 elif row["topic"] in prefs["blocked_topics"]:
                     row["status"] = "dismissed"
                 else:
                     start, end = prefs["start_hour"], prefs["end_hour"]
                     waking = start <= local.hour < end if start < end else local.hour >= start or local.hour < end
+                    if row.get("interest_id"):
+                        interest = self.store.get(db, "interest", row["interest_id"], {})
+                        row["not_before"] = max(row["not_before"], interest.get("not_before", 0))
                     allowed = row["not_before"] <= now
                     if row["priority"] in {"ordinary", "time_sensitive"}:
                         allowed &= waking
@@ -361,6 +449,8 @@ class Companion:
                 row["status"] = "expired"
                 self.store.put(db, "notification", key, row)
                 return ""
+            if row.get("_interest"):
+                row["not_before"] = max(row["not_before"], row["_interest"].get("not_before", 0))
             row.pop("_interest", None)
             if row["verified_at"] < now - DAY:
                 row.update(status="candidate", job_id=None, needs_reverification=True)
@@ -409,7 +499,9 @@ class Companion:
                 until = epoch(data["until"])
                 if not self.clock() < until < row["expires"]:
                     raise ValueError("Snooze must be before expiry")
-                row.update(status="pending", not_before=until, job_id=None)
+                row.update(not_before=until)
+                if kind == "notification":
+                    row.update(status="pending", job_id=None)
             elif action in {"done", "dismiss", "stop", "accept"}:
                 row["status"] = {"done": "done", "dismiss": "dismissed", "stop": "stopped", "accept": "accepted"}[action]
             else:

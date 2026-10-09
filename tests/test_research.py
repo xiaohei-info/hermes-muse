@@ -1,4 +1,7 @@
 import dataclasses
+import json
+import time
+import uuid
 import sys
 import tempfile
 import types
@@ -7,8 +10,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from hermes_muse.research import start, poll
+from hermes_muse.research import start as native_start, poll
 from hermes_muse.store import Store
+
+
+def start(store, ctx, data):
+    key = uuid.uuid4().hex[:12]
+    store.write("research", key, {"id": key, "created": time.time(),
+        "items": [{"question": q, "status": "pending", "attempts": 0} for q in dict.fromkeys(data["items"])]})
+    return poll(store, ctx, {"id": key})
 
 
 @dataclasses.dataclass
@@ -64,9 +74,40 @@ class ResearchTests(unittest.TestCase):
         self.ctx = SimpleNamespace(subagent_lifecycle=self.lifecycle)
         module = types.ModuleType("agent.subagent_lifecycle")
         module.SubagentHandle, module.SubagentLaunchRequest = Handle, Request
+        self.parent = SimpleNamespace(valid_tool_names={"delegate_task"})
+        module.get_active_subagent_parent = lambda: self.parent
         self.patch = patch.dict(sys.modules, {"agent.subagent_lifecycle": module})
         self.patch.start()
         self.addCleanup(self.patch.stop)
+
+    def test_new_batch_is_one_native_dispatch_and_status_cannot_advance_it(self):
+        calls = []
+        def dispatch(name, args, **kwargs):
+            calls.append((name, args, kwargs))
+            return json.dumps({"status": "dispatched", "delegation_id": "native-one"})
+        self.ctx.dispatch_tool = dispatch
+        batch = native_start(self.store, self.ctx, {"items": ["a", "b", "c", "d", "a"]})
+        self.assertEqual(batch["total"], 4)
+        self.assertEqual(len(calls), 1)
+        self.assertIs(calls[0][2]["parent_agent"], self.parent)
+        self.assertIn("4. d", calls[0][1]["goal"])
+        ledger = types.ModuleType("tools.async_delegation")
+        ledger.get_durable_delegation = lambda key: {"state": "completed", "result": {"summary": "All four checked"}}
+        with patch.dict(sys.modules, {"tools.async_delegation": ledger}):
+            result = poll(self.store, self.ctx, {"id": batch["id"]})
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self.lifecycle.requests, [])
+
+    def test_new_research_requires_native_parent_tool_and_records_no_failed_dispatch(self):
+        self.parent.valid_tool_names = set()
+        with self.assertRaises(ValueError):
+            native_start(self.store, self.ctx, {"items": ["a"]})
+        self.parent.valid_tool_names.add("delegate_task")
+        self.ctx.dispatch_tool = lambda *a, **kw: json.dumps({"error": "paused"})
+        with self.assertRaises(ValueError):
+            native_start(self.store, self.ctx, {"items": ["a"]})
+        self.assertEqual(self.store.all("research"), [])
 
     def test_dedup_bounded_waves_and_coverage(self):
         batch = start(self.store, self.ctx, {"items": ["a", "b", "c", "d", "e", "a"]})

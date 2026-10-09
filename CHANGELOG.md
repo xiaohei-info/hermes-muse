@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.10
+
+- Run all six fixed jobs on schedule instead of treating empty local goals/interests as proof there is no work. Patrols discover connected services/devices, inspect changes and upcoming deadlines, then stay silent when nothing merits a notice. This increases scheduled model usage.
+- Record per-source coverage and successful watermarks; partial or failed reads preserve the previous successful position. Retire stale unsent notices from verified source evidence.
+- Add weather/travel changes, interest news and relevant local opportunities to the existing patrol/Feed procedures, with current context, original sources, expiry and the same attention budget. No extra Cron or service dependency.
+- Give nightly review its own signal cursor; keep pending notices visible, fix interest snooze/resumption and a nested SQLite transaction during interest-notice finalization.
+- Allow evidence-backed completion of accepted goals across days, verified external cancellation and expiring Ideas without a fabricated goal. New commitments and scope changes still require user evidence.
+- Use one native asynchronous coordinator for new research batches, with host result callbacks and durable status. No user-driven wave advancement for new work; legacy batches remain inspectable.
+- Keep one Skill, seven prompts, four hooks and six fixed jobs. Preserve user templates, native identity/memory and job schedule/model/pause choices.
+
 ## 0.1.9
 
 - Expand proactive behavior instructions: notice concrete conversational plans, prepare useful work before interrupting, select one strongest ordinary item, and avoid status chasing or repeated offers.

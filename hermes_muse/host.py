@@ -362,7 +362,6 @@ def cron_run(home, key):
                 "once in this Bot Chat. Do not create or queue another notification for this delivery.\n"
                 "Why: " + notice.get("rationale", "") + "\n"
                 "Sources: " + ", ".join(notice.get("sources", [])) + "\n\n" + text)
-    context = service.context()
     if key.startswith("watch-"):
         pair = next(((jid, r) for jid, r in host.manifest()["jobs"].items() if r["key"] == key), None)
         owned = pair[1] if pair else None
@@ -376,22 +375,7 @@ def cron_run(home, key):
             return {"wakeAgent": goal["status"] == "active", "goal": goal["id"], "watch_id": pair[0]}
         except ValueError:
             return {"wakeAgent": False}
-    now = time.time()
-    signals = context["new_user_signals"]
-    if key in GOVERNANCE_JOBS:
-        wake = True  # a scheduled review can report insufficient evidence even without active goals
-    elif key == "memory-upkeep":
-        wake = bool(signals)
-    elif key == "feed-pulse":
-        wake = bool(context["interests_and_ideas"] or context["goals"] or context["preferences"]["feed_brief"])
-    elif key == "nightly-review":
-        nightly_cursor = store.read("cursor", "nightly-review", 0)
-        fresh = any(s["created"] > nightly_cursor for s in store.all("signal"))
-        wake = bool(fresh or context["goals"] or context["goals_needing_review"] or context["interests_and_ideas"])
-    else:
-        # Pending notices are rechecked by this run; never spawn a second delivery job.
-        ready = any(r["status"] in {"candidate", "pending"} and r["not_before"] <= now
-                    and r["expires"] > now for r in context["notifications"])
-        wake = bool(context["goals"] or context["interests_and_ideas"] or ready)
-    return {"wakeAgent": wake, "job": key, "started_at": stamp(now),
-            "instruction": "Call muse_manage context for current facts, then follow this job's Skill procedure. Advance review_complete only after successful writes."}
+    # Fixed jobs must inspect live sources/memory before deciding there is no work.
+    # Only owned watches retain their explicit lifecycle gate above.
+    return {"wakeAgent": key in JOBS, "job": key, "started_at": stamp(),
+            "instruction": "Call muse_manage context, inspect current sources using this job's Skill, then decide whether there is useful work. No worthwhile notification means [SILENT], not a skipped check."}

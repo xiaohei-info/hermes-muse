@@ -8,3 +8,5 @@ Return roughly one screen with a clear overall status and six brief points: alig
 Offer recommendations only. Do not edit SOUL, system configuration, memory, skills, user files or Cron jobs. Do not add another governance layer merely to make the review look complete. Save the concise report with review_complete(job=monthly-system-audit, up_to=<review start time>, summary=<report>) after successful completion; this plugin-owned record is the only intended state update.
 
 Return the report as the final response for native delivery to the current profile's Bot Chat. Do not enqueue another notification or repeat the report through another channel. The report is background evidence, not a new user request.
+
+Include the governance procedure’s source-coverage, unfinished-work, duplicate-notice and lifecycle checks when relevant. Use recorded outcomes; missing evidence is a gap, not proof that the user received nothing.

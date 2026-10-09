@@ -55,9 +55,9 @@ Configured procedures are not programmatic guarantees of model behavior. Actual 
 | Idea selection, acceptance and retirement | Partial | Has storage, 14-day expiry, feedback and goal closure; selection and task conversion use the model, with no card action UI. |
 | Goal research, briefings and letters | Configured | The nightly procedure studies selected goals and saves evidence/briefings; no separate goal-research scheduler. |
 | Conversation alongside background tasks | Implemented | Uses the native asynchronous subagent API while the main conversation continues. |
-| Nested coordinator/worker delegation | Not covered | The plugin research tool launches leaf tasks, without a nested coordinator. |
-| Wide parallel research | Partial | Up to three concurrent leaves and 24 questions, one retry for failed items; research_status must advance subsequent waves. |
-| Task state, stopping and restart recovery | Partial | Stores handles/results and checks cancellation when polled. Tasks lost across processes become unknown, without automatic resumption. |
+| Nested coordinator/worker delegation | Partial | Uses a native coordinator; further delegation depends on host depth/tool configuration. |
+| Wide parallel research | Partial | Up to 24 questions go to one native coordinator and return through the host callback. Bounded fan-out and read-only retries are coordinator instructions within host limits; status lookup no longer advances waves. |
+| Task state, stopping and restart recovery | Partial | New batches use native durable dispatch/results and host stop/steer controls. Coordinators recheck goal state; immediate cancellation still needs native control. Unknown outcomes are not automatically replayed. |
 | Browser task execution | Partial | Can use the host's browser tools; the plugin adds no browser executor. |
 | Browser pause for login/CAPTCHA and resume | Not covered | No persistent browser-task pause/resume mechanism. |
 | Reports, documents and interactive applications | Partial | Provides goal output directories and uses Hermes for generation; no Muse Library or app surface. |
