@@ -41,10 +41,10 @@ Feed has no dedicated page. New research batches use native Hermes execution and
 
 | Name | Purpose |
 | --- | --- |
-| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: connection and device checks, goals and interests, reminders and feedback, memory and relationships, Feed, delegation, checks of its own actions, and weekly/monthly reviews. |
+| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs, including thinking through a request’s practical consequences and carrying the plan into the task: connection and device checks, goals and interests, reminders and feedback, memory and relationships, Feed, delegation, checks of its own actions, and weekly/monthly reviews. |
 | muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, keep source progress by connection, account and resource, distinguish complete, partial and failed checks, maintain expiry, stopping and delivery state, and inspect native tool receipts and unresolved mistakes. |
 
-The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all six recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
+The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all six recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool. When you change a task, it considers the purpose and practical consequences, updates the actual task and verifies the result before confirming. Checking frequency and notification frequency stay separate; the reply explains what matters in natural language, without a fixed script.
 
 ## Prompts
 
@@ -53,7 +53,7 @@ The plugin includes eight prompt files:
 | File | Purpose |
 | --- | --- |
 | [receiving.md](prompts/receiving.md) | Shared Bot Chat handoff: turn internal findings into a direct response to the user, as a self-contained message from the same assistant, identifying the subject and what happened before explaining the findings, without acknowledging the job or creating another reminder. |
-| [system.md](prompts/system.md) | Keep the main conversation available for new input and coordination; delegate independent multi-step work and retain unfinished commitments. |
+| [system.md](prompts/system.md) | Take ownership of requests and changes, explain useful judgments in the user’s voice, keep the main conversation available, and retain unfinished commitments. |
 | [proactive-watch.md](prompts/proactive-watch.md) | Discover available connections/devices, check changes and approaching deadlines, record source coverage, then verify and notify or remain silent. |
 | [memory-upkeep.md](prompts/memory-upkeep.md) | Process new conversations and facts; check its own operations for mistakes, verify repairs, and update memory and progress. |
 | [nightly-review.md](prompts/nightly-review.md) | Review conversations independently of hourly upkeep; update alignment, research goals and suggestions, check closure and unresolved mistakes, and review working lessons and skills. |

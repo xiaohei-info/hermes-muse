@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Manage goals and expiring interests, proactive reminders, feedback, memory and relationships, nightly alignment, silent Feed and bounded parallel research using the current Hermes profile.
-version: 0.1.19
+version: 0.1.20
 ---
 
 # Companion
@@ -11,7 +11,7 @@ This is the single Skill registered as `hermes-muse:companion`. It adds procedur
 ## Choose a procedure
 
 - Checks of your own actions, mistakes, repairs and follow-through: [self-review](references/self-review.md).
-- User-facing results and Bot Chat handoff: [communication](references/communication.md).
+- Taking on or changing work, conversational tone, user-facing results and Bot Chat handoff: [communication](references/communication.md).
 - Goals, temporary interests, Ideas, completion and monitoring: [goals](references/goals.md).
 - Reminder selection, delivery, feedback and quiet attention: [proactivity](references/proactivity.md).
 - Incremental memory, relationships, reflection, repair and forgetting: [memory](references/memory.md).

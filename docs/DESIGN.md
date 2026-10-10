@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.19
+# Hermes Muse design — v0.1.20
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -127,3 +127,10 @@ Muse state holds checkpoints, one current snapshot's references, session/executi
 ## Self-contained receiving replies
 
 The shared receiving contract assumes internal deliveries/tool traces have not been read. Replies introduce the concrete subject and change, integrate follow-up checks into the current verified picture, and avoid unexplained references to a packet. Internal transcript presence is not user awareness; duplicate suppression uses actual user-facing results. The private-conversation pre-turn hook supplies the same guidance for all native Cron envelopes, including pre-existing jobs outside Muse, without adopting/editing those jobs, changing their output or recording their text as user intent. Muse outgoing envelopes and the system/communication procedure carry the same completeness rule. Ordinary user turns, groups and delegated execution retain their existing behavior. Exact wording remains model behavior.
+
+
+## Task ownership and conversational voice
+
+The existing system section, real-user turn pointer and communication procedure teach task-taking judgment: infer the intended result, consider relevant consequences, persist workable notification/failure/exit rules in the actual work and verify before confirming. This is model behavior under existing permissions, not new scheduling authority. Routine choices should not become a questionnaire, and explicit report subscriptions must not be silently converted into silent change watches. Existing native Cron inspection/update changes the original watch; watch_create is explicitly not an update API. Current source scope, lifecycle, ownership marker and generated delivery contract must be retained. Claims of scheduling, steering a child or recovery require evidence.
+
+The communication/receiving guidance favors familiar, warm, candid wording with a relevant practical judgment, respecting the existing user voice and SOUL. It does not impose a character, catchphrase, humor quota or fixed response structure. Eight prompt files, one Skill and six jobs remain. The system section keeps core principles and routing within the host’s 4,000-character limit; detailed procedures stay in the existing Skill. Native integration checks that the rendered shipped section is not clipped. Existing conversations get the procedure pointer on new real-user turns, while their frozen system prefix is unchanged.

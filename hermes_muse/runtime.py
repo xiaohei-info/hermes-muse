@@ -140,7 +140,7 @@ class Runtime:
             if timer:
                 timer.cancel()
         self.service.signal(turn_id, session_id, text, route_from(info))
-        return {"context": f"[Hermes Muse state pointer] This real user turn has signal_id={turn_id}. Companion workspace: {self.store.root}. For goals, interests, feedback, reminders or Feed, load hermes-muse:companion and use muse_manage. Read current state before using old memories as an active goal. This pointer does not authorize extra tasks."}
+        return {"context": f"[Hermes Muse state pointer] This real user turn has signal_id={turn_id}. Companion workspace: {self.store.root}. For goals, interests, feedback, reminders or Feed, load hermes-muse:companion and use muse_manage. When accepting or changing work, read its communication procedure: think through the outcome and practical consequences, persist the plan, verify actions and explain the useful judgment in the user's own conversational style. Read current state before using old memories as an active goal. This pointer does not authorize extra tasks."}
 
     def post_turn(self, session_id="", turn_id="", **kwargs):
         if self.closed:

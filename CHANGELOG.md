@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.20
+
+- Teach the existing communication/goals procedures to consider a request’s practical consequences, carry notification/failure/exit rules into actual work, and verify changes before confirming.
+- Encourage a natural, warm, candid voice that explains useful judgment without catchphrases, forced humor or a fixed reply template.
+- Clarify that frequency/scope changes update the existing native Cron job; watch_create is not an update API. Preserve explicit report subscriptions and user constraints.
+- Give existing conversations the procedure pointer and keep the system summary within the host’s prompt budget. No new Skill, prompt file, Cron or state storage.
+
 ## 0.1.19
 
 - Make receiving replies understandable without reading internal deliveries: identify the subject and change, then integrate verified findings and practical impact.

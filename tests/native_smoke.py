@@ -74,6 +74,8 @@ def main():
                     pause_job(next(iter(ids)), reason="user paused")
                 prompt = render_system_prompt_sections({"session_id": "integration"})
                 rendered = str(prompt)
+                expected_prompt = (PROJECT / "prompts/system.md").read_text().replace("{{MUSE_HOME}}", str(home / "muse")).replace("{{HERMES_HOME}}", str(home))
+                assert any(section.content == expected_prompt.strip() for section in prompt), "The host clipped part of the shipped system instructions"
                 assert str(home / "muse") in rendered, rendered
                 assert str(homes[1 - index] / "muse") not in rendered
                 skill = skill_view("hermes-muse:companion")
