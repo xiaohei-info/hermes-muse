@@ -124,7 +124,8 @@ def run(home):
         assert len(list_jobs(True)) == before, "Preparing a notice must not create a delivery Cron"
         assert prepared["execution_id"] == execution["id"] and prepared["job_id"] == patrol_id
         payload = prepared["final_response"]
-        assert payload.startswith("[Hermes Muse notification ") and "A bicycle is available." in payload
+        assert payload.startswith("[Hermes Muse internal delivery]") and "A bicycle is available." in payload
+        assert "[Hermes Muse notification " in payload and "The user is the audience" in payload
         assert runtime.transform_output("Status: dispatching", session_id="patrol-session") == payload
         finish_execution(execution["id"], success=True, delivery_outcome="delivered")
         runtime.host.reconcile()

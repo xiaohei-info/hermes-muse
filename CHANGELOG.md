@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.15
+
+- Align all job, Skill, system and research instructions around useful depth, initiative, completion and recovery; remove automatic next-pass deferral and rigid review formats.
+- Add one shared Bot Chat receiving prompt and a communication procedure. Notices and review reports arrive as internal findings to explain directly to the user, not messages to acknowledge.
+- Preserve direct-channel text, delivery checks, user intent boundaries, existing settings and the six recurring jobs; receiving envelopes never become user signals or new reminder loops.
+
 ## 0.1.14
 
 - Resolve previously merged source IDs still held by in-flight patrols, so stale context cannot recreate duplicates.

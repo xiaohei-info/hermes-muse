@@ -198,14 +198,15 @@ class HermesHost:
         _, job_id, execution_id = parts
         owned = self.manifest()["jobs"].get(job_id, {})
         key = owned.get("key", "")
-        if key != "proactive-watch" and not key.startswith("watch-"):
+        if key not in ("proactive-watch", *GOVERNANCE_JOBS) and not key.startswith("watch-"):
             return None
         with profile_scope(self.home):
             job, execution = get_job(job_id), get_execution(execution_id)
         if (not job or job.get("deliver") in (None, "local") or not execution
                 or execution.get("job_id") != job_id or execution.get("status") != "running"):
             return None
-        return {"job_id": job_id, "execution_id": execution_id, "route": {"deliver": job["deliver"]}}
+        return {"job_id": job_id, "execution_id": execution_id, "route": {"deliver": job["deliver"]},
+                "kind": "report" if key in GOVERNANCE_JOBS else "notice"}
 
     def watch(self, data):
         goal, _ = self.store.goal(data["goal_id"])
@@ -217,7 +218,7 @@ class HermesHost:
         if expires is not None and expires <= time.time():
             raise ValueError("Watch expiry must be in the future")
         key = "watch-" + uuid.uuid4().hex[:12]
-        prompt = ("Read hermes-muse:companion and muse_manage context. Work only on goal " + goal["id"] + ". "
+        prompt = ("Read hermes-muse:companion including its execution/recovery and communication procedures, and muse_manage context. Work only on goal " + goal["id"] + ". "
                   "Check its status and your stop condition first. Prepare evidence with notification_add. "
                   "Stop and call watch_stop when the promised condition is satisfied. "
                   "As your last step call notification_prepare and return its final_response exactly; "

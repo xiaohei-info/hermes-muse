@@ -6,6 +6,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 
+from .handoff import render_result
 from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, is_background_message, stamp
 
 DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": 1,
@@ -488,11 +489,12 @@ class Companion:
                 and row["status"] == "dispatching"]
         if not rows:
             return "[SILENT]"
+        destination = (delivery.get("route") or {}).get("deliver")
         parts = []
         for row in rows:
             parts.append("[Hermes Muse notification " + row["id"] + "]\n"
                          "Why: " + row["rationale"] + "\nSources: " + ", ".join(row["sources"]) + "\n\n" + row["message"])
-        return "\n\n".join(parts)
+        return render_result("\n\n".join(parts), destination)
 
     def delivery_gate(self, row, db, now, prefs, *, check_budget=True):
         """Explain policy eligibility, not a promise of scheduled or successful delivery."""

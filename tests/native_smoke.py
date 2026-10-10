@@ -128,6 +128,27 @@ def main():
                 assert (home / "SOUL.md").read_text() == "Keep this identity exactly.\n"
                 assert (home / "memories/USER.md").read_text() == "Existing private information.\n"
                 assert (home / "memories/MEMORY.md").read_text() == "Existing private information.\n"
+                # A genuine host-owned governance run receives the same Bot contract,
+                # while its recommendations remain evidence rather than user intent.
+                weekly = runtime.host.manifest()["fixed"]["weekly-governance-review"]
+                review_attempt = create_execution(weekly, source="test")
+                mark_execution_running(review_attempt["id"])
+                review_context = json.loads(entry.handler({"action": "context"},
+                    task_id="cron:" + weekly + ":" + review_attempt["id"], session_id="native-review"))
+                assert review_context["ok"]
+                staged = runtime.service.notification_add({"event_key": uuid.uuid4().hex, "message": "A future patrol candidate.",
+                    "rationale": "Isolated test", "sources": ["fixture"], "verified_at": time.time(),
+                    "expires": time.time() + 3600, "priority": "urgent"})
+                report_candidate = json.loads(entry.handler({"action": "notification_prepare", "data": {"id": staged["id"]}},
+                    task_id="cron:" + weekly + ":" + review_attempt["id"], session_id="native-review"))["result"]
+                assert report_candidate["status"] == "pending" and report_candidate["final_response"] == "[SILENT]"
+                assert not runtime.store.read("notification", staged["id"]).get("execution_id")
+                review_agent = SimpleNamespace(session_id="native-review", model="test", platform="cron")
+                report, changed, _ = apply_llm_output_transform(review_agent, "A verified review; proposed changes are not applied.", turn_id="review-turn")
+                assert changed and report.startswith("[Hermes Muse internal delivery]")
+                assert report.endswith("A verified review; proposed changes are not applied.")
+                assert "The user is the audience" in report
+                finish_execution(review_attempt["id"], success=True, delivery_outcome="delivered")
                 # User edits to workspace templates survive a second initialization.
                 prefs = home / "muse/TOOLS.md"
                 prefs.write_text("User maintained source list.\n")

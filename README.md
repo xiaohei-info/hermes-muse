@@ -48,10 +48,11 @@ The Skill is registered with the plugin and its files stay in the plugin directo
 
 ## Prompts
 
-The plugin includes seven prompt files:
+The plugin includes eight prompt files:
 
 | File | Purpose |
 | --- | --- |
+| [receiving.md](prompts/receiving.md) | Shared Bot Chat handoff: turn internal findings into a direct response to the user, without acknowledging the job or creating another reminder. |
 | [system.md](prompts/system.md) | Keep the main conversation available for new input and coordination; delegate independent multi-step work and retain unfinished commitments. |
 | [proactive-watch.md](prompts/proactive-watch.md) | Discover available connections/devices, check changes and approaching deadlines, record source coverage, then verify and notify or remain silent. |
 | [memory-upkeep.md](prompts/memory-upkeep.md) | Process new conversations, sourced facts and task outcomes; update memory, relationships and processing progress. |
@@ -60,7 +61,7 @@ The plugin includes seven prompt files:
 | [weekly-governance-review.md](prompts/weekly-governance-review.md) | Review outcomes and effort, missed sources, unfinished work and repeated reminders; suggest next-week adjustments. |
 | [monthly-system-audit.md](prompts/monthly-system-audit.md) | Check whether instructions and recurring work still help, look for duplicate workflows and work that should have stopped, and suggest simplifications. |
 
-Hermes appends `system.md` after the memory section through its plugin API; it takes effect in new conversations. The other six files become the corresponding Cron job prompts and are used when those jobs run. Each plugin load refreshes these job prompts while preserving the user's schedule, model and pause settings.
+Hermes appends `system.md` after the memory section through its plugin API; it takes effect in new conversations. `receiving.md` accompanies Bot Chat results and is also used by the receiving conversation hook. The six task files become the corresponding Cron job prompts and are used when those jobs run. Each plugin load refreshes these job prompts while preserving the user's schedule, model and pause settings.
 
 ## Conversation hooks
 
@@ -68,10 +69,10 @@ Hermes appends `system.md` after the memory section through its plugin API; it t
 | --- | --- |
 | pre_llm_call | Before the reply, records a short user excerpt and its source session, and adds a state-tool pointer to the current turn for goals, interests and feedback. |
 | post_llm_call | After replying to a user message of at least 80 characters, waits for five quiet minutes before scheduling memory upkeep. New input cancels the pending timer; at most three early triggers per day. |
-| transform_llm_output | For a patrol/watch that used the state tool, replaces the final response with approved notice bodies or `[SILENT]`. Ordinary conversations and review reports are unchanged. |
+| transform_llm_output | For a patrol/watch that used the state tool, replaces the final response with approved notice bodies or `[SILENT]`. Bot Chat notices and weekly/monthly reports include the same receiving guidance. Ordinary conversations and direct channel reports are unchanged. |
 | on_session_end | Clears the current turn's busy flag so later reminders do not keep waiting on a conversation that has ended. |
 
-User-signal hooks process private and local conversations, skipping groups, Cron, subagent input and completion callbacks. Older misclassified background messages remain as audit evidence outside the user-signal inbox. The output hook applies only to the current owned patrol/watch execution. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
+User-signal hooks process private and local conversations, skipping groups, Cron, subagent input and completion callbacks. Older misclassified background messages remain as audit evidence outside the user-signal inbox. The output hook is bound to the current owned patrol/watch or governance execution; it does not modify ordinary replies. Delayed upkeep uses the existing memory Cron job. Unloading the plugin from the running process cancels its temporary timers.
 
 ## Six recurring Cron jobs
 
@@ -81,7 +82,7 @@ User-signal hooks process private and local conversations, skipping groups, Cron
 | muse-memory-upkeep | Hourly | New facts and people/group notes |
 | muse-nightly-review | Daily at 03:20 | Alignment, goal research, Ideas, working lessons and skill review |
 | muse-feed-pulse | Hourly | Local Feed articles |
-| muse-weekly-governance-review | Sunday at 21:15 | A short review of outcomes, costs and proposed adjustments |
+| muse-weekly-governance-review | Sunday at 21:15 | A concrete review of usefulness, execution and proposed adjustments |
 | muse-monthly-system-audit | First day of the month at 10:40 | A short audit of priorities, instructions and recurring work |
 
 The plugin does not pin a model or provider on its recurring jobs. Hermes resolves the model at each run: **per-job model → current profile’s `cron.model` → profile’s main model**. Without a Cron default, hourly background work can use the same expensive model as your main conversation. Set a background model before leaving the scheduler running.
@@ -101,13 +102,15 @@ Hermes currently resolves reasoning from a per-job `reasoning_effort`, then the 
 
 Schedules use the current Hermes timezone. Watches with an explicit expiry stop when due. Explicitly requested timed reminders and watches can create additional recorded Cron jobs; six is the permanent job count. A patrol delivers approved notices in its own final response, with no extra delivery Cron. Deferred candidates stay for the next patrol. Delivery is checked against that execution’s persistent receipt, independently of later patrols.
 
-All six fixed jobs call the model on schedule to inspect the information relevant to their work. Each patrol discovers available connections and devices and checks mail, calendars, reminders and other sources even without saved goals or interests. Each source reuses a stable record and a tested read recipe. Verified tool aliases reuse the established source record; duplicate observations are archived without advancing its successful checkpoint. Different accounts and collections stay separate. Reducing calls must preserve substantive content, sound judgment, proactive help, relevant context and timely follow-through. Expected and checked resources are recorded separately; a missing calendar, unfinished page or failed read cannot advance the successful checkpoint. Checks consume model calls; tools and subagents can add usage.
+All six fixed jobs call the model on schedule to inspect the information relevant to their work. Each patrol discovers available connections and devices and checks mail, calendars, reminders and other sources even without saved goals or interests. Each source reuses a stable record and a tested read recipe. Verified tool aliases reuse the established source record; duplicate observations are archived without advancing its successful checkpoint. Different accounts and collections stay separate. Reducing calls must preserve substantive content, sound judgment, proactive help, relevant context and timely follow-through. A failed read calls for diagnosis and recovery where possible in the same run; consequential gaps in ordinary monitoring can merit a notice even without a saved goal. A missing permission is checked before a protected query, and an unavailable source is never treated as an empty result. Expected and checked resources are recorded separately; a missing calendar, unfinished page or failed read cannot advance the successful checkpoint. Checks consume model calls; tools and subagents can add usage.
 
 Pending reminders expose what blocks them and their earliest policy window, not a promised delivery time. New evidence can change urgency; genuine urgency bypasses ordinary quiet hours, while snoozes and topic opt-outs remain binding. A routine financial email alone does not establish an emergency. A patrol checks the facts and prepares useful help before deciding to interrupt. Examples include weather affecting a trip, a moved meeting, substantive news on an interest, or an event, exhibition or booking window relevant to a known plan. Location, dates and personal relevance need evidence; routine forecasts and repeated headlines do not merit a message. Nothing worthwhile means silence. Ordinary proactive messages focus on one useful item and do not chase a reply because the user stayed quiet. These are model instructions; judgment depends on the model and available sources.
 
 Conversations and background work share goals, interests and feedback. Accepted work can continue across days and close on verified outcomes; criteria that require user confirmation still require it. Completed, cancelled or rescheduled items are rechecked so stale pending reminders can be retired. Renewing an interest requires new user input, never the assistant's own research; snoozing does not extend its original expiry.
 
-Hourly upkeep and nightly review keep separate progress. Both drain the run’s initial backlog in the same run; 25 messages is a page size, not a work limit. New arrivals wait for the next run, and interrupted work retains its completed progress. Feed uses existing memory and current understanding; its hourly check does not require an article every time. Weekly and monthly jobs deliver short reports to Bot Chat. They propose changes without applying them and do not run a separate Skill audit. Existing user-created reviews remain in place.
+Hourly upkeep and nightly review keep separate progress. Both drain the run’s initial backlog in the same run; 25 messages is a page size, not a work limit. New arrivals wait for the next run, and interrupted work retains its completed progress. Feed uses existing memory and current understanding; its hourly check does not require an article every time. Weekly and monthly jobs deliver reports at the depth their findings need; only the stored summary is capped at 2000 characters. They propose changes without applying them and do not run a separate Skill audit. Existing user-created reviews remain in place.
+
+Bot Chat speaks to you about the finding, its real relevance and work already completed. It does not reply “received” to the background task or promise to investigate an already checked result. A question belongs only where your decision is needed; a remembered conversation must have evidence. The shared receiving prompt accompanies the delivered findings and is also used by the conversation hook. This guides the model’s response; it does not guarantee exact wording.
 
 The latest review summaries are available through `muse_manage status`; full outputs stay in native Cron history. The next review can use them to check whether earlier suggestions led to useful changes.
 
@@ -120,8 +123,8 @@ $HERMES_HOME/
 ├── plugins/hermes-muse/             # plugin code and resources
 │   ├── skills/companion/
 │   │   ├── SKILL.md                # shared procedures
-│   │   └── references/             # goals, reminders, memory, Feed, research, governance
-│   ├── prompts/                    # the seven prompts listed above
+│   │   └── references/             # goals, reminders, memory, Feed, research, governance, communication
+│   ├── prompts/                    # the eight prompts listed above
 │   └── templates/                  # initial workspace files
 ├── muse/
 │   ├── install.json                # job IDs and owned files

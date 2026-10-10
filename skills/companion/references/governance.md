@@ -12,10 +12,12 @@ These reviews may assess whether a relevant skill is being used well, but they d
 
 ## Result and follow-up
 
-Keep each report around one screen and under 2000 characters for review_complete. Use the user's language. Tie suggestions to evidence and use [doc], [runtime], [skill], [cron], [delete] or [local-note] to show where a change belongs. Reports recommend changes; they do not apply them. A user can later choose a recommendation in conversation.
+Make the report as detailed as its findings require, with a clear lead and concrete evidence. Only the saved review_complete summary has the 2000-character limit; full findings stay in native output or a linked artifact. Use the user's language. Tie suggestions to evidence and identify the affected file, task or workflow when that helps a decision; avoid mechanical labels and a fixed number of bullets. Reports recommend changes; they do not apply them. A user can later choose a recommendation in conversation.
 
-Save only the plugin's review summary/cursor via review_complete. Native Cron retains each run's full output and delivery record. The two scheduled reports go directly to this profile's Bot Chat; do not also use the ordinary proactive-notice queue. Bot Chat explains the result to the user, and the report never becomes a new user signal.
+Save only the plugin's review summary/cursor via review_complete. Native Cron retains each run's full output and delivery record. The two scheduled reports go directly to this profile's Bot Chat; do not also use the ordinary proactive-notice queue. Bot Chat presents the findings directly to the user using the communication procedure, and the report never becomes a new user signal.
 
 Defaults use the current Hermes timezone: weekly-governance-review runs Sunday at 21:15; monthly-system-audit runs on the first day of each month at 10:40. They are installed with the rest of the plugin. Existing unrelated review jobs remain user-owned.
 
 Check source_checks for missed/partial reads and repeated failures, compare native run history with claimed coverage, inspect unfinished native research and final deliveries, and look for repeated notices or work continuing after closure. Checking many sources and sending many messages are not success metrics. Weather/news selection follows the same value and evidence tests.
+
+Evaluate rich useful content, reasoning quality, timely initiative, coverage/recovery, delivery and conversational responsiveness first. Consider reducing redundant work only when these outcomes are preserved. Fewer calls, shorter prompts and fewer reminders are not success criteria by themselves. Apply the recovery contract to missing evidence; do not silently grade incomplete coverage as healthy.

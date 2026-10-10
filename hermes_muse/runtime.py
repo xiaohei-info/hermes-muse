@@ -7,6 +7,7 @@ import threading
 import time
 from pathlib import Path
 
+from .handoff import MARKER, receiving_instructions, render_result
 from .host import HermesHost, JOBS, ROOT, profile_scope
 from .service import Companion
 from .store import GOVERNANCE_JOBS, PLUGIN, Store, is_background_message, stamp
@@ -90,7 +91,7 @@ class Runtime:
                     from .research import start, poll
                     result = (start if action == "research_start" else poll)(self.store, self.ctx, data)
                 elif action in {"notification_prepare", "notification_queue", "notification_handoff"}:
-                    result = self.service.notification_queue(data, delivery)
+                    result = self.service.notification_queue(data, delivery if delivery and delivery.get("kind") != "report" else None)
                 else:
                     if action == "notification_add" and not data.get("session_id"):
                         data = dict(data)
@@ -112,6 +113,8 @@ class Runtime:
         if self.closed or not delivery:
             return None
         with profile_scope(self.home):
+            if delivery.get("kind") == "report":
+                return render_result(response_text, delivery["route"]["deliver"])
             return self.service.finalize_delivery(delivery)
 
     def handoff(self, key):
@@ -122,12 +125,9 @@ class Runtime:
         if self.closed or parent_session_id or info["cron"] or platform in {"cron", "delegate", "subagent", "webhook", "msgraph_webhook", "kanban"} or not private_session(info):
             return None
         text = user_message if isinstance(user_message, str) else json.dumps(user_message, ensure_ascii=False)
-        if (text.startswith(('[Cronjob "muse-delivery-', '[Cronjob "muse-proactive-watch"', '[Cronjob "muse-watch-')) or text.startswith("[Hermes Muse notification ")
+        if (text.startswith(('[Cronjob "muse-delivery-', '[Cronjob "muse-proactive-watch"', '[Cronjob "muse-watch-')) or text.startswith(("[Hermes Muse notification ", MARKER))
                 or any(text.startswith('[Cronjob "muse-' + job + '"') for job in GOVERNANCE_JOBS)):
-            return {"context": "This is a prepared Hermes Muse result, not a new user message. "
-                    "Read it and reply once in this Bot Chat. Do not queue the same notice again; "
-                    "Weekly/monthly recommendations remain proposals until the user asks to apply them; "
-                    "any state changes still need the existing evidence required by the Skill."}
+            return {"context": receiving_instructions()}
         if is_background_message(text):
             return None
         if not session_id or not turn_id or not text.strip():

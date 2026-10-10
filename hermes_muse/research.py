@@ -27,7 +27,7 @@ def start(store, ctx, data):
         "goal": "Complete this entire read-only research batch and return one consolidated report. "
                 "Work through every question without waiting for the user to ask again. "
                 "Use at most three concurrent workers if native nesting is available, otherwise work sequentially. "
-                "Retry failed read-only retrieval once; never replay unknown external actions. "
+                "Diagnose failed reads, correct recoverable inputs, respect cooldowns and use authorized alternatives until answered or genuinely blocked; do not busy-loop or replay unknown external actions. "
                 "Report per-question findings, original sources, as-of dates, failures and coverage gaps. "
                 "Do not contact anyone, change accounts, schedule tasks or write companion lifecycle state.\n"
                 + "\n".join(f"{n+1}. {q}" for n, q in enumerate(unique)),
