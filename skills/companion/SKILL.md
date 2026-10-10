@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Manage goals and expiring interests, proactive reminders, feedback, memory and relationships, nightly alignment, silent Feed and bounded parallel research using the current Hermes profile.
-version: 0.1.17
+version: 0.1.18
 ---
 
 # Companion

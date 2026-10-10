@@ -75,10 +75,13 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(100, len(first['events']))
         self.assertTrue(first['more'])
         self.call('late')
-        self.finish(first)
+        completed = self.finish(first)
+        self.assertTrue(completed["more"])
+        # The live model confused a page endpoint with the snapshot endpoint; reject that shortcut.
+        self.assertFalse(self.ops.read({"through": first["up_to"]})["available"])
         with self.assertRaises(ValueError):
             self.finish(first)
-        second = self.ops.read({'through': first['through']})
+        second = self.ops.read({})
         self.assertEqual(3, len(second['events']))
         self.assertFalse(second['more'])
         self.finish(second)
@@ -96,6 +99,18 @@ class OperationTests(unittest.TestCase):
         self.assertEqual(1, len(page['events']))
         self.assertIsNone(page['events'][0]['content'])
         self.assertNotIn('PRIVATE EVIDENCE COPY', json.dumps(page))
+
+    def test_native_tool_call_wrapper_excludes_only_pure_inspection(self):
+        self.call('wrapped', name='tool_call', args={'calls': [{'name': 'muse_manage', 'arguments': {'action': 'operations_read'}}]})
+        self.message(role='tool', text='SELF REVIEW OUTPUT', call_id='wrapped')
+        self.call('mixed', name='tool_call', args={'calls': [
+            {'name': 'muse_manage', 'arguments': {'action': 'context'}},
+            {'name': 'muse_manage', 'arguments': {'action': 'watch_create', 'goal_id': 'actual'}}]})
+        self.message(role='tool', text='A watch was created', call_id='mixed')
+        page = self.ops.read({})
+        self.assertEqual(2, len(page['events']))
+        self.assertNotIn('SELF REVIEW OUTPUT', json.dumps(page))
+        self.assertIn('watch_create', json.dumps(page))
 
     def test_failed_read_and_missing_ledger_never_advance(self):
         self.call()

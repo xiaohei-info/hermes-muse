@@ -29,13 +29,15 @@ def calls(row):
 
 def inspection(call):
     fn = call.get("function", {})
-    if fn.get("name") != "muse_manage":
-        return False
     try:
         args = fn.get("arguments", {})
         args = json.loads(args) if isinstance(args, str) else args
-        return args.get("action") in INSPECTION
-    except (TypeError, ValueError):
+        if fn.get("name") == "tool_call":
+            nested = args.get("calls")
+            return bool(nested) and isinstance(nested, list) and all(
+                inspection({"function": item}) for item in nested)
+        return fn.get("name") == "muse_manage" and args.get("action") in INSPECTION
+    except (AttributeError, TypeError, ValueError):
         return False
 
 
@@ -89,9 +91,10 @@ class Operations:
                     if matched and private:
                         eligible.add(sid)
                 ceiling = db.execute("SELECT COALESCE(MAX(id),0) FROM messages").fetchone()[0]
-                through = data.get("through", ceiling)
-                if type(through) is not int or not cursor["message_id"] <= through <= ceiling:
-                    raise ValueError("through must be a current native message snapshot boundary")
+                expected = cursor.get("through", ceiling)
+                through = data.get("through", expected)
+                if type(through) is not int or through != expected or not cursor["message_id"] <= through <= ceiling:
+                    raise ValueError(f"Continue the frozen snapshot through {expected}; up_to is only a page checkpoint, not its boundary")
                 # Scan by insertion ID: late tool results must be reviewed even when their call is older.
                 end = cursor["message_id"]
                 page_chars = 0
@@ -149,7 +152,7 @@ class Operations:
         except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:
             return {**result, "available": False, "gaps": result["gaps"] + [f"Native evidence read failed: {type(exc).__name__}: {exc}"]}
         refs = [r["ref"] for r in result["events"] + result["executions"]]
-        snapshot = {"cursor": cursor, "up_to": result["up_to"], "execution_through": now,
+        snapshot = {"cursor": cursor, "up_to": result["up_to"], "through": through, "execution_through": now,
                     "refs": refs, "gaps": result["gaps"]}
         token = digest(json.dumps(snapshot, sort_keys=True))
         self.store.write("meta", "operation_snapshot", {**snapshot, "token": token})
@@ -165,9 +168,15 @@ class Operations:
                 raise ValueError("Evidence coverage is incomplete; preserve the checkpoint and resolve the gap")
             bounded(data.get("summary"), 2000)
             updated = {**current, "message_id": snapshot["up_to"], "execution_through": snapshot["execution_through"]}
+            more = snapshot["up_to"] < snapshot["through"]
+            if more:
+                updated["through"] = snapshot["through"]
+            else:
+                updated.pop("through", None)
             self.store.put(db, "meta", "operation_cursor", updated)
             self.store.delete(db, "meta", "operation_snapshot")
-            return {"reviewed": True, "checkpoint": updated}
+            return {"reviewed": True, "checkpoint": updated, "more": more, "through": snapshot["through"],
+                    "instruction": "Only this page is reviewed. Call operations_read with data={} now; the remaining snapshot is preserved automatically." if more else "The operation snapshot is reviewed; future arrivals belong to the next pass."}
 
     def finding(self, data):
         with self.store.transaction() as db:
