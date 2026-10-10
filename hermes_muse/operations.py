@@ -96,7 +96,9 @@ class Operations:
                 end = cursor["message_id"]
                 page_chars = 0
                 rows = db.execute("SELECT id,session_id,role,content,tool_calls,tool_call_id,tool_name,timestamp "
-                                  "FROM messages WHERE id>? AND id<=? ORDER BY id", (end, through))
+                                  "FROM messages WHERE id>? AND id<=? AND timestamp>=? "
+                                  "AND (role='tool' OR tool_calls IS NOT NULL) ORDER BY id",
+                                  (end, through, cursor["since"]))
                 for raw in rows:
                     row = dict(raw)
                     if row["session_id"] not in eligible or row["timestamp"] < cursor["since"]:
