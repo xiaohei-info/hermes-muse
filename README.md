@@ -41,8 +41,8 @@ Feed has no dedicated page. New research batches use native Hermes execution and
 
 | Name | Purpose |
 | --- | --- |
-| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: connection and device checks, goals and interests, reminders and feedback, memory and relationships, Feed, delegation, and weekly/monthly reviews. |
-| muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, keep source progress by connection, account and resource, distinguish complete, partial and failed checks, and maintain expiry, stopping and delivery state. |
+| [hermes-muse:companion](skills/companion/SKILL.md) | Shared procedures for conversations and background jobs: connection and device checks, goals and interests, reminders and feedback, memory and relationships, Feed, delegation, checks of its own actions, and weekly/monthly reviews. |
+| muse_manage | Lets the assistant record and query source checks, goals, interests, reminders, feedback, Feed and research progress, keep source progress by connection, account and resource, distinguish complete, partial and failed checks, maintain expiry, stopping and delivery state, and inspect native tool receipts and unresolved mistakes. |
 
 The Skill is registered with the plugin and its files stay in the plugin directory. Conversations load the relevant procedure as needed; all six recurring Cron jobs use the same Skill. Use normal conversation and let the assistant call the tool.
 
@@ -52,11 +52,11 @@ The plugin includes eight prompt files:
 
 | File | Purpose |
 | --- | --- |
-| [receiving.md](prompts/receiving.md) | Shared Bot Chat handoff: turn internal findings into a direct response to the user, without acknowledging the job or creating another reminder. |
+| [receiving.md](prompts/receiving.md) | Shared Bot Chat handoff: turn internal findings into a direct response to the user, as the same assistant continuing its own work and taking responsibility for it, without acknowledging the job or creating another reminder. |
 | [system.md](prompts/system.md) | Keep the main conversation available for new input and coordination; delegate independent multi-step work and retain unfinished commitments. |
 | [proactive-watch.md](prompts/proactive-watch.md) | Discover available connections/devices, check changes and approaching deadlines, record source coverage, then verify and notify or remain silent. |
-| [memory-upkeep.md](prompts/memory-upkeep.md) | Process new conversations, sourced facts and task outcomes; update memory, relationships and processing progress. |
-| [nightly-review.md](prompts/nightly-review.md) | Review conversations independently of hourly upkeep; update alignment, research goals and suggestions, check closure, and review working lessons and skills. |
+| [memory-upkeep.md](prompts/memory-upkeep.md) | Process new conversations and facts; check its own operations for mistakes, verify repairs, and update memory and progress. |
+| [nightly-review.md](prompts/nightly-review.md) | Review conversations independently of hourly upkeep; update alignment, research goals and suggestions, check closure and unresolved mistakes, and review working lessons and skills. |
 | [feed-pulse.md](prompts/feed-pulse.md) | Use native memory, preferences, current context and real sources to choose topics; quietly write only when there is new value. |
 | [weekly-governance-review.md](prompts/weekly-governance-review.md) | Review outcomes and effort, missed sources, unfinished work and repeated reminders; suggest next-week adjustments. |
 | [monthly-system-audit.md](prompts/monthly-system-audit.md) | Check whether instructions and recurring work still help, look for duplicate workflows and work that should have stopped, and suggest simplifications. |
@@ -68,7 +68,7 @@ Hermes appends `system.md` after the memory section through its plugin API; it t
 | Hook | Purpose |
 | --- | --- |
 | pre_llm_call | Before the reply, records a short user excerpt and its source session, and adds a state-tool pointer to the current turn for goals, interests and feedback. |
-| post_llm_call | After replying to a user message of at least 80 characters, waits for five quiet minutes before scheduling memory upkeep. New input cancels the pending timer; at most three early triggers per day. |
+| post_llm_call | Associates owned Cron sessions with their native execution IDs for self-review. After replying to a user message of at least 80 characters, waits for five quiet minutes before scheduling memory upkeep. New input cancels the pending timer; at most three early triggers per day. |
 | transform_llm_output | For a patrol/watch that used the state tool, replaces the final response with approved notice bodies or `[SILENT]`. Bot Chat notices and weekly/monthly reports include the same receiving guidance. Ordinary conversations and direct channel reports are unchanged. |
 | on_session_end | Clears the current turn's busy flag so later reminders do not keep waiting on a conversation that has ended. |
 
@@ -112,7 +112,7 @@ Conversations and background work share goals, interests and feedback. Accepted 
 
 Hourly upkeep and nightly review keep separate progress. Both drain the run’s initial backlog in the same run; 25 messages is a page size, not a work limit. New arrivals wait for the next run, and interrupted work retains its completed progress. Feed uses existing memory and current understanding; its hourly check does not require an article every time. Weekly and monthly jobs deliver reports at the depth their findings need; only the stored summary is capped at 2000 characters. They propose changes without applying them and do not run a separate Skill audit. Existing user-created reviews remain in place.
 
-Bot Chat speaks to you about the finding, its real relevance and work already completed. It does not reply “received” to the background task or promise to investigate an already checked result. A question belongs only where your decision is needed; a remembered conversation must have evidence. The shared receiving prompt accompanies the delivered findings and is also used by the conversation hook. This guides the model’s response; it does not guarantee exact wording.
+Bot Chat speaks to you about the finding, its real relevance and work already completed. It owns verified background actions and mistakes, rather than speaking about another assistant’s report. It does not reply “received” to the background task or promise to investigate an already checked result. A question belongs only where your decision is needed; a remembered conversation must have evidence. The shared receiving prompt accompanies the delivered findings and is also used by the conversation hook. This guides the model’s response; it does not guarantee exact wording.
 
 The latest review summaries are available through `muse_manage status`; full outputs stay in native Cron history. The next review can use them to check whether earlier suggestions led to useful changes.
 
@@ -131,7 +131,7 @@ $HERMES_HOME/
 ├── muse/
 │   ├── install.json                # job IDs and owned files
 │   ├── install.lock
-│   ├── state.db                    # source checks, cursors, interests, notices, Feed, research, reviews
+│   ├── state.db                    # source checks, cursors, interests, notices, Feed, research, findings
 │   ├── AGENTS.md
 │   ├── TOOLS.md                    # confirmed connections, devices and limits
 │   ├── PROACTIVE_PREFERENCES.md
@@ -151,6 +151,8 @@ $HERMES_HOME/
 ```
 
 The memory, dreams and goal directories borrow Muse's organization. The ownership record, SQLite state, Feed storage and native memory paths are Hermes adaptations. First load adds missing workspace templates; goals, notes and articles are created during use. Reloading does not duplicate the recurring jobs.
+
+Self-review reads native tool calls/results and owned Cron execution records, including persisted child sessions. Hourly upkeep checks new operations and unfinished repairs; nightly review carries verified lessons forward. Only checkpoints, session/execution references and findings are saved in the existing state database. The first pass covers the preceding 24 hours; later passes continue from the saved checkpoint. Missing history stays a coverage gap. Fixes use existing authority, and consequential errors need an actual user-facing correction before closure; there is no automatic rollback engine.
 
 Nightly review can also maintain a short Working lessons section in `muse/AGENTS.md`, merging duplicate methods and updating stale ones while preserving user-written conventions. Personal facts and task logs stay in memory and goal records. Existing installations add the section only when useful; the whole file is not replaced.
 

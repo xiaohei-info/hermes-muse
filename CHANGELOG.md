@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.17
+
+- Review native tool calls/results and owned Cron outcomes through the existing state tool, including persisted child sessions and late tool results.
+- Keep only operation checkpoints, execution/session references and evidence-backed findings in the existing state database; failed reads do not advance the review.
+- Add a self-review procedure to the existing Skill and hourly/nightly maintenance: verify actions and repairs, admit consequential mistakes and track actual disclosure.
+- Make Bot Chat handoffs explicitly continue the same assistant's work and responsibility, without inventing completed actions or blaming a separate background report.
+- Preserve six Cron jobs, existing settings, identity files and native execution history; add no model/provider dependency or automatic rollback.
+
 ## 0.1.16
 
 - Include native assistant outcomes and user corrections in patrol context; require a current relevance review before sending and recheck at finalization.

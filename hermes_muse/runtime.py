@@ -15,8 +15,8 @@ from .store import GOVERNANCE_JOBS, PLUGIN, Store, is_background_message, stamp
 log = logging.getLogger(__name__)
 ACTIONS = ("context", "status", "goal_create", "goal_update", "interest_record", "idea_add", "feedback",
            "preferences", "notification_add", "notification_refresh", "notification_queue", "notification_handoff", "notification_prepare", "feed_add", "feed_list",
-           "feed_update", "source_check", "notification_resolve", "notification_review", "review_complete", "watch_create", "watch_stop", "research_start", "research_status", "forget")
-SCHEMA = {"name": "muse_manage", "description": "Manage companion goals, temporary interests, reminders, Feed and background research. First read hermes-muse:companion for action-specific data fields. context returns live state and real user signal IDs. Never invent a signal ID, delivery receipt or authorization.",
+           "feed_update", "source_check", "notification_resolve", "notification_review", "review_complete", "watch_create", "watch_stop", "research_start", "research_status", "operations_read", "operations_complete", "finding_record", "forget")
+SCHEMA = {"name": "muse_manage", "description": "Manage companion goals, temporary interests, reminders, Feed and background research and inspect native operations/findings. First read hermes-muse:companion for action-specific data fields. context returns live state and real user signal IDs. Never invent a signal ID, delivery receipt or authorization.",
           "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": list(ACTIONS)}, "data": {"type": "object", "description": "Action arguments documented by the companion Skill; omit for context/status."}}, "required": ["action"], "additionalProperties": False}}
 
 
@@ -66,6 +66,7 @@ class Runtime:
             if is_delegated_child_context() and action not in {"context", "status", "feed_list"}:
                 raise ValueError("A delegated child may read Muse context but must return proposed changes to its parent")
             with profile_scope(self.home):
+                self.service.operations.track(kwargs.get("session_id"), kwargs.get("task_id"))
                 delivery = self.host.current_delivery(kwargs.get("task_id"))
                 if delivery and kwargs.get("session_id"):
                     with self.lock:
@@ -81,6 +82,9 @@ class Runtime:
                         result["installation"] = self.host.manifest()
                         result["reviews"] = {job: self.store.read("meta", "last_review:" + job)
                                              for job in GOVERNANCE_JOBS}
+                elif action in {"operations_read", "operations_complete", "finding_record"}:
+                    method = {"operations_read": "read", "operations_complete": "complete", "finding_record": "finding"}[action]
+                    result = getattr(self.service.operations, method)(data)
                 elif action == "preferences":
                     result = self.service.preference_update(data)
                 elif action == "watch_create":
@@ -140,6 +144,10 @@ class Runtime:
         return {"context": f"[Hermes Muse state pointer] This real user turn has signal_id={turn_id}. Companion workspace: {self.store.root}. For goals, interests, feedback, reminders or Feed, load hermes-muse:companion and use muse_manage. Read current state before using old memories as an active goal. This pointer does not authorize extra tasks."}
 
     def post_turn(self, session_id="", turn_id="", **kwargs):
+        if self.closed:
+            return
+        if private_session(session_info()):
+            self.service.operations.track(session_id, kwargs.get("task_id"))
         session = self.store.read("session", session_id)
         if not session or session.get("turn_id") != turn_id:
             return

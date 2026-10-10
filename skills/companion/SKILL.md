@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Manage goals and expiring interests, proactive reminders, feedback, memory and relationships, nightly alignment, silent Feed and bounded parallel research using the current Hermes profile.
-version: 0.1.16
+version: 0.1.17
 ---
 
 # Companion
@@ -10,6 +10,7 @@ This is the single Skill registered as `hermes-muse:companion`. It adds procedur
 
 ## Choose a procedure
 
+- Checks of your own actions, mistakes, repairs and follow-through: [self-review](references/self-review.md).
 - User-facing results and Bot Chat handoff: [communication](references/communication.md).
 - Goals, temporary interests, Ideas, completion and monitoring: [goals](references/goals.md).
 - Reminder selection, delivery, feedback and quiet attention: [proactivity](references/proactivity.md).
@@ -29,6 +30,8 @@ When a call fails, read the actual error and distinguish bad arguments, missing 
 Resolve prerequisites before dependent calls: inspect authorization before reading a protected collection; a status probe must not run in parallel with the operation whose permission it decides. Use the actual tool's batching contract. Load a relevant connector skill when needed. Inspect fresh tool definitions or implementation when an error warrants it; source notes are reusable recipes, not a ban on investigation. Do not expand permissions, install services, restart shared processes or alter user settings as an incidental recovery step.
 
 Finish recoverable work; if genuinely blocked, preserve truthful partial progress and explain the cause, attempts, missing coverage and user impact. Baseline monitoring is already a responsibility even without a saved goal. A consequential gap merits a deduplicated notice through the existing flow; a transient failure that was recovered usually does not. No fixed error-count threshold substitutes for judgment. A reasonable retry that is still failing need not become an endless loop; leave an evidence-backed reason and a clear recovery path. Do not manufacture a new subscription or a success claim to make the task look complete.
+
+After consequential creations, updates or deletions, check the actual state against user intent and existing work using the self-review procedure. A successful tool response is not proof that the action was necessary or correct.
 
 Use the communication procedure for results. Silence means no worthwhile user-facing result after doing the work and assessing gaps, not that no work was completed. Preserve existing delivery/evidence controls; prepare a genuine service-gap notice when warranted rather than appending arbitrary status text to the final transport output.
 

@@ -159,7 +159,20 @@ def main():
                     native_db.append_message("native-history", "assistant", "The database diagnosis is finished; no new screenshot is needed.")
                     native_db.create_session("group-history", source="telegram", chat_type="group")
                     native_db.append_message("group-history", "user", "Group-only private context")
+                    native_db.append_message("native-history", "assistant", tool_calls=[{"id": "native-write", "function": {"name": "write_file", "arguments": '{"path":"goal.md"}'}}])
+                    native_db.append_message("native-history", "tool", "Saved goal.md", tool_name="write_file", tool_call_id="native-write")
+                    native_db.create_session("audit-child", source="delegate", parent_session_id="native-history", chat_type="private")
+                    native_db.append_message("audit-child", "tool", "Child result", tool_name="inspect", tool_call_id="child-call")
                     native_db.close()
+                    runtime.store.write("session", "native-history", {"id": "native-history", "last_signal": time.time()})
+                    audit_response = json.loads(entry.handler({"action": "operations_read"}))
+                    assert audit_response["ok"], audit_response
+                    audit = audit_response["result"]
+                    assert audit["available"] and not audit["gaps"], audit
+                    assert {"native-history", "audit-child"} <= {e["session_id"] for e in audit["events"]}, audit
+                    assert any(e.get("related_call", {}).get("call", {}).get("id") == "native-write" for e in audit["events"])
+                    assert all(e["session_id"] != "group-history" for e in audit["events"])
+                    runtime.service.operations.complete({"token": audit["token"], "summary": "Native read-only operation evidence verified"})
                     history = read_conversation(home, "native-history", time.time() - 86400)
                     assert history["available"], history
                     assert any("diagnosis is finished" in m["text"] for m in history["messages"]), history

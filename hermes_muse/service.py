@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from .handoff import render_result
+from .operations import Operations
 from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, is_background_message, stamp
 
 DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": None,
@@ -16,6 +17,7 @@ DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": None
 class Companion:
     def __init__(self, store, host, clock=time.time):
         self.store, self.host, self.clock = store, host, clock
+        self.operations = Operations(store, host, clock)
 
     def preferences(self):
         text = self.store.path("PROACTIVE_PREFERENCES.md").read_text(encoding="utf-8")
@@ -333,6 +335,7 @@ class Companion:
                 "legacy_source_checks": len(self.store.all("source_check_legacy")),
                 "research": [{"id": b["id"], "goal_id": b.get("goal_id"), "mode": b.get("mode", "legacy"),
                               "created": b["created"]} for b in sorted(self.store.all("research"), key=lambda x: x["created"], reverse=True)[:20]],
+                "operation_review": self.operations.summary() if view != "feed-pulse" else None,
                 "notifications": live,
                 "notification_history": history,
                 "feed": self.feed_list({})[:15]}
@@ -772,7 +775,7 @@ class Companion:
 
     def forget(self, data):
         kind, key = data["kind"], identifier(data["id"])
-        if kind not in {"interest", "notification", "feed", "goal"}:
+        if kind not in {"interest", "notification", "feed", "goal", "operation_finding"}:
             raise ValueError("Unsupported owned record kind")
         with self.store.transaction() as db:
             self.require_signal(db, data.get("signal_id"))
