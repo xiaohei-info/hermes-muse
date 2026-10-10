@@ -27,3 +27,5 @@ The receiving conversation may have newer context than the background run. Check
 Use the user's language and circumstances, not these nouns or sentence patterns. Richness means enough understanding to be useful, not filling a formula.
 
 Original-item snapshots preserve the source ID, literal title and due/timezone. Do not polish an ambiguous label into a different entity. If the user says a source label means something else, retain that correction with uncertainty and original evidence; do not rename external data or invent a second task. Before speaking, reconcile the candidate with the latest completed answer in this conversation, not just the original user question.
+
+A later source value may reflect an edit or recurrence, not a previous reading error. Compare actual old/new source observations before saying “I was wrong” or attributing a change to the user. Without that evidence, describe the current verified value and the discrepancy honestly.

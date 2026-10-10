@@ -128,13 +128,16 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(self.store.read("notification", second["id"])["status"], "dispatching")
 
     def test_source_title_and_item_identity_survive_refresh(self):
-        snapshot = {"source_id": "reminder-1", "title": "x账号修改密码和邮箱", "due": "2026-10-10 21:00", "timezone": "Asia/Shanghai", "checked_at": self.now}
+        snapshot = {"item_id": "reminder-1", "title": "x账号修改密码和邮箱", "due": "2026-10-10 21:00", "timezone": "Asia/Shanghai", "checked_at": self.now}
+        self.store.write("source_check", "source-collection", {"id": "source-collection"})
+        with self.assertRaises(ValueError):
+            self.notice(message="x账号修改密码和邮箱", source_snapshot={**snapshot, "item_id": "source-collection"})
         with self.assertRaises(ValueError):
             self.notice(message="X账号修改密码和邮箱", source_snapshot=snapshot)
         row = self.notice(message="原提醒为「x账号修改密码和邮箱」，平台含义尚未确认。", source_snapshot=snapshot, priority="urgent")
         with self.assertRaises(ValueError):
             self.service.notification_refresh({"id": row["id"], "verified_at": self.now, "sources": ["original"],
-                "source_snapshot": {**snapshot, "source_id": "different-item"}})
+                "source_snapshot": {**snapshot, "item_id": "different-item"}})
         self.assertTrue(self.dispatch(row["id"]))
         self.assertEqual(self.store.read("notification", row["id"])["source_snapshot"], snapshot)
 

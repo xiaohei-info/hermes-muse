@@ -276,10 +276,14 @@ class Companion:
             self.store.put(db, "notification", key, row)
         return {"reviewed": True, "notification": row}
 
-    def source_snapshot(self, data):
-        if not isinstance(data, dict) or set(data) - {"source_id", "title", "due", "timezone", "checked_at"}:
-            raise ValueError("source_snapshot needs original source_id, title, checked_at; optional due/timezone")
-        result = {k: bounded(data.get(k), 2000) for k in ("source_id", "title")}
+    def source_snapshot(self, data, db=None):
+        if not isinstance(data, dict) or set(data) - {"item_id", "title", "due", "timezone", "checked_at"}:
+            raise ValueError("source_snapshot needs original upstream item_id, title, checked_at (not a source_check record ID); optional due/timezone")
+        result = {k: bounded(data.get(k), 2000) for k in ("item_id", "title")}
+        collection = self.store.get(db, "source_check", result["item_id"]) if db is not None else self.store.read("source_check", result["item_id"])
+        if collection:
+            # Source-check IDs are plugin collection identities, not upstream item IDs.
+            raise ValueError("Use the original reminder/event item ID, not a source_check collection ID")
         result["title"] = data["title"]  # Preserve case and the exact provider title.
         for field in ("due", "timezone"):
             if field in data:
@@ -517,9 +521,9 @@ class Companion:
             if "message" in data:
                 row["message"] = bounded(data["message"], 6000)
             if data.get("source_snapshot"):
-                snapshot = self.source_snapshot(data["source_snapshot"])
+                snapshot = self.source_snapshot(data["source_snapshot"], db=db)
                 previous = row.get("source_snapshot")
-                if previous and previous["source_id"] != snapshot["source_id"]:
+                if previous and previous.get("item_id", previous.get("source_id")) != snapshot["item_id"]:
                     raise ValueError("A notice cannot change its original source item")
                 row["source_snapshot"] = snapshot
             if row.get("source_snapshot") and row["source_snapshot"]["title"] not in row["message"]:
