@@ -136,6 +136,14 @@ class HermesHost:
         with file_lock(self.store.path("install.lock")):
             record = self.manifest()
             self.save_manifest(record)  # identity is durable before any external job creation
+            # Only a byte-identical shipped default is migrated; custom preferences survive.
+            prefs_path = self.store.path("PROACTIVE_PREFERENCES.md")
+            template = (self.root / "templates/PROACTIVE_PREFERENCES.md").read_text(encoding="utf-8")
+            old_default = template.replace('"ordinary_per_day": null', '"ordinary_per_day": 1')
+            if (prefs_path.exists() and prefs_path.read_text(encoding="utf-8") == old_default
+                    and not self.store.read("meta", "explicit_preferences", {})):
+                self.store.write_text("PROACTIVE_PREFERENCES.md", template)
+                self.store.write("meta", "ordinary_default_upgrade", {"at": time.time(), "from": 1, "to": None})
             for file in (self.root / "templates").rglob("*.md"):
                 relative = file.relative_to(self.root / "templates").as_posix()
                 content = file.read_text(encoding="utf-8").replace("{{MUSE_HOME}}", str(self.store.root)).replace("{{HERMES_HOME}}", str(self.home))
@@ -182,6 +190,11 @@ class HermesHost:
                 update_job(job_id, {"next_run_at": stamp(time.time() + 1)})
                 return True
         return False
+
+    def conversation(self, session_id, since):
+        from .conversation import read_conversation
+        with profile_scope(self.home):
+            return read_conversation(self.home, session_id, since)
 
     def route(self, session_id=None):
         from cron.scheduler_delivery import BOT_CHAT_PLATFORM

@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Manage goals and expiring interests, proactive reminders, feedback, memory and relationships, nightly alignment, silent Feed and bounded parallel research using the current Hermes profile.
-version: 0.1.15
+version: 0.1.16
 ---
 
 # Companion
@@ -18,7 +18,7 @@ This is the single Skill registered as `hermes-muse:companion`. It adds procedur
 - Background execution and independent wide research: [research](references/research.md).
 - Weekly value review and monthly structure audit: [governance](references/governance.md).
 
-Be direct, warm when appropriate, and willing to disagree with reasons. Skip generic praise and service pitches. Check what you can actually do before asking the user to solve a problem for you. Read the relevant procedure in full. Call `muse_manage` with `action` and a `data` object. Tool errors mean the action did not finish; follow the execution contract below before deciding that a limitation remains. `context` returns current data, `status` also returns resource ownership. Never hand-edit state.db, install.json or native Cron stores.
+Be direct, warm when appropriate, and willing to disagree with reasons. Skip generic praise and service pitches. Check what you can actually do before asking the user to solve a problem for you. Read the relevant procedure in full. Call `muse_manage` with `action` and a `data` object. Tool errors mean the action did not finish; follow the execution contract below before deciding that a limitation remains. `context` returns current data and native conversation evidence (including assistant outcomes); `notification_review` records the model’s current relevance judgment before notice delivery, `status` also returns resource ownership. Never hand-edit state.db, install.json or native Cron stores.
 
 ## Execution and recovery
 

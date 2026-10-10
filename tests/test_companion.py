@@ -74,6 +74,70 @@ class CompanionTests(unittest.TestCase):
         self.service.finalize_delivery(binding)
         return text
 
+    def test_default_allows_independent_notices_and_explicit_limit_still_applies(self):
+        self.assertIsNone(self.service.preferences()["ordinary_per_day"])
+        first, second = self.notice("first"), self.notice("second")
+        self.assertTrue(self.dispatch(first["id"]))
+        self.assertTrue(self.dispatch(second["id"]))
+        self.service.preference_update({"ordinary_per_day": 2})
+        third = self.notice("third")
+        self.assertFalse(self.dispatch(third["id"]))
+        self.assertIn("ordinary_per_day", self.store.read("meta", "explicit_preferences"))
+
+    def test_conversation_review_blocks_stale_delivery_and_can_retire_resolved_work(self):
+        snapshot = {"available": True, "revision": "r1", "messages": [{"role": "assistant", "text": "The diagnosis is complete."}]}
+        self.host.conversation = lambda sid, since: {**snapshot, "session_id": sid}
+        row = self.notice(priority="urgent")
+        binding = {"job_id": "patrol", "execution_id": "r", "route": {"deliver": "bot-chat"}}
+        blocked = self.service.notification_queue({"id": row["id"]}, binding)
+        self.assertEqual(blocked["final_response"], "[SILENT]")
+        self.assertIn("session-a", blocked["recent_conversations"])
+        reviewed = self.service.notification_review({"id": row["id"], "conversation_revisions": {"session-a": "r1"},
+            "verdict": "resolved", "reason": "The actual diagnosis was completed and delivered in the native conversation"})
+        self.assertEqual(reviewed["notification"]["status"], "cancelled")
+        self.assertFalse(self.dispatch(row["id"]))
+        self.assertEqual(self.store.all("budget"), [])
+
+    def test_new_assistant_result_after_prepare_suppresses_output_without_losing_budget(self):
+        snapshot = {"available": True, "revision": "r1", "messages": [{"id": 1, "text": "Need a result"}]}
+        self.host.conversation = lambda sid, since: snapshot
+        row = self.notice()
+        self.service.notification_review({"id": row["id"], "conversation_revisions": {"session-a": "r1"},
+            "verdict": "relevant", "reason": "No completed answer in the current native history"})
+        binding = {"job_id": "patrol", "execution_id": "r", "route": {"deliver": "bot-chat"}}
+        self.assertIn(row["message"], self.service.notification_queue({"id": row["id"]}, binding)["final_response"])
+        snapshot["revision"] = "r2"
+        self.assertEqual(self.service.finalize_delivery(binding), "[SILENT]")
+        self.assertEqual(self.store.read("budget", "2026-10-08:ordinary"), 0)
+        stale = self.service.notification_review({"id": row["id"], "conversation_revisions": {"session-a": "r1"},
+            "verdict": "relevant", "reason": "Outdated read"})
+        self.assertFalse(stale["reviewed"])
+        self.service.notification_review({"id": row["id"], "conversation_revisions": {"session-a": "r2"},
+            "verdict": "relevant", "reason": "New message concerns a different issue; this finding still adds value"})
+        self.assertTrue(self.dispatch(row["id"]))
+
+    def test_issue_revision_retires_unsent_candidate_but_never_rewrites_sent_history(self):
+        first = self.notice("v1", issue_key="case", priority="urgent")
+        with self.assertRaises(ValueError):
+            self.notice("v2", issue_key="case", priority="urgent")
+        second = self.notice("v2", issue_key="case", supersedes=[first["id"]], priority="urgent")
+        self.assertEqual(self.store.read("notification", first["id"])["status"], "cancelled")
+        self.assertTrue(self.dispatch(second["id"]))
+        with self.assertRaises(ValueError):
+            self.notice("v3", issue_key="case", supersedes=[second["id"]])
+        self.assertEqual(self.store.read("notification", second["id"])["status"], "dispatching")
+
+    def test_source_title_and_item_identity_survive_refresh(self):
+        snapshot = {"source_id": "reminder-1", "title": "x账号修改密码和邮箱", "due": "2026-10-10 21:00", "timezone": "Asia/Shanghai", "checked_at": self.now}
+        with self.assertRaises(ValueError):
+            self.notice(message="X账号修改密码和邮箱", source_snapshot=snapshot)
+        row = self.notice(message="原提醒为「x账号修改密码和邮箱」，平台含义尚未确认。", source_snapshot=snapshot, priority="urgent")
+        with self.assertRaises(ValueError):
+            self.service.notification_refresh({"id": row["id"], "verified_at": self.now, "sources": ["original"],
+                "source_snapshot": {**snapshot, "source_id": "different-item"}})
+        self.assertTrue(self.dispatch(row["id"]))
+        self.assertEqual(self.store.read("notification", row["id"])["source_snapshot"], snapshot)
+
     def test_review_returns_remaining_snapshot_and_preserves_new_arrivals(self):
         for i in range(53):
             self.now += 1
@@ -131,6 +195,7 @@ class CompanionTests(unittest.TestCase):
             self.service.notification_refresh({**data, "priority": "promised"})
 
     def test_pending_budget_reset_respects_next_window_and_overnight_preferences(self):
+        self.service.preference_update({"ordinary_per_day": 1})
         row = self.notice()
         day = self.host.local_now(self.now).date().isoformat()
         self.store.write("budget", day+":ordinary", 1)
@@ -337,6 +402,7 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(len({r["job_id"] for r in queued}), 1)
 
     def test_concurrent_daily_budget_and_no_second_dispatch(self):
+        self.service.preference_update({"ordinary_per_day": 1})
         rows = [self.notice("event-" + str(i)) for i in range(8)]
         for row in rows:
             self.service.notification_queue({"id": row["id"]})

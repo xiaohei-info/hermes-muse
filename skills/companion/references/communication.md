@@ -25,3 +25,5 @@ The receiving conversation may have newer context than the background run. Check
 - Coverage is impaired: “今天上午的日历检查没能完成。我已排除参数问题，重新连接后仍然超时；邮箱可以正常检查，但目前不能据此判断有没有新改期。” State a next step only if it is actually underway or a decision genuinely needs the user.
 
 Use the user's language and circumstances, not these nouns or sentence patterns. Richness means enough understanding to be useful, not filling a formula.
+
+Original-item snapshots preserve the source ID, literal title and due/timezone. Do not polish an ambiguous label into a different entity. If the user says a source label means something else, retain that correction with uncertainty and original evidence; do not rename external data or invent a second task. Before speaking, reconcile the candidate with the latest completed answer in this conversation, not just the original user question.

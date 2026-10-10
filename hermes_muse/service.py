@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from .handoff import render_result
 from .store import DAY, GOVERNANCE_JOBS, Store, bounded, digest, epoch, identifier, is_background_message, stamp
 
-DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": 1,
+DEFAULT_PREFERENCES = {"start_hour": 9, "end_hour": 22, "ordinary_per_day": None,
                        "time_sensitive_per_day": 3, "blocked_topics": [], "feed_brief": ""}
 
 
@@ -25,6 +25,8 @@ class Companion:
             raise ValueError("Preferences metadata is invalid; delivery is blocked until repaired")
         prefs = {**DEFAULT_PREFERENCES, **json.loads(line[len(prefix):-4])}
         for key, high in (("start_hour", 23), ("end_hour", 24), ("ordinary_per_day", 20), ("time_sensitive_per_day", 20)):
+            if key.endswith("_per_day") and prefs[key] is None:
+                continue
             if type(prefs[key]) is not int or not 0 <= prefs[key] <= high:
                 raise ValueError(f"Invalid preference: {key}")
         if not isinstance(prefs["blocked_topics"], list) or any(not isinstance(x, str) for x in prefs["blocked_topics"]):
@@ -40,6 +42,8 @@ class Companion:
             prefs.update(data)
             # Validate before changing the file.
             for key, high in (("start_hour", 23), ("end_hour", 24), ("ordinary_per_day", 20), ("time_sensitive_per_day", 20)):
+                if key.endswith("_per_day") and prefs[key] is None:
+                    continue
                 if type(prefs[key]) is not int or not 0 <= prefs[key] <= high:
                     raise ValueError(f"Invalid preference: {key}")
             if not isinstance(prefs["blocked_topics"], list) or any(not isinstance(x, str) for x in prefs["blocked_topics"]):
@@ -49,6 +53,9 @@ class Companion:
             path = self.store.path("PROACTIVE_PREFERENCES.md")
             body = path.read_text(encoding="utf-8").partition("\n")[2]
             self.store.write_text("PROACTIVE_PREFERENCES.md", "<!-- hermes-muse " + json.dumps(prefs, ensure_ascii=False) + " -->\n" + body)
+            explicit = self.store.get(db, "meta", "explicit_preferences", {})
+            explicit.update({key: self.clock() for key in data})
+            self.store.put(db, "meta", "explicit_preferences", explicit)
             if "feed_brief" in data:
                 self.store.put(db, "meta", "feed_requested", self.clock())
         if "feed_brief" in data:
@@ -226,6 +233,62 @@ class Companion:
                 return False
         return row.get("expires", now + 1) > now
 
+    def conversation_states(self, db=None):
+        sessions = self.store.rows(db, "session") if db is not None else self.store.all("session")
+        reader = getattr(self.host, "conversation", None)
+        return {s["id"]: reader(s["id"], self.clock() - DAY) for s in sessions} if reader else {}
+
+    @staticmethod
+    def conversation_revisions(states):
+        return {sid: value["revision"] for sid, value in states.items() if value.get("available") and value.get("messages")}
+
+    def conversation_block(self, row, states):
+        if row.get("session_id") and not states.get(row["session_id"], {}).get("available"):
+            return "conversation_unavailable"
+        current = self.conversation_revisions(states)
+        if (current or row.get("conversation_review")) and row.get("conversation_review", {}).get("revisions") != current:
+            return "conversation_changed_or_unreviewed"
+        return None
+
+    def notification_review(self, data):
+        """The model judges relevance; code checks that its reviewed history is current."""
+        key = identifier(data["id"])
+        candidate = self.store.read("notification", key, {})
+        states = self.conversation_states()
+        if candidate.get("session_id") and not states.get(candidate["session_id"], {}).get("available"):
+            raise ValueError("The linked conversation is unavailable; recover its history before reviewing this task notice")
+        revisions = self.conversation_revisions(states)
+        if data.get("conversation_revisions", {}) != revisions:
+            return {"reviewed": False, "reason": "Conversation changed; inspect the returned evidence before deciding",
+                    "recent_conversations": states, "conversation_revisions": revisions}
+        verdict = data.get("verdict")
+        if verdict not in {"relevant", "resolved", "superseded"}:
+            raise ValueError("verdict must be relevant, resolved or superseded")
+        reason = bounded(data.get("reason"), 2000)
+        with self.store.transaction() as db:
+            row = self.store.get(db, "notification", key)
+            if not row or row["status"] not in {"candidate", "pending"}:
+                raise ValueError("Review only unsent candidates; delivered/unknown history is immutable")
+            row["conversation_review"] = {"revisions": revisions, "at": self.clock(), "verdict": verdict, "reason": reason}
+            if verdict != "relevant":
+                row.update(status="cancelled", resolution={"at": self.clock(), "reason": reason, "basis": "native_conversation"})
+                row.pop("delivery_gate", None)
+            self.store.put(db, "notification", key, row)
+        return {"reviewed": True, "notification": row}
+
+    def source_snapshot(self, data):
+        if not isinstance(data, dict) or set(data) - {"source_id", "title", "due", "timezone", "checked_at"}:
+            raise ValueError("source_snapshot needs original source_id, title, checked_at; optional due/timezone")
+        result = {k: bounded(data.get(k), 2000) for k in ("source_id", "title")}
+        result["title"] = data["title"]  # Preserve case and the exact provider title.
+        for field in ("due", "timezone"):
+            if field in data:
+                result[field] = bounded(data[field], 200)
+        result["checked_at"] = epoch(data["checked_at"])
+        if not self.clock() - DAY <= result["checked_at"] <= self.clock() + 60:
+            raise ValueError("Source snapshot verification must be recent")
+        return result
+
     @staticmethod
     def signal_batch(signals):
         # Include timestamp ties so advancing a timestamp cursor cannot lose a sibling.
@@ -239,14 +302,19 @@ class Companion:
         cursor = self.store.read("cursor", "memory-upkeep", 0)
         nightly_cursor = self.store.read("cursor", "nightly-review", 0)
         notices = self.store.all("notification")
+        conversations = self.conversation_states() if view != "feed-pulse" else {}
         with self.store.transaction() as db:
             for row in notices:
                 if row["status"] in {"candidate", "pending"} and row["expires"] > now:
                     row["delivery_gate"] = self.delivery_gate(row, db, now, self.preferences())
+                    blocker = self.conversation_block(row, conversations) if view != "feed-pulse" else None
+                    if blocker:
+                        row["delivery_gate"]["blocked_by"].append(blocker)
         live = [r for r in notices if r["status"] in {"candidate", "pending", "queued", "dispatching", "transport_queued", "unknown", "failed"}
                 and (r["expires"] > now or r["status"] not in {"candidate", "pending"})]
         history = sorted((r for r in notices if r not in live), key=lambda r: r["created"], reverse=True)[:30]
-        return {"now": stamp(now), "workspace": str(self.store.root), "preferences": self.preferences(),
+        return {"now": stamp(now), "recent_conversations": conversations,
+                "conversation_revisions": self.conversation_revisions(conversations), "workspace": str(self.store.root), "preferences": self.preferences(),
                 "goals": [g for g in goals if g["status"] == "active" and g["research_review_at"] > now],
                 "goals_needing_review": [g for g in goals if g["status"] == "active" and g["research_review_at"] <= now],
                 "interests_and_ideas": interests,
@@ -391,19 +459,37 @@ class Companion:
                "priority": data.get("priority", "ordinary"), "topic": str(data.get("topic", ""))[:100],
                "goal_id": data.get("goal_id"), "interest_id": data.get("interest_id"),
                "final_result": bool(data.get("final_result")), "status": "candidate", "not_before": now,
-               "session_id": data.get("session_id"), "job_id": None}
+               "session_id": data.get("session_id"), "job_id": None,
+               "issue_key": bounded(data.get("issue_key") or ("signal:" + data["signal_id"] if data.get("signal_id") else event_key), 500)}
+        if data.get("source_snapshot"):
+            row["source_snapshot"] = self.source_snapshot(data["source_snapshot"])
+            if row["source_snapshot"]["title"] not in row["message"]:
+                raise ValueError("Quote the exact original title in the notice; do not expand or rename it")
         if not self.owner_valid(row):
             raise ValueError("Notification owner is inactive or expired")
         with self.store.transaction() as db:
             if row["priority"] == "promised":
                 owned_promise = data.get("watch_id") and self.host.is_active_watch(data["watch_id"], row.get("goal_id"))
                 if not owned_promise:
-                    self.require_signal(db, data.get("signal_id"))
+                    signal = self.require_signal(db, data.get("signal_id"))
+                    row.update(session_id=signal["session_id"], source_signal=signal["id"])
             if self.store.get(db, "forgotten", "notification:" + key):
                 return {"id": key, "status": "forgotten"}
             existing = self.store.get(db, "notification", key)
             if existing:
                 return existing
+            supersedes = data.get("supersedes", [])
+            if not isinstance(supersedes, list):
+                raise ValueError("supersedes must list older candidate IDs for the same issue")
+            for old_key in supersedes:
+                old = self.store.get(db, "notification", identifier(old_key))
+                if not old or old.get("issue_key", old["event_key"]) != row["issue_key"] or old["status"] not in {"candidate", "pending"}:
+                    raise ValueError("Supersede only unsent candidates for the same issue; preserve delivered history")
+                old.update(status="cancelled", superseded_by=key)
+                self.store.put(db, "notification", old_key, old)
+            siblings = [n for n in self.store.rows(db, "notification") if n.get("issue_key", n["event_key"]) == row["issue_key"] and n["status"] in {"candidate", "pending"}]
+            if siblings:
+                raise ValueError("An unsent candidate already tracks this issue; refresh it or explicitly supersede it")
             self.store.put(db, "notification", key, row)
         return row
 
@@ -430,6 +516,15 @@ class Companion:
             row.update(verified_at=verified, sources=sources)
             if "message" in data:
                 row["message"] = bounded(data["message"], 6000)
+            if data.get("source_snapshot"):
+                snapshot = self.source_snapshot(data["source_snapshot"])
+                previous = row.get("source_snapshot")
+                if previous and previous["source_id"] != snapshot["source_id"]:
+                    raise ValueError("A notice cannot change its original source item")
+                row["source_snapshot"] = snapshot
+            if row.get("source_snapshot") and row["source_snapshot"]["title"] not in row["message"]:
+                raise ValueError("Notice text must preserve the exact original source title")
+            row.pop("conversation_review", None)
             self.store.put(db, "notification", key, row)
         return row
 
@@ -447,6 +542,11 @@ class Companion:
             self.delivery_text(key, delivery=delivery)
         result = dict(self.store.read("notification", key))
         result["final_response"] = self.prepared_response(delivery) if delivery else "[SILENT]"
+        if result.get("delivery_gate", {}).get("blocked_by", []) in (["conversation_unavailable"], ["conversation_changed_or_unreviewed"]):
+            states = self.conversation_states()
+            result.update(recent_conversations=states, conversation_revisions=self.conversation_revisions(states))
+            result["instruction"] = "Review the current user/assistant outcomes, resolve stale candidates or call notification_review, then prepare again. Do not infer completion merely from a reply."
+            return result
         result["instruction"] = ("Return final_response as this Cron's final answer. No extra send or Cron." if delivery
                                  else "Saved for the next patrol; no delivery task was created.")
         return result
@@ -455,6 +555,7 @@ class Companion:
         """Native output hook: emit verified notice bodies, never a model's status summary."""
         now = self.clock()
         prefs = self.preferences()
+        states = self.conversation_states()
         with self.store.transaction() as db:
             for row in self.store.rows(db, "notification"):
                 if (not row.get("direct_delivery") or row.get("execution_id") != delivery["execution_id"]
@@ -462,6 +563,8 @@ class Companion:
                     continue
                 if row["status"] != "dispatching":
                     pass
+                elif self.conversation_block(row, states):
+                    row.update(status="pending", job_id=None, delivery_gate={"blocked_by": [self.conversation_block(row, states)], "next_eligible_at": None})
                 elif not self.owner_valid(row, db):
                     row["status"] = "expired"
                 elif row["topic"] in prefs["blocked_topics"]:
@@ -492,7 +595,8 @@ class Companion:
         destination = (delivery.get("route") or {}).get("deliver")
         parts = []
         for row in rows:
-            parts.append("[Hermes Muse notification " + row["id"] + "]\n"
+            snapshot = "Original item (preserve exact title/time): " + json.dumps(row["source_snapshot"], ensure_ascii=False) + "\n" if row.get("source_snapshot") else ""
+            parts.append("[Hermes Muse notification " + row["id"] + "]\n" + snapshot +
                          "Why: " + row["rationale"] + "\nSources: " + ", ".join(row["sources"]) + "\n\n" + row["message"])
         return render_result("\n\n".join(parts), destination)
 
@@ -514,7 +618,7 @@ class Companion:
             local = self.host.local_now(now)
             if check_budget:
                 limit = prefs[row["priority"] + "_per_day"]
-                if self.store.get(db, "budget", local.date().isoformat() + ":" + row["priority"], 0) >= limit:
+                if limit is not None and self.store.get(db, "budget", local.date().isoformat() + ":" + row["priority"], 0) >= limit:
                     reasons.append("daily_limit")
                     if limit == 0:
                         return {"blocked_by": reasons, "next_eligible_at": None, "expires_before_eligible": True,
@@ -561,6 +665,11 @@ class Companion:
             prefs = self.preferences()
             if row["topic"] in prefs["blocked_topics"]:
                 row["status"] = "dismissed"
+                self.store.put(db, "notification", key, row)
+                return ""
+            blocker = self.conversation_block(row, self.conversation_states(db))
+            if blocker:
+                row.update(status="pending", job_id=None, delivery_gate={"blocked_by": [blocker], "next_eligible_at": None})
                 self.store.put(db, "notification", key, row)
                 return ""
             row["delivery_gate"] = self.delivery_gate(row, db, now, prefs)

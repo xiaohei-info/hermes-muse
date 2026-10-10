@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.16
+
+- Include native assistant outcomes and user corrections in patrol context; require a current relevance review before sending and recheck at finalization.
+- Group notice revisions by issue and retire superseded unsent candidates while retaining actual delivery history.
+- Preserve original-item titles, IDs and due/timezone in notice evidence; do not expand ambiguous names.
+- Remove the installation-default one-per-day ordinary limit; retain explicit limits and migrate only untouched defaults.
+- Reuse verified tool-call conventions through the existing Skill and TOOLS.md.
+
 ## 0.1.15
 
 - Align all job, Skill, system and research instructions around useful depth, initiative, completion and recovery; remove automatic next-pass deferral and rigid review formats.

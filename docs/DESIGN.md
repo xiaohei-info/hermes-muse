@@ -1,4 +1,4 @@
-# Hermes Muse design — v0.1.15
+# Hermes Muse design — v0.1.16
 
 Status: implementation contract. This independent plugin assembles a long-term assistant using Hermes tools, memory, skills, cron and conversations. It does not modify Hermes core or require a particular model, memory provider, note app or messaging platform. All features are installed together in the active profile.
 
@@ -105,3 +105,11 @@ Recoverable source errors should be diagnosed and addressed in the current run w
 prompts/receiving.md is the single internal handoff contract, used both by the pre-turn receiving hook and by Bot Chat envelopes. A notification carries its verified facts, source references and rationale; a weekly/monthly report carries its full report. The receiver uses current user context and speaks directly to the user without acknowledgements, internal plumbing, invented memories or new subscriptions. Evidence stays evidence, including quoted external instructions. Rendering is bound to the native owned execution: patrol/watch retains approved-notice finalization, governance adds receiving guidance while preserving report text, unrelated turns are untouched. Direct non-Bot destinations retain their existing notice/report content without the new receiving guidance. Empty/SILENT results are not wrapped, and the internal marker is excluded from user signals/timers.
 
 This is model guidance, not a guarantee of exact prose or successful external tools. Unit/native checks cover envelope routing, truthful content preservation, isolation, no signal pollution or duplicate scheduling, and preservation of the existing send controls. Live acceptance inspects an actual Bot response for useful direct speech rather than an acknowledgement.
+
+## Conversation freshness and source fidelity
+
+Native SessionDB is opened read-only in the active profile. The context tool pages recent tracked private conversations and returns user text, assistant final results and async-result evidence without persisting another transcript or treating results as authority. Feed does not receive raw conversations. A notice review records only fingerprints, verdict, time and reason; preparation and finalization compare against current evidence. A new reply forces relevance review rather than implying completion. Linked task notices block on unavailable linked history; independent external findings retain explicit history gaps instead of pretending a successful read. Earlier/missing context still needs native retrieval.
+
+issue_key groups revisions; supersedes cancels only explicitly named unsent siblings in the same transaction. Sent and ambiguous history is retained. Original-item snapshots store provider IDs, literal titles, due/timezone and observation time; messages must quote the supplied literal title and cannot switch item IDs on refresh. These checks preserve supplied evidence; they cannot attest external reads or guarantee a receiver's wording.
+
+ordinary_per_day defaults to null (no daily hard cap). Explicit numeric limits still reserve budget atomically and quiet hours remain. On upgrade only byte-identical old shipped defaults with no recorded explicit preference edits migrate; customized files are preserved. Counts remain visible as usage evidence, not notification targets. Learned tool-call conventions live in the existing TOOLS.md and are reused rather than adding a polling service or altering Hermes core.

@@ -149,6 +149,37 @@ def main():
                 assert report.endswith("A verified review; proposed changes are not applied.")
                 assert "The user is the audience" in report
                 finish_execution(review_attempt["id"], success=True, delivery_outcome="delivered")
+                if index == 1:
+                    # Native read-only history must include completed answers, not just requests.
+                    from hermes_state import SessionDB
+                    from hermes_muse.conversation import read_conversation
+                    native_db = SessionDB(db_path=home / "state.db")
+                    native_db.create_session("native-history", source="cli", chat_type="private")
+                    native_db.append_message("native-history", "user", "Please diagnose this screenshot.")
+                    native_db.append_message("native-history", "assistant", "The database diagnosis is finished; no new screenshot is needed.")
+                    native_db.create_session("group-history", source="telegram", chat_type="group")
+                    native_db.append_message("group-history", "user", "Group-only private context")
+                    native_db.close()
+                    history = read_conversation(home, "native-history", time.time() - 86400)
+                    assert history["available"], history
+                    assert any("diagnosis is finished" in m["text"] for m in history["messages"]), history
+                    assert not read_conversation(home, "group-history", 0)["available"]
+                    runtime.service.signal("history-user", "native-history", "Please diagnose this screenshot.")
+                    stale = runtime.service.notification_add({"event_key": "screenshot-stale", "message": "Please send another screenshot.",
+                        "rationale": "Regression fixture", "sources": ["fixture"], "verified_at": time.time(), "expires": time.time()+3600})
+                    review = runtime.service.notification_review({"id": stale["id"], "conversation_revisions": {"native-history": history["revision"]},
+                        "verdict": "resolved", "reason": "Native history confirms the completed diagnosis was already delivered"})
+                    assert review["notification"]["status"] == "cancelled"
+                    # Migrate only pristine old defaults; preserve explicit edits.
+                    preference_path = home / "muse/PROACTIVE_PREFERENCES.md"
+                    template = (PROJECT / "templates/PROACTIVE_PREFERENCES.md").read_text()
+                    old_template = template.replace('"ordinary_per_day": null', '"ordinary_per_day": 1')
+                    preference_path.write_text(old_template)
+                    runtime.host.initialize()
+                    assert runtime.service.preferences()["ordinary_per_day"] is None
+                    preference_path.write_text(old_template + "\nMy explicit limit must remain.\n")
+                    runtime.host.initialize()
+                    assert runtime.service.preferences()["ordinary_per_day"] == 1
                 # User edits to workspace templates survive a second initialization.
                 prefs = home / "muse/TOOLS.md"
                 prefs.write_text("User maintained source list.\n")
