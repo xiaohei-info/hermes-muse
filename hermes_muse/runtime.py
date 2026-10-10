@@ -129,8 +129,7 @@ class Runtime:
         if self.closed or parent_session_id or info["cron"] or platform in {"cron", "delegate", "subagent", "webhook", "msgraph_webhook", "kanban"} or not private_session(info):
             return None
         text = user_message if isinstance(user_message, str) else json.dumps(user_message, ensure_ascii=False)
-        if (text.startswith(('[Cronjob "muse-delivery-', '[Cronjob "muse-proactive-watch"', '[Cronjob "muse-watch-')) or text.startswith(("[Hermes Muse notification ", MARKER))
-                or any(text.startswith('[Cronjob "muse-' + job + '"') for job in GOVERNANCE_JOBS)):
+        if text.lstrip().startswith(('[Cronjob "', "[Hermes Muse notification ", MARKER)):
             return {"context": receiving_instructions()}
         if is_background_message(text):
             return None

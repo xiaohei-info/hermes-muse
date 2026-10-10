@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.19
+
+- Make receiving replies understandable without reading internal deliveries: identify the subject and change, then integrate verified findings and practical impact.
+- Apply shared receiving guidance to native Cron results in private conversations, including existing non-Muse jobs. Preserve their task definitions and keep generated results out of user signals.
+
 ## 0.1.18
 
 - Preserve the review snapshot boundary across pages and return an explicit continuation instruction. Reject substituting the page checkpoint for the snapshot boundary, caught in a real maintenance run.

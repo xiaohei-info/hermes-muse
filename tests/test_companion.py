@@ -823,7 +823,7 @@ class HookTests(unittest.TestCase):
                 runtime.close()
                 self.assertFalse(runtime.timers)
 
-    def test_other_cron_delivery_is_not_a_user_signal(self):
+    def test_other_cron_delivery_gets_guidance_without_becoming_a_user_signal(self):
         from hermes_muse.runtime import Runtime
         with tempfile.TemporaryDirectory() as home:
             prepare(home)
@@ -833,7 +833,8 @@ class HookTests(unittest.TestCase):
             with patch("hermes_muse.runtime.session_info", return_value=info):
                 result = runtime.pre_turn(session_id="bot", turn_id="digest",
                     user_message='[Cronjob "personal-task-digest-daily" output — scheduled job, not the user.]\nReview cycling.')
-                self.assertIsNone(result)
+                from hermes_muse.handoff import receiving_instructions
+                self.assertEqual(result["context"], receiving_instructions())
                 runtime.post_turn(session_id="bot", turn_id="digest")
                 self.assertEqual(runtime.store.all("signal"), [])
                 self.assertFalse(runtime.timers)

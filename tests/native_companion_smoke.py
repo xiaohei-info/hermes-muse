@@ -136,7 +136,11 @@ def run(home):
             count = len(runtime.store.all("signal"))
             context = runtime.pre_turn(session_id="bot-session", turn_id="delivery-turn",
                                        user_message='[Cronjob "muse-proactive-watch" output]\n\n' + payload)
-            assert context and "Bot Chat" in context["context"]
+            from hermes_muse.handoff import receiving_instructions
+            assert context and context["context"] == receiving_instructions()
+            other = runtime.pre_turn(session_id="bot-session", turn_id="other-cron",
+                user_message='[Cronjob "existing-system-monitor" output]\nA verified system finding.')
+            assert other["context"] == receiving_instructions()
             assert len(runtime.store.all("signal")) == count
             for review in ("weekly-governance-review", "monthly-system-audit"):
                 review_context = runtime.pre_turn(session_id="bot-session", turn_id=review,

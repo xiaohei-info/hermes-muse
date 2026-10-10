@@ -52,7 +52,7 @@ The plugin includes eight prompt files:
 
 | File | Purpose |
 | --- | --- |
-| [receiving.md](prompts/receiving.md) | Shared Bot Chat handoff: turn internal findings into a direct response to the user, as the same assistant continuing its own work and taking responsibility for it, without acknowledging the job or creating another reminder. |
+| [receiving.md](prompts/receiving.md) | Shared Bot Chat handoff: turn internal findings into a direct response to the user, as a self-contained message from the same assistant, identifying the subject and what happened before explaining the findings, without acknowledging the job or creating another reminder. |
 | [system.md](prompts/system.md) | Keep the main conversation available for new input and coordination; delegate independent multi-step work and retain unfinished commitments. |
 | [proactive-watch.md](prompts/proactive-watch.md) | Discover available connections/devices, check changes and approaching deadlines, record source coverage, then verify and notify or remain silent. |
 | [memory-upkeep.md](prompts/memory-upkeep.md) | Process new conversations and facts; check its own operations for mistakes, verify repairs, and update memory and progress. |
@@ -67,7 +67,7 @@ Hermes appends `system.md` after the memory section through its plugin API; it t
 
 | Hook | Purpose |
 | --- | --- |
-| pre_llm_call | Before the reply, records a short user excerpt and its source session, and adds a state-tool pointer to the current turn for goals, interests and feedback. |
+| pre_llm_call | Before the reply, records a short user excerpt and its source session, and adds a state-tool pointer for goals, interests and feedback. Native Cron results, including other jobs, receive the shared guidance for a self-contained reply instead of becoming user signals. |
 | post_llm_call | Associates owned Cron sessions with their native execution IDs for self-review. After replying to a user message of at least 80 characters, waits for five quiet minutes before scheduling memory upkeep. New input cancels the pending timer; at most three early triggers per day. |
 | transform_llm_output | For a patrol/watch that used the state tool, replaces the final response with approved notice bodies or `[SILENT]`. Bot Chat notices and weekly/monthly reports include the same receiving guidance. Ordinary conversations and direct channel reports are unchanged. |
 | on_session_end | Clears the current turn's busy flag so later reminders do not keep waiting on a conversation that has ended. |
@@ -112,7 +112,7 @@ Conversations and background work share goals, interests and feedback. Accepted 
 
 Hourly upkeep and nightly review keep separate progress. Both drain the run’s initial backlog in the same run; 25 messages is a page size, not a work limit. New arrivals wait for the next run, and interrupted work retains its completed progress. Feed uses existing memory and current understanding; its hourly check does not require an article every time. Weekly and monthly jobs deliver reports at the depth their findings need; only the stored summary is capped at 2000 characters. They propose changes without applying them and do not run a separate Skill audit. Existing user-created reviews remain in place.
 
-Bot Chat speaks to you about the finding, its real relevance and work already completed. It owns verified background actions and mistakes, rather than speaking about another assistant’s report. It does not reply “received” to the background task or promise to investigate an already checked result. A question belongs only where your decision is needed; a remembered conversation must have evidence. The shared receiving prompt accompanies the delivered findings and is also used by the conversation hook. This guides the model’s response; it does not guarantee exact wording.
+Bot Chat explains the subject, what happened, why it matters and what has been checked. You do not need to read the internal delivery or tool log to understand its reply. It owns verified background actions and mistakes, rather than speaking about another assistant’s report. It does not reply “received” to the background task or promise to investigate an already checked result. A question belongs only where your decision is needed; a remembered conversation must have evidence. The shared receiving prompt accompanies the delivered findings and is also used by the conversation hook. This guides the model’s response; it does not guarantee exact wording.
 
 The latest review summaries are available through `muse_manage status`; full outputs stay in native Cron history. The next review can use them to check whether earlier suggestions led to useful changes.
 
