@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import sqlite3
 import tempfile
@@ -23,7 +24,7 @@ class OperationTests(unittest.TestCase):
         self.db.executescript('''CREATE TABLE sessions (id TEXT PRIMARY KEY,parent_session_id TEXT,chat_type TEXT);
         CREATE TABLE messages (id INTEGER PRIMARY KEY,session_id TEXT,role TEXT,content TEXT,tool_calls TEXT,tool_call_id TEXT,tool_name TEXT,timestamp REAL);''')
         (self.home / 'cron').mkdir()
-        with sqlite3.connect(self.home / 'cron/executions.db') as d:
+        with closing(sqlite3.connect(self.home / 'cron/executions.db')) as d, d:
             d.execute('CREATE TABLE executions (id TEXT,job_id TEXT,status TEXT,claimed_at TEXT,finished_at TEXT,error TEXT,delivery_outcome TEXT)')
         self.session('main')
         self.store.write('session', 'main', {'id': 'main'})
@@ -110,7 +111,7 @@ class OperationTests(unittest.TestCase):
         self.assertNotIn('token', page)
 
     def test_execution_failure_without_session_and_later_completion(self):
-        with sqlite3.connect(self.home / 'cron/executions.db') as d:
+        with closing(sqlite3.connect(self.home / 'cron/executions.db')) as d, d:
             d.execute('INSERT INTO executions VALUES(?,?,?,?,?,?,?)', ('failed', 'owned', 'failed', stamp(self.now - 30), stamp(self.now - 5), 'model unavailable', None))
             d.execute('INSERT INTO executions VALUES(?,?,?,?,?,?,?)', ('other', 'foreign', 'failed', stamp(self.now - 30), stamp(self.now - 5), 'private', None))
             d.execute('INSERT INTO executions VALUES(?,?,?,?,?,?,?)', ('late', 'owned', 'running', stamp(self.now - 30), None, None, None))
@@ -118,7 +119,7 @@ class OperationTests(unittest.TestCase):
         self.assertEqual({'failed', 'late'}, {e['id'] for e in page['executions']})
         self.finish(page)
         self.now += 50
-        with sqlite3.connect(self.home / 'cron/executions.db') as d:
+        with closing(sqlite3.connect(self.home / 'cron/executions.db')) as d, d:
             d.execute("UPDATE executions SET status='completed', finished_at=? WHERE id='late'", (stamp(self.now - 5),))
         self.assertEqual(['late'], [e['id'] for e in self.ops.read({})['executions']])
 
