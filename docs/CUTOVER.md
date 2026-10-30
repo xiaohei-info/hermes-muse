@@ -42,3 +42,25 @@ jobs the rollback paused (`muse-health`, `muse-deliver`) and leaves pauses you s
 
 Residual risk: 0.3.x does not dedupe against sent history, so an event that arrives after the rollback
 can still be notified twice; the bridge only guarantees that what v2 already sent is not sent again.
+
+## Windows acceptance
+
+The bridge uses the same stdlib mutation lock as normal writes (`flock` on POSIX,
+`msvcrt.locking` on Windows). This supports an existing custom Windows 0.3.x install;
+it does not make the historical upstream 0.3.x tags Windows-compatible. Reinstall the
+previous **Windows-compatible** checkout when rolling back such an installation.
+
+Run the acceptance scripts with a scratch `HERMES_HOME` and `TMPDIR`, never the active
+profile. With Hermes available, `python tests/native_windows_contract.py` additionally
+checks private Photon callers and background/group/import exclusion, a goal lifecycle,
+stale content CAS, real NTFS junction refusal, an occupied editor's replace failure and
+recovery, shared bridge/user/cron locks held past the Windows ten-second retry window,
+all six owned launchers, and Health without high items. The synthetic historical-store
+probe supplies only the current platform lock seam on Windows; it still executes the
+tags' real Store and pending-signal code. POSIX runs the tags without that seam.
+
+Home resolution is checked on local NTFS with spaces and non-ASCII names. It still
+resolves the home once through `host.resolve_home`; this is not a guarantee about
+subst/mapped drives, OneDrive or 8.3 aliases. Report those path shapes separately if used.
+Windows keeps an unrelated process cwd during host acceptance because it cannot delete
+the current directory; POSIX retains the deleted-cwd check. Both restore cwd before cleanup.

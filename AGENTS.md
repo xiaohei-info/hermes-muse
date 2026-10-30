@@ -212,7 +212,7 @@ Hermes 宿主
   - surface、hooks、entry、install 只把参数映射成 kernel 函数调用（`surface_acceptance` S11 会检查）；
   - views、health 和 dashboard 只用 `Store(..., readonly=True)` 读。
   - 所有 natural_key 都在 `kernel/store/keys.py` 中派生，goal slug、watch 槽位和淡出询问键由 `goals` 派生。
-- `kernel/store/` 只依赖 stdlib。
+- `kernel/store/` 只依赖 stdlib；回滚桥的文件锁复用共享基础层 `locks.file_lock`，平台锁仍只在 `host.exclusive`。
 - `kernel/` 依赖 store、共享基础和 host：
   - 宿主调用经 `Kernel.adapter` 发出；
   - 可以引用 `host.sessions` 的纯函数和常量（`redact`、`excerpt`、`EXCERPT`、`USER_SOURCES`、`MACHINE_SOURCES`、`classify`）；
@@ -553,4 +553,4 @@ Hermes 宿主
   - hooks 的“只在变化时注入”记在进程内存中，进程重启后摘要会再注入一次（`hooks.Hooks`）；
   - 加载记录按 pid：一个已退出加载进程的 pid 被复用时，记录要到下一次加载时才清掉（`HostAdapter.load_failed`）；
   - 记忆守卫只要求 remove 数不超过 patch 数，不核对内容是否真被合并；被删的原文已记录，可恢复（`upkeep.guard`）；
-  - Windows 没有 `dir_fd`/`O_NOFOLLOW`：内容路径逐级按属性拒绝 symlink/junction 后再按绝对路径使用，检查与使用之间换入的 junction 拦不住（`content_io._windows_directory`）；回滚桥 `bridge.py` 仍只支持 POSIX。
+  - Windows 没有 `dir_fd`/`O_NOFOLLOW`：内容路径逐级按属性拒绝 symlink/junction 后再按绝对路径使用，检查与使用之间换入的 junction 拦不住（`content_io._windows_directory`）。回滚桥复用同一文件锁，支持已有自定义 Windows 0.3.x 安装的回滚。
