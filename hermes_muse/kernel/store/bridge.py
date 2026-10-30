@@ -36,7 +36,8 @@ def v1_lock(muse):
 
 
 def bridge(home, *, dry_run=False, now=None):
-    home = Path(home)
+    # Canonicalize the profile root like HostAdapter (macOS /var is an alias).
+    home = Path(home).resolve()
     if dry_run:
         with tempfile.TemporaryDirectory(prefix="muse-bridge-dry-") as scratch:
             (Path(scratch) / "muse").mkdir()
