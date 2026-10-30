@@ -79,8 +79,9 @@ def caller(platform="", task_id="", parent_session_id="", stored_source=None, st
         return "group"
     if not stored:
         return "user" if classify(platform) == "user" else "other"
-    # LOCAL names only an already proven native interactive LOCAL row.
-    if named == "local" and stored in LOCAL_SURFACES and transport == "local":
+    # LOCAL also binds the initially reserved cli/tui/gui/acp row before peer refresh.
+    # In both states authority comes from the private stored producer, not the transport.
+    if named == "local" and stored in LOCAL_SURFACES and transport in ("local", stored):
         named = stored
     return "user" if classify(stored) == "user" and classify(named or stored) == "user" else "other"
 

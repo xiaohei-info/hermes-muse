@@ -31,8 +31,11 @@ def main():
                 db.execute('ALTER TABLE sessions ADD COLUMN created_source TEXT')
             cases = [(s, 'local', s, 'dm', None) for s in ('cli', 'tui', 'gui', 'acp')]
             cases += [(s, source, created, chat, parent) for s, source, created, chat, parent in [
+                ('reserved', 'cli', 'cli', 'dm', None),  # native row before LOCAL peer refresh
                 ('once', 'oneshot', 'cli', 'dm', None), ('tool', 'tool', 'cli', 'dm', None),
                 ('bare', 'local', None, 'dm', None), ('unknown', 'local', 'future', 'dm', None),
+                ('classic-unknown', 'local', 'unknown', 'dm', None),
+                ('unknown-origin', 'cli', 'unknown', 'dm', None),
                 ('import', 'local', 'imported', 'dm', None), ('background', 'local', 'cron', 'dm', None),
                 ('flipped', 'cli', 'kanban', 'dm', None), ('child', 'local', 'cli', 'dm', 'cli'),
                 ('hidden-session', 'local', 'cli', 'dm', None),
@@ -53,12 +56,12 @@ def main():
         tokens = set_session_vars(platform='local', chat_type='dm')
         try:
             actual = {sid: adapter.caller(session_id=sid) for sid, *_ in cases}
-            expected = {sid: 'user' if sid in ('cli','tui','gui','acp','photon') else 'other' for sid, *_ in cases}
+            expected = {sid: 'user' if sid in ('cli','tui','gui','acp','photon','reserved') else 'other' for sid, *_ in cases}
             # Photon transport is not LOCAL, so test it in its own native binding below.
             expected['photon'] = 'other'
             assert actual == expected, actual
             turns = adapter.sessions.user_turns(0)
-            assert {r['session_id'] for r in turns} == {'cli','tui','gui','acp','photon'}, turns
+            assert {r['session_id'] for r in turns} == {'cli','tui','gui','acp','photon','reserved'}, turns
             assert {r['source'] for r in turns} == {'cli','tui','gui','acp','photon'}, turns
             for row in turns:
                 assert adapter.sessions.read(row['ref'])['available'], row
@@ -66,9 +69,9 @@ def main():
             k = Kernel(home, adapter=adapter)
             k.store.set_meta('intake_since', 0)
             intake.capture(k, 200)
-            assert {e['payload']['session_id'] for e in k.store.query('signal')} == {'cli','tui','gui','acp','photon'}
+            assert {e['payload']['session_id'] for e in k.store.query('signal')} == {'cli','tui','gui','acp','photon','reserved'}
             for sid, *_ in cases:
-                if sid not in ('cli','tui','gui','acp','photon'):
+                if sid not in ('cli','tui','gui','acp','photon','reserved'):
                     with closing(sqlite3.connect(home / 'state.db')) as db:
                         mid = db.execute('SELECT id FROM messages WHERE session_id=? LIMIT 1', (sid,)).fetchone()[0]
                     assert not adapter.sessions.read(f'{sid}:{mid}')['available'], sid
@@ -82,7 +85,7 @@ def main():
         tokens = set_session_vars(platform='cli', chat_type='dm')
         try:
             for sid, *_ in cases:
-                if sid not in ('cli','tui','gui','acp','photon'):
+                if sid not in ('cli','tui','gui','acp','photon','reserved'):
                     assert adapter.caller(session_id=sid) != 'user', sid
         finally:
             clear_session_vars(tokens)
@@ -104,7 +107,7 @@ def main():
             for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions' AND sql LIKE '%created_source%'").fetchall():
                 db.execute('DROP INDEX "' + index.replace('"', '""') + '"')
             db.execute('ALTER TABLE sessions DROP COLUMN created_source')
-        assert {r['session_id'] for r in adapter.sessions.user_turns(0)} == {'flipped', 'photon'}
+        assert {r['session_id'] for r in adapter.sessions.user_turns(0)} == {'flipped', 'photon', 'reserved', 'unknown-origin'}
         assert adapter.caller(session_id='cli') == 'other'
         assert not adapter.faults, list(adapter.faults)
     print('LOCAL native authority, intake, read, registered tool and producer exclusions PASS')
