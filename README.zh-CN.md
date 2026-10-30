@@ -51,6 +51,10 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 ## 工作方式
 
+每个定时任务把一类输入变成 Muse 记下的内容，你在消息、Dashboard 页面或下一次对话里看到结果。下图为默认设置。
+
+![Hermes Muse 工作方式：输入、工人、记录、你看到的](docs/images/muse-overview.zh-CN.svg)
+
 | job（cron key） | 默认调度 | 模型做什么 | 投递 |
 |---|---|---|---|
 | intake（`memory-upkeep`） | 每小时，分批处理完为止 | 判断每条新私聊消息的含义和相关目标 | local |

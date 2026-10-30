@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="772" viewBox="0 0 1000 772" font-family="-apple-system,'Segoe UI','PingFang SC','Noto Sans CJK SC','Microsoft YaHei',Helvetica,Arial,sans-serif" role="img" aria-label="Hermes Muse 工作方式">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
+<rect width="1000" height="772" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="20" y="32" font-size="18" fill="#1f2328" font-weight="600" text-anchor="start">Hermes Muse 工作方式</text>
+<text x="20" y="54" font-size="12" fill="#59636e" font-weight="normal" text-anchor="start">从左往右读：输入 → 哪个工人处理 → Muse 记下什么 → 你在哪里看到</text>
+<text x="22" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">① 输入</text>
+<text x="252" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">② 工人（定时任务）</text>
+<text x="527" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">③ 记录</text>
+<text x="802" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">④ 你看到的</text>
+<rect x="20" y="78" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">你说的每一轮话</text>
+<text x="29" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">记成一条「新信号」，</text>
+<text x="29" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">72 小时没处理就搁置</text>
+<rect x="250" y="78" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="97" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">整理员</text>
+<text x="305.5" y="97" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">intake</text>
+<text x="259" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">每小时；逐条判断：存下、</text>
+<text x="259" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">忽略或只当背景</text>
+<rect x="259" y="130" width="104.0" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="140" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">接力 · 每批 15 条</text>
+<rect x="525" y="78" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">有用的事实</text>
+<text x="534" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">像「要办的事」的，转给夜间</text>
+<text x="534" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">复盘当作目标提案</text>
+<rect x="800" y="78" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">记忆里新记下的事</text>
+<line x1="213" y1="113.0" x2="247" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="113.0" x2="522" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="113.0" x2="797" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="158" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">到期该跟进的目标</text>
+<text x="29" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">整理员转来的目标提案</text>
+<text x="29" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">最近的对话</text>
+<rect x="250" y="158" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="177" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">夜间复盘</text>
+<text x="319.0" y="177" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">nightly</text>
+<text x="259" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">03:20 开第一批，之后接力</text>
+<text x="259" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">到清空为止</text>
+<rect x="259" y="210" width="104.0" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="220" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">接力 · 每批 10 条</text>
+<rect x="525" y="158" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">目标（每天最多新建 5 个）</text>
+<text x="534" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">想法：值得做的点子</text>
+<text x="534" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">发现：我哪里做得不好</text>
+<rect x="800" y="158" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">每轮开头的一行小抄</text>
+<text x="809" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">「[Muse] 2 个目标到期…」</text>
+<line x1="213" y1="193.0" x2="247" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="193.0" x2="522" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="193.0" x2="797" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="238" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">你的兴趣</text>
+<text x="29" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">你说「我关注 X」时登记；</text>
+<text x="29" y="286" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">14 天不提就淡出</text>
+<rect x="250" y="238" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="257" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Feed 研究</text>
+<text x="359.5" y="257" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">feed</text>
+<text x="259" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">每天 08:00；挑最久没研究</text>
+<text x="259" y="286" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">（至少隔一天）的兴趣查一轮</text>
+<rect x="259" y="290" width="96.5" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="300" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">接力 · 每批 3 个</text>
+<rect x="525" y="238" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Feed 条目：研究简报</text>
+<text x="534" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">特别值得说的另起一条通知</text>
+<rect x="800" y="238" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Dashboard 的 Feed 页</text>
+<line x1="213" y1="273.0" x2="247" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="273.0" x2="522" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="273.0" x2="797" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="318" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">外部来源</text>
+<text x="29" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">邮件、日历、GitHub、设备状态…</text>
+<text x="29" y="366" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">以及到点的目标提醒</text>
+<rect x="250" y="318" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="337" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">巡逻</text>
+<text x="292.0" y="337" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">patrol</text>
+<text x="259" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">每 30 分钟看一眼</text>
+<rect x="259" y="370" width="96.5" height="14" rx="7" fill="#f6f8fa" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="380" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">单次 · 最多 8 条</text>
+<rect x="525" y="318" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">通知草稿</text>
+<text x="534" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">判断值得打扰你才写；</text>
+<text x="534" y="366" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">去重、排期</text>
+<rect x="800" y="318" width="180" height="150" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Bot Chat 里的消息</text>
+<text x="809" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">守免打扰时段和每日条数</text>
+<line x1="213" y1="353.0" x2="247" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="353.0" x2="522" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="353.0" x2="797" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="398" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="417" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">排好期的通知</text>
+<rect x="250" y="398" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="417" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">投递员</text>
+<text x="305.5" y="417" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">deliver</text>
+<text x="259" y="432" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">每 10 分钟；纯脚本，不跑模型</text>
+<rect x="525" y="398" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="417" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">送达回执</text>
+<text x="534" y="432" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">2 小时没有回执记为 unknown，</text>
+<text x="534" y="446" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">再过 48 小时关闭</text>
+<line x1="213" y1="433.0" x2="247" y2="433.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="433.0" x2="522" y2="433.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<path d="M773 433.0 L786 433.0 L786 396.0" fill="none" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="478" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">健康摘要</text>
+<text x="29" y="512" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">和 7 天的计数</text>
+<rect x="250" y="478" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="497" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">周报</text>
+<text x="292.0" y="497" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">weekly</text>
+<text x="259" y="512" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">周日 21:15</text>
+<rect x="525" y="478" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">一份周报</text>
+<rect x="800" y="478" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Bot Chat</text>
+<line x1="213" y1="513.0" x2="247" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="513.0" x2="522" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="513.0" x2="797" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="558" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">你在对话里明确交代</text>
+<text x="29" y="592" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">「出结果告诉我」</text>
+<text x="29" y="606" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">「我关注 X」</text>
+<rect x="250" y="558" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="577" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">主会话里的助手</text>
+<text x="259" y="592" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">当场登记</text>
+<text x="259" y="606" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">不经过工人</text>
+<rect x="525" y="558" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">目标 / 兴趣 / 想法</text>
+<rect x="800" y="558" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">立即生效</text>
+<line x1="213" y1="593.0" x2="247" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="593.0" x2="522" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="593.0" x2="797" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="646" width="560" height="92" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="30" y="666" font-size="12.5" fill="#1f2328" font-weight="600" text-anchor="start">管家巡视（tick）</text>
+<text x="30" y="686" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">不跑模型，只看账本、做登记。在你说完一轮话后、任何 Muse 任务开工前、</text>
+<text x="30" y="702" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">你安静 5 分钟后触发。带「接力」标签的工人交完一批、还有剩余且有进展时，</text>
+<text x="30" y="718" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">巡视会马上叫它跑下一批（连续 3 批没有处理任何条目就停止）。</text>
+<rect x="590" y="646" width="380" height="92" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="600" y="666" font-size="12.5" fill="#1f2328" font-weight="600" text-anchor="start">自动收尾</text>
+<text x="600" y="686" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">账本里每件事都有到期时间：信号 72 小时没处理就搁置；</text>
+<text x="600" y="702" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">兴趣、想法和发现 14 天后淡出；没发出的通知 3 天后作废；</text>
+<text x="600" y="718" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">任务运行 2 小时仍没有结果就收尾。巡视时顺手执行。</text>
+<text x="20" y="760" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">图中为默认值；调度和免打扰时段可在你的 profile 中修改。</text>
+</svg>

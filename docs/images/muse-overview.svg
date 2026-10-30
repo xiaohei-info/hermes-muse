@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="772" viewBox="0 0 1000 772" font-family="-apple-system,'Segoe UI','PingFang SC','Noto Sans CJK SC','Microsoft YaHei',Helvetica,Arial,sans-serif" role="img" aria-label="How Hermes Muse works">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
+<rect width="1000" height="772" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="20" y="32" font-size="18" fill="#1f2328" font-weight="600" text-anchor="start">How Hermes Muse works</text>
+<text x="20" y="54" font-size="12" fill="#59636e" font-weight="normal" text-anchor="start">Read left to right: input → which worker handles it → what Muse records → where you see it</text>
+<text x="22" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">1 Input</text>
+<text x="252" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">2 Worker (scheduled job)</text>
+<text x="527" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">3 Recorded</text>
+<text x="802" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">4 You see</text>
+<rect x="20" y="78" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Every message you send</text>
+<text x="29" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">recorded as a new signal;</text>
+<text x="29" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">parked after 72 h unhandled</text>
+<rect x="250" y="78" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="97" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Sorter</text>
+<text x="308.2" y="97" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">intake</text>
+<text x="259" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">hourly; saves, ignores or</text>
+<text x="259" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">keeps each as background</text>
+<rect x="259" y="130" width="126.0" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="140" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">relay · 15 per batch</text>
+<rect x="525" y="78" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Useful facts</text>
+<text x="534" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">action-like ones go to nightly</text>
+<text x="534" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">review as goal proposals</text>
+<rect x="800" y="78" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">New items in memory</text>
+<line x1="213" y1="113.0" x2="247" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="113.0" x2="522" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="113.0" x2="797" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="158" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Goals due for a check</text>
+<text x="29" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Goal proposals from the sorter</text>
+<text x="29" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Recent conversations</text>
+<rect x="250" y="158" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="177" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Nightly review</text>
+<text x="365.8" y="177" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">nightly</text>
+<text x="259" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">03:20 first batch, then relays</text>
+<text x="259" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">until nothing is left</text>
+<rect x="259" y="210" width="126.0" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="220" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">relay · 10 per batch</text>
+<rect x="525" y="158" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Goals (at most 5 created a day)</text>
+<text x="534" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Ideas: things worth doing</text>
+<text x="534" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Findings: where I fell short</text>
+<rect x="800" y="158" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">A line at the top of each turn</text>
+<text x="809" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">“[Muse] 2 goals due…”</text>
+<line x1="213" y1="193.0" x2="247" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="193.0" x2="522" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="193.0" x2="797" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="238" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Your interests</text>
+<text x="29" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">registered when you say you</text>
+<text x="29" y="286" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">follow X; fade after 14 days</text>
+<rect x="250" y="238" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="257" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Feed research</text>
+<text x="358.6" y="257" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">feed</text>
+<text x="259" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">08:00 daily; researches the interest</text>
+<text x="259" y="286" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">unchecked longest (≥ 1 day)</text>
+<rect x="259" y="290" width="120.39999999999999" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="300" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">relay · 3 per batch</text>
+<rect x="525" y="238" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Feed articles: research write-ups</text>
+<text x="534" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">a notable one also gets a notice</text>
+<rect x="800" y="238" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Feed page in the Dashboard</text>
+<line x1="213" y1="273.0" x2="247" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="273.0" x2="522" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="273.0" x2="797" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="318" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">External sources</text>
+<text x="29" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">mail, calendar, GitHub, devices…</text>
+<text x="29" y="366" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">and goal reminders that are due</text>
+<rect x="250" y="318" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="337" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Patrol</text>
+<text x="308.2" y="337" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">patrol</text>
+<text x="259" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">every 30 min</text>
+<rect x="259" y="370" width="159.6" height="14" rx="7" fill="#f6f8fa" stroke="#0969da" stroke-width="0.8"/>
+<text x="266" y="380" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">single run · up to 8 items</text>
+<rect x="525" y="318" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Notice drafts</text>
+<text x="534" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">written only if worth interrupting;</text>
+<text x="534" y="366" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">deduped and scheduled</text>
+<rect x="800" y="318" width="180" height="150" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Messages in Bot Chat</text>
+<text x="809" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">quiet hours, daily budget</text>
+<line x1="213" y1="353.0" x2="247" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="353.0" x2="522" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="353.0" x2="797" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="398" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="417" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Scheduled notices</text>
+<rect x="250" y="398" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="417" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Courier</text>
+<text x="315.4" y="417" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">deliver</text>
+<text x="259" y="432" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">every 10 min; plain script, no model</text>
+<rect x="525" y="398" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="417" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Delivery receipt</text>
+<text x="534" y="432" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">none after 2 h → unknown;</text>
+<text x="534" y="446" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">closed 48 h later</text>
+<line x1="213" y1="433.0" x2="247" y2="433.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="433.0" x2="522" y2="433.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<path d="M773 433.0 L786 433.0 L786 396.0" fill="none" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="478" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Health summary</text>
+<text x="29" y="512" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">and 7-day counts</text>
+<rect x="250" y="478" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="497" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Weekly digest</text>
+<text x="358.6" y="497" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">weekly</text>
+<text x="259" y="512" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Sunday 21:15</text>
+<rect x="525" y="478" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">One digest</text>
+<rect x="800" y="478" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Bot Chat</text>
+<line x1="213" y1="513.0" x2="247" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="513.0" x2="522" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="513.0" x2="797" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="558" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="29" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">What you say outright</text>
+<text x="29" y="592" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">“tell me when it&#x27;s out”,</text>
+<text x="29" y="606" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">“I follow X”</text>
+<rect x="250" y="558" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
+<text x="259" y="577" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">The assistant, in conversation</text>
+<text x="259" y="592" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">records it on the spot;</text>
+<text x="259" y="606" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">no worker involved</text>
+<rect x="525" y="558" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="534" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Goal / interest / idea</text>
+<rect x="800" y="558" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="809" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Takes effect at once</text>
+<line x1="213" y1="593.0" x2="247" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="468" y1="593.0" x2="522" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<line x1="773" y1="593.0" x2="797" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
+<rect x="20" y="646" width="560" height="92" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="30" y="666" font-size="12.5" fill="#1f2328" font-weight="600" text-anchor="start">Housekeeping pass (tick)</text>
+<text x="30" y="686" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Runs no model; reads the books and files things. It runs after each of your turns,</text>
+<text x="30" y="702" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">before any Muse job starts, and after you have been quiet for 5 minutes.</text>
+<text x="30" y="718" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">When a relay worker finishes a batch with work left and made progress,</text>
+<text x="30" y="734" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">the pass wakes it for the next batch (stops after 3 empty batches in a row).</text>
+<rect x="590" y="646" width="380" height="92" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<text x="600" y="666" font-size="12.5" fill="#1f2328" font-weight="600" text-anchor="start">Auto-expiry</text>
+<text x="600" y="686" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Everything recorded has a deadline: signals unhandled after 72 h are parked;</text>
+<text x="600" y="702" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">interests, ideas and findings fade after 14 days; unsent notices expire</text>
+<text x="600" y="718" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">after 3 days; a run with no outcome after 2 h is closed.</text>
+<text x="600" y="734" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Applied during the housekeeping pass.</text>
+<text x="20" y="760" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Defaults shown; schedules and quiet hours can be changed in your profile.</text>
+</svg>
