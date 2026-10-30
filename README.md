@@ -51,9 +51,9 @@ Requires Hermes 0.21.5 or later with the plugin APIs for tools, Skills, prompt s
 
 ## How it works
 
-Each scheduled job turns one kind of input into something Muse records, and you see the result in a message, a Dashboard page or the next conversation. The diagram shows the defaults.
+Workers write what they find into Muse's ledger (`state-v2.db`); a few readers hand it back to you as a note, a message or a Dashboard page. The diagram shows the defaults.
 
-![How Hermes Muse works: input, worker, what is recorded, where you see it](docs/images/muse-overview.svg)
+![How Hermes Muse works: workers write to the ledger, readers hand it to you](docs/images/muse-overview.svg)
 
 | Job (cron key) | Default schedule | What the model does | Delivery |
 |---|---|---|---|

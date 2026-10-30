@@ -1,145 +1,148 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="772" viewBox="0 0 1000 772" font-family="-apple-system,'Segoe UI','PingFang SC','Noto Sans CJK SC','Microsoft YaHei',Helvetica,Arial,sans-serif" role="img" aria-label="How Hermes Muse works">
-<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8c959f"/></marker></defs>
-<rect width="1000" height="772" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
-<text x="20" y="32" font-size="18" fill="#1f2328" font-weight="600" text-anchor="start">How Hermes Muse works</text>
-<text x="20" y="54" font-size="12" fill="#59636e" font-weight="normal" text-anchor="start">Read left to right: input → which worker handles it → what Muse records → where you see it</text>
-<text x="22" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">1 Input</text>
-<text x="252" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">2 Worker (scheduled job)</text>
-<text x="527" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">3 Recorded</text>
-<text x="802" y="72" font-size="12" fill="#59636e" font-weight="600" text-anchor="start">4 You see</text>
-<rect x="20" y="78" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Every message you send</text>
-<text x="29" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">recorded as a new signal;</text>
-<text x="29" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">parked after 72 h unhandled</text>
-<rect x="250" y="78" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="97" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Sorter</text>
-<text x="308.2" y="97" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">intake</text>
-<text x="259" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">hourly; saves, ignores or</text>
-<text x="259" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">keeps each as background</text>
-<rect x="259" y="130" width="126.0" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
-<text x="266" y="140" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">relay · 15 per batch</text>
-<rect x="525" y="78" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Useful facts</text>
-<text x="534" y="112" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">action-like ones go to nightly</text>
-<text x="534" y="126" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">review as goal proposals</text>
-<rect x="800" y="78" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="809" y="97" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">New items in memory</text>
-<line x1="213" y1="113.0" x2="247" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="113.0" x2="522" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="773" y1="113.0" x2="797" y2="113.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="158" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Goals due for a check</text>
-<text x="29" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Goal proposals from the sorter</text>
-<text x="29" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Recent conversations</text>
-<rect x="250" y="158" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="177" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Nightly review</text>
-<text x="365.8" y="177" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">nightly</text>
-<text x="259" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">03:20 first batch, then relays</text>
-<text x="259" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">until nothing is left</text>
-<rect x="259" y="210" width="126.0" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
-<text x="266" y="220" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">relay · 10 per batch</text>
-<rect x="525" y="158" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Goals (at most 5 created a day)</text>
-<text x="534" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Ideas: things worth doing</text>
-<text x="534" y="206" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Findings: where I fell short</text>
-<rect x="800" y="158" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="809" y="177" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">A line at the top of each turn</text>
-<text x="809" y="192" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">“[Muse] 2 goals due…”</text>
-<line x1="213" y1="193.0" x2="247" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="193.0" x2="522" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="773" y1="193.0" x2="797" y2="193.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="238" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Your interests</text>
-<text x="29" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">registered when you say you</text>
-<text x="29" y="286" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">follow X; fade after 14 days</text>
-<rect x="250" y="238" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="257" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Feed research</text>
-<text x="358.6" y="257" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">feed</text>
-<text x="259" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">08:00 daily; researches the interest</text>
-<text x="259" y="286" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">unchecked longest (≥ 1 day)</text>
-<rect x="259" y="290" width="120.39999999999999" height="14" rx="7" fill="#ddf4ff" stroke="#0969da" stroke-width="0.8"/>
-<text x="266" y="300" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">relay · 3 per batch</text>
-<rect x="525" y="238" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Feed articles: research write-ups</text>
-<text x="534" y="272" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">a notable one also gets a notice</text>
-<rect x="800" y="238" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="809" y="257" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Feed page in the Dashboard</text>
-<line x1="213" y1="273.0" x2="247" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="273.0" x2="522" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="773" y1="273.0" x2="797" y2="273.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="318" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">External sources</text>
-<text x="29" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">mail, calendar, GitHub, devices…</text>
-<text x="29" y="366" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">and goal reminders that are due</text>
-<rect x="250" y="318" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="337" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Patrol</text>
-<text x="308.2" y="337" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">patrol</text>
-<text x="259" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">every 30 min</text>
-<rect x="259" y="370" width="159.6" height="14" rx="7" fill="#f6f8fa" stroke="#0969da" stroke-width="0.8"/>
-<text x="266" y="380" font-size="10" fill="#0969da" font-weight="normal" text-anchor="start">single run · up to 8 items</text>
-<rect x="525" y="318" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Notice drafts</text>
-<text x="534" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">written only if worth interrupting;</text>
-<text x="534" y="366" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">deduped and scheduled</text>
-<rect x="800" y="318" width="180" height="150" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="809" y="337" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Messages in Bot Chat</text>
-<text x="809" y="352" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">quiet hours, daily budget</text>
-<line x1="213" y1="353.0" x2="247" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="353.0" x2="522" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="773" y1="353.0" x2="797" y2="353.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="398" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="417" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Scheduled notices</text>
-<rect x="250" y="398" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="417" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Courier</text>
-<text x="315.4" y="417" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">deliver</text>
-<text x="259" y="432" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">every 10 min; plain script, no model</text>
-<rect x="525" y="398" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="417" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Delivery receipt</text>
-<text x="534" y="432" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">none after 2 h → unknown;</text>
-<text x="534" y="446" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">closed 48 h later</text>
-<line x1="213" y1="433.0" x2="247" y2="433.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="433.0" x2="522" y2="433.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<path d="M773 433.0 L786 433.0 L786 396.0" fill="none" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="478" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Health summary</text>
-<text x="29" y="512" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">and 7-day counts</text>
-<rect x="250" y="478" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="497" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">Weekly digest</text>
-<text x="358.6" y="497" font-size="10" fill="#8c959f" font-weight="normal" text-anchor="start">weekly</text>
-<text x="259" y="512" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Sunday 21:15</text>
-<rect x="525" y="478" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">One digest</text>
-<rect x="800" y="478" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="809" y="497" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Bot Chat</text>
-<line x1="213" y1="513.0" x2="247" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="513.0" x2="522" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="773" y1="513.0" x2="797" y2="513.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="558" width="190" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="29" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">What you say outright</text>
-<text x="29" y="592" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">“tell me when it&#x27;s out”,</text>
-<text x="29" y="606" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">“I follow X”</text>
-<rect x="250" y="558" width="215" height="70" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1"/>
-<text x="259" y="577" font-size="12.5" fill="#0969da" font-weight="600" text-anchor="start">The assistant, in conversation</text>
-<text x="259" y="592" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">records it on the spot;</text>
-<text x="259" y="606" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">no worker involved</text>
-<rect x="525" y="558" width="245" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="534" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Goal / interest / idea</text>
-<rect x="800" y="558" width="180" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="809" y="577" font-size="12" fill="#1f2328" font-weight="600" text-anchor="start">Takes effect at once</text>
-<line x1="213" y1="593.0" x2="247" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="468" y1="593.0" x2="522" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<line x1="773" y1="593.0" x2="797" y2="593.0" stroke="#8c959f" stroke-width="1.3" marker-end="url(#a)"/>
-<rect x="20" y="646" width="560" height="92" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="30" y="666" font-size="12.5" fill="#1f2328" font-weight="600" text-anchor="start">Housekeeping pass (tick)</text>
-<text x="30" y="686" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Runs no model; reads the books and files things. It runs after each of your turns,</text>
-<text x="30" y="702" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">before any Muse job starts, and after you have been quiet for 5 minutes.</text>
-<text x="30" y="718" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">When a relay worker finishes a batch with work left and made progress,</text>
-<text x="30" y="734" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">the pass wakes it for the next batch (stops after 3 empty batches in a row).</text>
-<rect x="590" y="646" width="380" height="92" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-<text x="600" y="666" font-size="12.5" fill="#1f2328" font-weight="600" text-anchor="start">Auto-expiry</text>
-<text x="600" y="686" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Everything recorded has a deadline: signals unhandled after 72 h are parked;</text>
-<text x="600" y="702" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">interests, ideas and findings fade after 14 days; unsent notices expire</text>
-<text x="600" y="718" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">after 3 days; a run with no outcome after 2 h is closed.</text>
-<text x="600" y="734" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Applied during the housekeeping pass.</text>
-<text x="20" y="760" font-size="11" fill="#59636e" font-weight="normal" text-anchor="start">Defaults shown; schedules and quiet hours can be changed in your profile.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="790" viewBox="0 0 1100 790" font-family="-apple-system,'Segoe UI','PingFang SC','Noto Sans CJK SC','Microsoft YaHei',Helvetica,Arial,sans-serif" role="img" aria-label="How Hermes Muse works">
+<style>.h{fill:#59636e;font-size:12px;font-weight:600}.m{fill:#59636e;font-size:10.5px}.t{fill:#1f2328;font-size:13px;font-weight:600}.lb{fill:#59636e;font-size:10.5px}
+.box{fill:#fff;stroke:#d0d7de}.wk{fill:#fff;stroke:#0969da;stroke-width:1.4}.led{fill:#fff;stroke:#656d76;stroke-width:1.2}
+.panel{fill:#0969da;fill-opacity:.07;stroke:#0969da;stroke-opacity:.5;stroke-dasharray:4 3}
+.w{stroke:#656d76;stroke-width:1.2;fill:none}.r{stroke:#0969da;stroke-width:1.2;fill:none;stroke-dasharray:5 3}
+.nt{fill:#1f2328;font-size:12.5px;font-weight:600}.nb{fill:#59636e;font-size:11px}</style>
+<defs><marker id="aw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#656d76"/></marker><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0969da"/></marker></defs>
+<rect width="1100" height="790" rx="12" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="20" y="32" font-size="18" font-weight="600" fill="#1f2328">How Hermes Muse works</text><text x="20" y="52" font-size="12" fill="#59636e">The ledger (state-v2.db) is in the middle. Workers on the left write to it; readers on the right hand things to you.</text>
+<g transform="translate(10,64)">
+<text class="h" x="10" y="18">Input</text>
+<text class="h" x="200" y="18">Workers (write)</text>
+<text class="h" x="470" y="18">Ledger · state-v2.db</text>
+<text class="h" x="700" y="18">Readers</text>
+<text class="h" x="900" y="18">You see</text>
+<rect class="panel" x="460" y="60" width="170" height="480" rx="10"/>
+<rect class="box" x="10" y="58" width="160" height="54" rx="8"/>
+<text class="t" x="20" y="77">Your conversations</text>
+<text class="m" x="20" y="92">recorded after every turn</text>
+<rect class="box" x="10" y="306" width="160" height="60" rx="8"/>
+<text class="t" x="20" y="325">What you say outright</text>
+<text class="m" x="20" y="340">“tell me when it's out”</text>
+<text class="m" x="20" y="353">“I follow X”</text>
+<rect class="box" x="10" y="484" width="160" height="60" rx="8"/>
+<text class="t" x="20" y="503">External sources</text>
+<text class="m" x="20" y="518">mail, calendar, GitHub,</text>
+<text class="m" x="20" y="531">devices…</text>
+<rect class="wk" x="200" y="90" width="190" height="60" rx="8"/>
+<text class="t" x="210" y="109">Intake</text>
+<text class="m" x="210" y="124">hourly · relay · 15 per batch</text>
+<text class="m" x="210" y="137">each: save / ignore / background</text>
+<rect class="wk" x="200" y="160" width="190" height="134" rx="8"/>
+<text class="t" x="210" y="179">Nightly review</text>
+<text class="m" x="210" y="194">03:20 · relay · 10 per batch</text>
+<text class="m" x="210" y="207">follows up due goals and</text>
+<text class="m" x="210" y="220">goal proposals; reviews chats</text>
+<text class="m" x="210" y="233">for ideas and findings</text>
+<rect class="wk" x="200" y="306" width="190" height="60" rx="8"/>
+<text class="t" x="210" y="325">Assistant, on the spot</text>
+<text class="m" x="210" y="340">records goals, interests, ideas</text>
+<text class="m" x="210" y="353">in the conversation; no worker</text>
+<rect class="wk" x="200" y="378" width="190" height="92" rx="8"/>
+<text class="t" x="210" y="397">Feed research</text>
+<text class="m" x="210" y="412">daily 08:00 · relay · 3 per batch</text>
+<text class="m" x="210" y="425">researches interests online;</text>
+<text class="m" x="210" y="438">a notable one also gets a notice</text>
+<rect class="wk" x="200" y="484" width="190" height="60" rx="8"/>
+<text class="t" x="210" y="503">Patrol</text>
+<text class="m" x="210" y="518">every 30 min · up to 8 items</text>
+<text class="m" x="210" y="531">notice only if worth interrupting</text>
+<rect class="led" x="470" y="70" width="150" height="46" rx="8"/>
+<text class="t" x="480" y="89">New signals</text>
+<text class="m" x="480" y="104">parked after 72 h</text>
+<rect class="led" x="470" y="152" width="150" height="46" rx="8"/>
+<text class="t" x="480" y="171">Goals</text>
+<text class="m" x="480" y="186">jobs add ≤ 5 a day</text>
+<rect class="led" x="470" y="212" width="150" height="46" rx="8"/>
+<text class="t" x="480" y="231">Ideas</text>
+<text class="m" x="480" y="246">fade after 14 days</text>
+<rect class="led" x="470" y="272" width="150" height="46" rx="8"/>
+<text class="t" x="480" y="291">Findings</text>
+<text class="m" x="480" y="306">where I fell short</text>
+<rect class="led" x="470" y="350" width="150" height="46" rx="8"/>
+<text class="t" x="480" y="369">Interests</text>
+<text class="m" x="480" y="384">fade after 14 days</text>
+<rect class="led" x="470" y="412" width="150" height="46" rx="8"/>
+<text class="t" x="480" y="431">Feed articles</text>
+<text class="m" x="480" y="446">research write-ups</text>
+<rect class="led" x="470" y="474" width="150" height="56" rx="8"/>
+<text class="t" x="480" y="493">Notices</text>
+<text class="m" x="480" y="508">draft → scheduled → sent</text>
+<text class="m" x="480" y="521">also idle-goal questions</text>
+<path class="w" d="M170,76 L470,76" marker-end="url(#aw)"/>
+<path class="r" d="M90,112 V200 H200" marker-end="url(#ar)"/>
+<text class="lb" x="96" y="150">reviews last 72 h</text>
+<path class="w" d="M170,336 L200,336" marker-end="url(#aw)"/>
+<path class="w" d="M170,514 L200,514" marker-end="url(#aw)"/>
+<path class="w" d="M390,112 L470,112" marker-end="url(#aw)"/>
+<path class="r" d="M470,100 L390,100" marker-end="url(#ar)"/>
+<path class="r" d="M470,172 L390,172" marker-end="url(#ar)"/>
+<path class="w" d="M390,186 L470,186" marker-end="url(#aw)"/>
+<path class="w" d="M390,232 L470,232" marker-end="url(#aw)"/>
+<path class="w" d="M390,284 L470,284" marker-end="url(#aw)"/>
+<path class="w" d="M390,360 L470,360" marker-end="url(#aw)"/>
+<path class="r" d="M470,384 L390,384" marker-end="url(#ar)"/>
+<path class="w" d="M390,432 L470,432" marker-end="url(#aw)"/>
+<path class="w" d="M390,452 H440 V480 H470" marker-end="url(#aw)"/>
+<path class="r" d="M470,496 L390,496" marker-end="url(#ar)"/>
+<path class="w" d="M390,512 L470,512" marker-end="url(#aw)"/>
+<path class="w" d="M295,90 V46 H995 V58" marker-end="url(#aw)"/>
+<text class="lb" x="420" y="41">useful facts → Hermes memory (not in the ledger)</text>
+<rect class="wk" x="700" y="160" width="150" height="60" rx="8"/>
+<text class="t" x="710" y="179">Pre-turn note</text>
+<text class="m" x="710" y="194">read before each turn</text>
+<text class="m" x="710" y="207">waiting goals, open findings</text>
+<rect class="wk" x="700" y="300" width="150" height="70" rx="8"/>
+<text class="t" x="710" y="319">Weekly</text>
+<text class="m" x="710" y="334">Sunday 21:15</text>
+<text class="m" x="710" y="347">last 7 days of records</text>
+<text class="m" x="710" y="360">and the Health summary</text>
+<rect class="wk" x="700" y="484" width="150" height="60" rx="8"/>
+<text class="t" x="710" y="503">Deliver</text>
+<text class="m" x="710" y="518">every 10 min · no model</text>
+<text class="m" x="710" y="531">quiet hours, daily budget</text>
+<path class="r" d="M620,176 L700,176" marker-end="url(#ar)"/>
+<path class="r" d="M620,290 H665 V204 H700" marker-end="url(#ar)"/>
+<path class="r" d="M630,335 L700,335" marker-end="url(#ar)"/>
+<path class="r" d="M620,496 L700,496" marker-end="url(#ar)"/>
+<text class="lb" x="630" y="490">due ones</text>
+<path class="r" d="M620,435 L900,435" marker-end="url(#ar)"/>
+<rect class="box" x="900" y="58" width="190" height="50" rx="8"/>
+<text class="t" x="910" y="77">Hermes memory</text>
+<text class="m" x="910" y="92">carried into later chats</text>
+<rect class="box" x="900" y="160" width="190" height="60" rx="8"/>
+<text class="t" x="910" y="179">Note at start of turn</text>
+<text class="m" x="910" y="194">“[Muse] 2 goals due…”</text>
+<rect class="box" x="900" y="410" width="190" height="50" rx="8"/>
+<text class="t" x="910" y="429">Dashboard Feed page</text>
+<text class="m" x="910" y="444">browse any time</text>
+<rect class="box" x="900" y="480" width="190" height="64" rx="8"/>
+<text class="t" x="910" y="499">Bot Chat messages</text>
+<text class="m" x="910" y="514">notices and weekly digest</text>
+<path class="w" d="M850,190 L900,190" marker-end="url(#aw)"/>
+<path class="w" d="M850,350 H875 V500 H900" marker-end="url(#aw)"/>
+<path class="w" d="M850,522 L900,522" marker-end="url(#aw)"/>
+<text class="lb" x="858" y="516">send</text>
+<path class="w" d="M10,575 L50,575" marker-end="url(#aw)"/>
+<text class="lb" x="56" y="579">writes</text>
+<path class="r" d="M110,575 L150,575" marker-end="url(#ar)"/>
+<text class="lb" x="156" y="579">reads</text>
+<rect class="wk" x="216" y="568" width="14" height="14" rx="3"/>
+<text class="lb" x="236" y="579">worker (job or hook)</text>
+<rect class="led" x="400" y="568" width="14" height="14" rx="3"/>
+<text class="lb" x="420" y="579">a record type in the ledger</text>
+</g>
+<rect class="box" x="20" y="690" width="345" height="82" rx="8"/><text class="nt" x="30" y="710">Relay</text>
+<text class="nb" x="30" y="728">Intake, nightly and feed take one batch at a time.</text>
+<text class="nb" x="30" y="743">When a batch is done with work left and progress</text>
+<text class="nb" x="30" y="758">made, the housekeeping pass wakes the next one.</text>
+<rect class="box" x="375" y="690" width="345" height="82" rx="8"/><text class="nt" x="385" y="710">Housekeeping pass (tick)</text>
+<text class="nb" x="385" y="728">Runs no model; reads the ledger and files things.</text>
+<text class="nb" x="385" y="743">Runs after each of your turns, before any Muse</text>
+<text class="nb" x="385" y="758">job starts, and after you have been quiet 5 min.</text>
+<rect class="box" x="730" y="690" width="345" height="82" rx="8"/><text class="nt" x="740" y="710">Auto-expiry</text>
+<text class="nb" x="740" y="728">Every ledger item has a deadline: signals are parked,</text>
+<text class="nb" x="740" y="743">interests, ideas, findings fade, notices expire; a run</text>
+<text class="nb" x="740" y="758">with no outcome after 2 h is closed.</text>
 </svg>

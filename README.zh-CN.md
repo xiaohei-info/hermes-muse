@@ -51,9 +51,9 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 ## 工作方式
 
-每个定时任务把一类输入变成 Muse 记下的内容，你在消息、Dashboard 页面或下一次对话里看到结果。下图为默认设置。
+工人把发现的事写进 Muse 的账本（`state-v2.db`），再由几个读账本的环节以提示、消息或 Dashboard 页面交给你。下图为默认设置。
 
-![Hermes Muse 工作方式：输入、工人、记录、你看到的](docs/images/muse-overview.zh-CN.svg)
+![Hermes Muse 工作方式：工人写账本，读账本的交给你](docs/images/muse-overview.zh-CN.svg)
 
 | job（cron key） | 默认调度 | 模型做什么 | 投递 |
 |---|---|---|---|
