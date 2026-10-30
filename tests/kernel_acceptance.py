@@ -255,6 +255,11 @@ def part_notifier(base):
           held["state"] == "scheduled" and datetime.fromtimestamp(held["payload"]["next_eligible"], UTC).hour == 9
           and urgent["state"] == "sending" and woken == ["job-deliver"], {"held": held["state"], "urgent": urgent["state"], "woken": woken})
 
+    awake_at = datetime(2026, 11, 6, 12, 0, 0, 123456, tzinfo=UTC).timestamp() + 4e-7  # not a whole microsecond
+    check("N3 gate: inside waking hours an ordinary notice is eligible at exactly the time asked, not a rounded copy",
+          notifier.gate("ordinary", notifier.preferences(k.home), awake_at, UTC) == awake_at,
+          {})
+
     for n in (2, 3):  # urgent_per_day (default 2): the third urgent of the night is gated as time_sensitive
         patrol(k, [{"upstream_id": f"mail:<urgent{n}@example.org>", "title": f"Urgent {n}"}], priority="urgent")
         run_deliver(k, host)

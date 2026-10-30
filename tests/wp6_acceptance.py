@@ -162,7 +162,7 @@ def part_entry(home, ids):
     check("deliver run: a changed `deliver` preference becomes the job's route (that run silent); then the launcher prints "
           "the due notice as plain stdout (no model), claimed for that execution on the new route; the next run is silent",
           printed[0][1] and printed[0][2].strip() == "" and printed[1][1]
-          # migrated notices the install claim (5 per message, ties in random id order) left over may join it
+          # migrated notices the install claim (5 per message) left over may join it
           and printed[1][2].strip().startswith("Your synthetic reminder\n\n") and printed[1][2].strip().endswith(notifier.FOOTER)
           and _parse_wake_gate(printed[1][2])
           and claimed["state"] == "sending" and claimed["payload"]["execution_id"] == printed[1][0]

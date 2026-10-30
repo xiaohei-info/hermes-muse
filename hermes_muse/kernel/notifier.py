@@ -45,7 +45,7 @@ def gate(priority, prefs, at, tz, spent=0):
     if priority == "urgent":
         return at
     limit = prefs.get(f"{priority}_per_day")
-    local = datetime.fromtimestamp(at, tz)
+    local = opened = datetime.fromtimestamp(at, tz)
     if limit is not None and spent >= limit:
         if limit == 0:
             return None
@@ -55,7 +55,7 @@ def gate(priority, prefs, at, tz, spent=0):
     if not awake:
         opening = local.replace(hour=start, minute=0, second=0, microsecond=0)
         local = opening if opening > local else opening + timedelta(days=1)
-    return local.timestamp()
+    return at if local is opened else local.timestamp()  # a datetime holds microseconds: converting `at` back can shift it
 
 
 def effective(store, priority, prefs, now, tz):
