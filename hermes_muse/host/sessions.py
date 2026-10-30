@@ -303,12 +303,14 @@ class Sessions(Part):
 
     @tolerant(Counter)
     def sources(self, since):
-        """Session count per `sessions.source` with activity after `since`."""
+        """Session count per producer source with activity after `since`; unresolved LOCAL stays visible."""
         if not self.path.exists():
             return Counter()
         with reader(self.path) as db:
+            source, _, _ = private_user(db)
             return Counter({r[0]: r[1] for r in db.execute(
-                "SELECT source, COUNT(*) FROM sessions WHERE COALESCE(last_activity_at, started_at) > ? GROUP BY source",
+                f"SELECT ({source}), COUNT(*) FROM sessions s "
+                f"WHERE COALESCE(last_activity_at, started_at) > ? GROUP BY ({source})",
                 (since,))})
 
     @tolerant(list)

@@ -47,6 +47,9 @@ def main():
             db.execute('INSERT INTO messages(session_id,role,content,timestamp,message_uid,display_kind) VALUES(?,?,?,?,?,?)',
                        ('cli', 'user', 'hidden', 101, 'hidden', 'hidden'))
         adapter = HostAdapter(home)
+        counts = adapter.sessions.sources(-1)
+        assert all(counts[s] >= 1 for s in ('cli', 'tui', 'gui', 'acp', 'photon')), counts
+        assert counts['local'] >= 1, counts  # unresolved transports still surface in Health
         tokens = set_session_vars(platform='local', chat_type='dm')
         try:
             actual = {sid: adapter.caller(session_id=sid) for sid, *_ in cases}
