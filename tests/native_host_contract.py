@@ -2,7 +2,7 @@
 
 Synthetic temporary homes only; no model calls, no live channels, no user data.
 Run with a Hermes interpreter: HERMES_SOURCE=/path/to/hermes-agent python tests/native_host_contract.py
-The whole test runs from a deleted process cwd: the adapter must never need it.
+Runs from a deleted cwd on POSIX, or an unrelated cwd on Windows (which cannot delete it).
 """
 import json
 import os
@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from contextlib import ExitStack, closing
 from unittest import mock
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -54,7 +55,7 @@ def finish(job_id, outcome, success=True, error=None):
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix="muse-host-contract-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="muse-host-contract-") as temporary, ExitStack() as cleanup:
         base = Path(temporary).resolve()
         home = base / "profile"
         (home / "workspace").mkdir(parents=True)
@@ -64,8 +65,11 @@ def main():
         os.environ.update(HERMES_HOME=str(home), HERMES_IGNORE_USER_CONFIG="1")
         gone = base / "gone"
         gone.mkdir()
+        cleanup.callback(os.chdir, os.getcwd())
         os.chdir(gone)
-        gone.rmdir()  # from here on os.getcwd() raises
+        if os.name != "nt":
+            gone.rmdir()  # from here on os.getcwd() raises
+        # Windows keeps an unrelated cwd: ntpath.realpath requires getcwd even for absolute paths.
 
         from cron.executions import create_execution
         from cron.jobs import list_jobs, pause_job, update_job
@@ -135,7 +139,8 @@ def main():
         page = host.sessions.read(attachment["ref"], offset=attachment["chars"] - 100, length=50000)
         assert page["available"] and page["total"] == attachment["chars"] and "[REDACTED]" in page["text"] and not page["more"]
         assert len(host.sessions.read(attachment["ref"], length=50000)["text"]) == 12000
-        once = next(iter(sqlite3.connect(home / "state.db").execute("SELECT id FROM messages WHERE session_id='once'")))[0]
+        with closing(sqlite3.connect(home / "state.db")) as db:
+            once = db.execute("SELECT id FROM messages WHERE session_id='once'").fetchone()[0]
         assert host.sessions.read(f"once:{once}") == {"ref": f"once:{once}", "available": False}
         assert host.sessions.job_of("local-run") == job["id"]
         assert host.sessions.job_of(f"cron_{job['id']}_20261029_120000") == job["id"]
@@ -206,7 +211,7 @@ def main():
         clean.mkdir()
         (clean / "config.yaml").write_text("plugins:\n  enabled: [hermes-muse]\n")
         assert [r["status"] for r in HostAdapter(clean).probe(captured_sources=["cli"])] == ["ok"] * 7
-        (home / "muse" / "<bound method Path.home of <class 'pathlib.PosixPath'>>").mkdir(parents=True)
+        (home / "muse" / "bound method Path.home").mkdir(parents=True)
         results = {r["name"]: r for r in host.probe(captured_sources=["cli", "oneshot"])}
         for r in results.values():
             assert set(r) == {"name", "status", "detail", "fix"} and r["status"] in STATUSES, r
@@ -217,7 +222,7 @@ def main():
         assert {n: r["status"] for n, r in results.items()} == expected, results
         assert "'local'" in results["signal_purity"]["detail"], results["signal_purity"]
         print(json.dumps(list(results.values()), ensure_ascii=False, indent=1))
-        with sqlite3.connect(home / "state.db") as db:
+        with closing(sqlite3.connect(home / "state.db")) as db, db:
             db.execute("UPDATE sessions SET cwd=? WHERE id='bot'", (str(home),))
         assert host.probe()[3]["status"] == "ok"
 
