@@ -53,7 +53,7 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 工人把发现的事写进 Muse 的账本（`state-v2.db`），再由几个读账本的环节以提示、消息或 Dashboard 页面交给你。下图为默认设置。
 
-![Hermes Muse 工作方式：工人写账本，读账本的交给你](docs/images/muse-overview.zh-CN.svg)
+![Hermes Muse 工作方式：工人写账本，读账本的交给你](docs/images/muse-overview.svg)
 
 | job（cron key） | 默认调度 | 模型做什么 | 投递 |
 |---|---|---|---|
