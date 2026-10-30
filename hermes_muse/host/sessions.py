@@ -145,6 +145,36 @@ PRIVATE_USER = (f"s.source IN ({','.join('?' * len(USER_SOURCES))}) "
 PRIVATE_USER_ARGS = (*sorted(USER_SOURCES), *GROUP_CHATS)
 
 
+def local_surface(raw, session_id, route, chat_id, user_id):
+    """Project only a matching native immutable creation receipt, never its config/prompt.
+
+    commit_local_session reserves sessions.source without created_source. A later
+    placeholder writer can stamp `unknown`; the native receipt still proves who
+    created this exact root/private route. An absent receipt permits the older
+    created_source path; a present malformed or machine receipt fails closed.
+    """
+    if raw is None:
+        return ""
+    try:
+        receipt = json.loads(raw)
+        policy, entry = receipt["policy"], receipt["entry"]
+        origin = entry["origin"]
+        source = policy["source"]
+        platform = {"cli": "cli", "tui": "tui", "gui": "desktop", "acp": "acp"}.get(source)
+        if (not platform or not route or not user_id or chat_id != session_id
+                or receipt["session_id"] != session_id or receipt["route"] != route
+                or receipt["principal_id"] != user_id
+                or entry["session_id"] != session_id or entry["session_key"] != route
+                or entry["platform"] != "local" or origin["platform"] != "local"
+                or origin["chat_id"] != chat_id or origin["user_id"] != user_id
+                or policy["platform"] != platform
+                or json.loads(policy["request_json"])["source"] != source):
+            return "other"
+        return source
+    except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
+        return "other"
+
+
 def private_user(db):
     """Shared authority/intake/read predicate; native provenance, never a caller override.
 
@@ -152,12 +182,20 @@ def private_user(db):
     Machine creation labels cannot gain authority through a later surface flip.
     """
     columns = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
-    source, guards = "s.source", []
+    source, guards, native = "s.source", [], "''"
+    labels = ",".join(f"'{s}'" for s in LOCAL_SURFACES)
+    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "state_meta" in tables and {"session_key", "chat_id", "user_id"} <= columns:
+        db.create_function("muse_local_surface", 5, local_surface, deterministic=True)
+        native = ("(SELECT muse_local_surface(value,s.id,s.session_key,s.chat_id,s.user_id) "
+                  "FROM state_meta WHERE key = 'gateway.local_policy.v1:' || s.id)")
     if "created_source" in columns:
-        labels = ",".join(f"'{s}'" for s in LOCAL_SURFACES)
         source = f"CASE WHEN s.source = 'local' AND s.created_source IN ({labels}) THEN s.created_source ELSE s.source END"
         guards.append("(s.created_source IS NULL OR s.created_source = '' OR s.created_source IN ("
-                      + ",".join("?" * len(USER_SOURCES)) + "))")
+                      + ",".join("?" * len(USER_SOURCES))
+                      + f") OR (s.created_source = 'unknown' AND {native} IN ({labels})))")
+    source = (f"CASE WHEN s.source IN ('local',{labels}) THEN "
+              f"COALESCE(NULLIF({native},''),({source})) ELSE s.source END")
     if "parent_session_id" in columns:
         guards.append("COALESCE(s.parent_session_id,'') = ''")
     if "hidden" in columns:

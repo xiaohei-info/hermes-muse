@@ -53,9 +53,13 @@ previous **Windows-compatible** checkout when rolling back such an installation.
 Run the acceptance scripts with a scratch `HERMES_HOME` and `TMPDIR`, never the active
 profile. `tests/local_session_acceptance.py` checks native gateway `source=local`
 with immutable `created_source=cli/tui/gui/acp` for private caller authority and signal
-intake. Bare LOCAL, finite oneshot, machine/import creation labels, child, group,
-hidden and background turns remain excluded. Older schemas without provenance keep
-legacy source rules; LOCAL itself is never allowlisted. For live model acceptance,
+intake. `tests/local_receipt_acceptance.py` covers native reservation rows whose later
+placeholder writer stamped `created_source=unknown`: only a matching immutable
+`gateway.local_policy.v1:` receipt can prove that exact root session, principal,
+route, LOCAL origin and interactive launch policy. A present invalid/machine receipt
+fails closed. Bare LOCAL/unknown, finite oneshot, machine/import creation labels,
+child, group, hidden and background turns remain excluded. Older schemas without
+provenance keep legacy source rules; LOCAL itself is never allowlisted. For live model acceptance,
 use the actual interactive gateway CLI (not an unlabeled finite `chat -q` run), and
 verify stored metadata plus create/read/update/cancel readbacks. Photon classification
 or registered-handler integration alone does not prove a Photon transport/model turn.

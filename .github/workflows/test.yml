@@ -103,6 +103,7 @@ jobs:
       - run: python scripts/check_callers.py prompts templates skills after-install.md
       - run: python tests/native_host_contract.py
       - run: python tests/local_session_acceptance.py
+      - run: python tests/local_receipt_acceptance.py
       - run: python tests/store_v2_acceptance.py
       - run: python tests/kernel_acceptance.py
       - run: python tests/surface_acceptance.py
