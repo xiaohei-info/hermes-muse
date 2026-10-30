@@ -12,7 +12,7 @@ from . import Part, tolerant
 
 # Allowlist, fail closed: an unlisted source is never user authority; probe `signal_purity` reports it.
 USER_SOURCES = frozenset({
-    "cli", "tui", "gui", "desktop", "ios", "acp",
+    "cli", "tui", "gui", "desktop", "ios", "acp", "photon",
     "telegram", "discord", "whatsapp", "whatsapp_cloud", "slack", "signal", "mattermost", "matrix",
     "email", "sms", "dingtalk", "feishu", "wecom", "weixin", "bluebubbles", "qqbot", "yuanbao",
 })
