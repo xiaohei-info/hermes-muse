@@ -16,6 +16,9 @@ USER_SOURCES = frozenset({
     "telegram", "discord", "whatsapp", "whatsapp_cloud", "slack", "signal", "mattermost", "matrix",
     "email", "sms", "dingtalk", "feishu", "wecom", "weixin", "bluebubbles", "qqbot", "yuanbao",
 })
+# gateway.session_a2a.storage_source maps only these creation labels to LOCAL.
+# `local` is a transport, never producer authority on its own.
+LOCAL_SURFACES = ("cli", "tui", "gui", "acp")
 MACHINE_SOURCES = frozenset({
     "cron", "oneshot", "kanban", "subagent", "delegate", "tool", "batch", "api", "api_server",
     "webhook", "msgraph_webhook", "wecom_callback", "relay", "bot_room", "bot_peer_dm",
@@ -50,11 +53,11 @@ def classify(source):
     return "user" if source in USER_SOURCES else "machine" if source in MACHINE_SOURCES else "unclassified"
 
 
-def caller(platform="", task_id="", parent_session_id="", stored_source=None, **_):
+def caller(platform="", task_id="", parent_session_id="", stored_source=None, stored_transport=None, **_):
     """Who runs the current hook or tool call: user | cron | child | group | other.
 
     Only `user` (a private turn on a user-surface platform) carries authority or gets injections.
-    `stored_source()` is the session's `sessions.source`, Hermes' final classification of the session
+    `stored_source()` is the resolved private producer source, Hermes' final classification of the session
     (e.g. `oneshot` for `hermes -q` although the env says cli): when the row exists it decides; the call's
     platform or the session env (which a child process may simply inherit) can only narrow it, never widen it.
     Without a row only the host's own `platform` kwarg of this call counts (hooks get it; tool calls never
@@ -68,13 +71,17 @@ def caller(platform="", task_id="", parent_session_id="", stored_source=None, **
     # The gateway binds the session platform, CLI/TUI/desktop bind the session source.
     named = str(platform or get_session_env("HERMES_SESSION_PLATFORM", "")
                 or get_session_env("HERMES_SESSION_SOURCE", "")).lower()
-    if (get_session_env("HERMES_CRON_SESSION", "") == "1" or "cron" in (named, stored)
+    transport = str((stored_transport() if stored_transport else "") or "").lower()
+    if (get_session_env("HERMES_CRON_SESSION", "") == "1" or "cron" in (named, stored, transport)
             or str(task_id or "").startswith("cron:")):
         return "cron"
     if get_session_env("HERMES_SESSION_CHAT_TYPE", "").lower() in GROUP_CHATS:
         return "group"
     if not stored:
         return "user" if classify(platform) == "user" else "other"
+    # LOCAL names only an already proven native interactive LOCAL row.
+    if named == "local" and stored in LOCAL_SURFACES and transport == "local":
+        named = stored
     return "user" if classify(stored) == "user" and classify(named or stored) == "user" else "other"
 
 
@@ -137,6 +144,32 @@ PRIVATE_USER = (f"s.source IN ({','.join('?' * len(USER_SOURCES))}) "
 PRIVATE_USER_ARGS = (*sorted(USER_SOURCES), *GROUP_CHATS)
 
 
+def private_user(db):
+    """Shared authority/intake/read predicate; native provenance, never a caller override.
+
+    Older schemas have no LOCAL provenance and retain their legacy source rules.
+    Machine creation labels cannot gain authority through a later surface flip.
+    """
+    columns = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
+    source, guards = "s.source", []
+    if "created_source" in columns:
+        labels = ",".join(f"'{s}'" for s in LOCAL_SURFACES)
+        source = f"CASE WHEN s.source = 'local' AND s.created_source IN ({labels}) THEN s.created_source ELSE s.source END"
+        guards.append("(s.created_source IS NULL OR s.created_source = '' OR s.created_source IN ("
+                      + ",".join("?" * len(USER_SOURCES)) + "))")
+    if "parent_session_id" in columns:
+        guards.append("COALESCE(s.parent_session_id,'') = ''")
+    if "hidden" in columns:
+        guards.append("COALESCE(s.hidden,0) = 0")
+    predicate = PRIVATE_USER.replace("s.source", f"({source})")
+    args = PRIVATE_USER_ARGS
+    if guards:
+        predicate += " AND " + " AND ".join(guards)
+    if "created_source" in columns:
+        args += tuple(sorted(USER_SOURCES))
+    return source, predicate, args
+
+
 class Sessions(Part):
     @property
     def path(self):
@@ -151,14 +184,15 @@ class Sessions(Part):
         if not self.path.exists():
             return []
         with reader(self.path) as db:
+            source, private, args = private_user(db)
             rows = db.execute(
-                "SELECT m.id, m.session_id, m.role, m.content, m.timestamp, m.tool_name, m.message_uid, s.source "
+                f"SELECT m.id, m.session_id, m.role, m.content, m.timestamp, m.tool_name, m.message_uid, ({source}) AS source "
                 "FROM messages m JOIN sessions s ON s.id = m.session_id "
-                f"WHERE m.timestamp > ? AND m.role IN ({','.join('?' * len(roles))}) AND {PRIVATE_USER} "
+                f"WHERE m.timestamp > ? AND m.role IN ({','.join('?' * len(roles))}) AND {private} "
                 f"AND COALESCE(m.display_kind,'') NOT IN ({','.join('?' * len(HIDDEN_KINDS))}) "
                 "AND (m.active = 1 OR m.compacted = 1) AND m.content IS NOT NULL AND m.content != '' "
                 "ORDER BY m.timestamp, m.id LIMIT ?",
-                (since, *roles, *PRIVATE_USER_ARGS, *HIDDEN_KINDS, limit)).fetchall()
+                (since, *roles, *args, *HIDDEN_KINDS, limit)).fetchall()
         turns, seen = [], set()
         for row in rows:
             try:
@@ -185,10 +219,11 @@ class Sessions(Part):
         if not self.path.exists():
             return {"ref": ref, "available": False}
         with reader(self.path) as db:
+            _, private, args = private_user(db)
             row = db.execute(
                 f"SELECT m.content FROM messages m JOIN sessions s ON s.id = m.session_id "
-                f"WHERE m.session_id = ? AND m.id = ? AND {PRIVATE_USER}",
-                (session_id, message_id, *PRIVATE_USER_ARGS)).fetchone()
+                f"WHERE m.session_id = ? AND m.id = ? AND {private}",
+                (session_id, message_id, *args)).fetchone()
         if not row:
             return {"ref": ref, "available": False}
         text = redact(as_text(row["content"]))
@@ -205,6 +240,21 @@ class Sessions(Part):
         with reader(self.path) as db:
             row = db.execute("SELECT source FROM sessions WHERE id = ?", (str(session_id),)).fetchone()
         return (row["source"] or "") if row else ""
+
+    @tolerant(str)
+    def user_source_of(self, session_id):
+        """Resolved private producer; present but excluded rows return `other`.
+
+        Do not return empty for an excluded row: caller's pre-row hook fallback
+        must never override stored child/group/machine provenance.
+        """
+        if not session_id or not self.path.exists():
+            return ""
+        with reader(self.path) as db:
+            source, private, args = private_user(db)
+            row = db.execute(f"SELECT CASE WHEN {private} THEN ({source}) ELSE 'other' END AS source "
+                             "FROM sessions s WHERE s.id = ?", (*args, str(session_id))).fetchone()
+        return row["source"] if row else ""
 
     @tolerant(lambda: None)
     def job_of(self, session_id):

@@ -51,7 +51,15 @@ it does not make the historical upstream 0.3.x tags Windows-compatible. Reinstal
 previous **Windows-compatible** checkout when rolling back such an installation.
 
 Run the acceptance scripts with a scratch `HERMES_HOME` and `TMPDIR`, never the active
-profile. With Hermes available, `python tests/native_windows_contract.py` additionally
+profile. `tests/local_session_acceptance.py` checks native gateway `source=local`
+with immutable `created_source=cli/tui/gui/acp` for private caller authority and signal
+intake. Bare LOCAL, finite oneshot, machine/import creation labels, child, group,
+hidden and background turns remain excluded. Older schemas without provenance keep
+legacy source rules; LOCAL itself is never allowlisted. For live model acceptance,
+use the actual interactive gateway CLI (not an unlabeled finite `chat -q` run), and
+verify stored metadata plus create/read/update/cancel readbacks. Photon classification
+or registered-handler integration alone does not prove a Photon transport/model turn.
+With Hermes available, `python tests/native_windows_contract.py` additionally
 checks private Photon callers and background/group/import exclusion, a goal lifecycle,
 stale content CAS, real NTFS junction refusal, an occupied editor's replace failure and
 recovery, shared bridge/user/cron locks held past the Windows ten-second retry window,
