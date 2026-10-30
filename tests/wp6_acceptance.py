@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from contextlib import closing
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -40,7 +41,7 @@ class Ctx:
 
 
 def user_turn(home, session, text, at):
-    with sqlite3.connect(home / "state.db") as db:
+    with closing(sqlite3.connect(home / "state.db")) as db, db:
         db.execute("INSERT OR IGNORE INTO sessions (id, source, chat_type, title, started_at) VALUES (?,?,?,?,?)",
                    (session, "cli", "dm", "Chat", at - 60))
         db.execute("INSERT INTO messages (session_id, role, content, timestamp, message_uid) VALUES (?,?,?,?,?)",
@@ -240,7 +241,7 @@ def part_hooks(home, ids):
     # Muse's intake run may compact native memory but never delete an entry outright; every change is recorded.
     # Intake and patrol start together on the hour in `local-<hash>` sessions: only the hook's task_id tells them apart.
     started = time.time()
-    with sqlite3.connect(home / "state.db") as db:
+    with closing(sqlite3.connect(home / "state.db")) as db, db:
         db.executemany("INSERT INTO sessions (id, source, chat_type, title, started_at) VALUES (?,?,?,?,?)",
                        [(sid, "cron", "dm", None, started) for sid in ("local-1a2b3c", "local-4d5e6f", "local-7a8b9c")])
     intake_run = {"session_id": "local-1a2b3c", "task_id": f"cron:{ids['memory-upkeep']}:x1", "platform": "cron"}
@@ -310,7 +311,7 @@ def part_views(home):
           {"feed": feed["total"], "open": open_goals["total"], "closed": closed["total"]})
     js = subprocess.run(["node", "--check", str(ROOT / "dashboard" / "dist" / "index.js")], capture_output=True, text=True)
     check("dashboard: page script parses and requests /health", js.returncode == 0
-          and "request('/health', scope)" in (ROOT / "dashboard" / "dist" / "index.js").read_text(), js.stderr[:200])
+          and "request('/health', scope)" in (ROOT / "dashboard" / "dist" / "index.js").read_text(encoding="utf-8"), js.stderr[:200])
 
 
 def part_rollback(home, ids, adapter):
@@ -318,9 +319,30 @@ def part_rollback(home, ids, adapter):
     import cutover
     from cron.jobs import list_jobs
     from hermes_muse.install import MARKER, PROMPTS_BACKUP, install
-    pre = cutover.preflight(adapter)
+    from unittest import mock
+    opened = []
+    connect = sqlite3.connect
+
+    def tracked_connect(*args, **kwargs):
+        db = connect(*args, **kwargs)
+        opened.append(db)
+        return db
+
+    with mock.patch.object(cutover.sqlite3, "connect", side_effect=tracked_connect):
+        pre = cutover.preflight(adapter)
+    closed = []
+    for db in opened:
+        try:
+            db.execute("SELECT 1")
+            closed.append(False)
+        except sqlite3.ProgrammingError:
+            closed.append(True)
+        finally:
+            db.close()
+    check("cutover: backup closes every SQLite handle before returning", bool(closed) and all(closed), closed)
     backup = Path(pre["backup"])
-    copied = sqlite3.connect(backup / "state-v2.db").execute("SELECT COUNT(*) FROM entity").fetchone()[0]
+    with closing(sqlite3.connect(backup / "state-v2.db")) as db:
+        copied = db.execute("SELECT COUNT(*) FROM entity").fetchone()[0]
     verify = cutover.verify(adapter)
     check("cutover: preflight backup (SQLite via backup API) and probes; verify reports A4/A7",
           copied > 0 and pre["probes"] and set(verify) == {"alert", "A4_probes", "A7_signal_watermark"},

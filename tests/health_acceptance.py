@@ -74,7 +74,9 @@ def main():
     from hermes_muse.host import HostAdapter, profile_scope
     from hermes_muse.kernel.store import Store
 
-    with tempfile.TemporaryDirectory(prefix="muse-health-") as temporary:
+    from contextlib import ExitStack, closing
+
+    with tempfile.TemporaryDirectory(prefix="muse-health-") as temporary, ExitStack() as cleanup:
         base = Path(temporary).resolve()
         home = base / "profile"
         (home / "workspace").mkdir(parents=True)
@@ -83,8 +85,11 @@ def main():
         os.environ.update(HERMES_HOME=str(home), HERMES_IGNORE_USER_CONFIG="1")
         gone = base / "gone"
         gone.mkdir()
+        cleanup.callback(os.chdir, os.getcwd())
         os.chdir(gone)
-        gone.rmdir()  # Health must never need the process cwd
+        if os.name != "nt":
+            gone.rmdir()  # Health must never need the process cwd
+        # Windows keeps an unrelated cwd: ntpath.realpath requires getcwd even for absolute paths.
 
         # -- today's failures on the current Hermes ------------------------------------------------
         host = HostAdapter(home)
@@ -92,7 +97,7 @@ def main():
         entry.write_text("print('')\n")
         job = host.cron.ensure("patrol", schedule="every 30m", entry=entry, prompt="Patrol.", deliver="bot-chat")
         seed_state(home, job["id"])  # Bot Chat cwd=/workspace, local-* cron session, oneshot, unknown 'local' source
-        with sqlite3.connect(home / "state.db") as db:
+        with closing(sqlite3.connect(home / "state.db")) as db, db:
             for content in ('{"ok": true}', '{"error": "missing request_id"}', "x" * 25000,
                             "token sk-" + "a1b2c3d4" * 3, '{"success": true}'):
                 db.execute("INSERT INTO messages (session_id, role, content, timestamp) VALUES ('local-run','tool',?,?)",

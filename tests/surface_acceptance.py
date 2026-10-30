@@ -226,15 +226,16 @@ def native(base):
     from hermes_state import SessionDB
     SessionDB(db_path=home / "state.db").close()
     import sqlite3
-    with sqlite3.connect(home / "state.db") as db:  # what Hermes writes before the first tool call of a turn
+    from contextlib import closing
+    with closing(sqlite3.connect(home / "state.db")) as db, db:  # transaction and handle both close
         db.executemany("INSERT INTO sessions (id, source, started_at) VALUES (?, ?, 0)",
-                       [("native", "cli"), ("phone", "ios"), ("hook", "webhook"), ("q", "oneshot")])
+                       [("native", "cli"), ("phone", "ios"), ("imessage", "photon"), ("hook", "webhook"), ("q", "oneshot")])
     adapter = HostAdapter(home)
     # Isolated from the shell that runs the test: no inherited session env, only this temporary home's state.db.
     for name in [n for n in os.environ if n.startswith("HERMES_SESSION_") or n in ("HERMES_CRON_SESSION", "HERMES_PLATFORM")]:
         del os.environ[name]
     # Tool handlers get no platform: the stored sessions.source decides (same USER_SOURCES list as Signals).
-    caller = {**{sid: adapter.caller(session_id=sid) for sid in ("native", "phone", "hook", "q", "missing")},
+    caller = {**{sid: adapter.caller(session_id=sid) for sid in ("native", "phone", "imessage", "hook", "q", "missing")},
               **{p: adapter.caller(session_id="x", platform=p) for p in ("cli", "ios", "webhook", "api_server", "kanban", "local")}}
     # An inherited env naming a user surface never widens a stored machine source and never stands in for a missing row.
     os.environ["HERMES_SESSION_SOURCE"] = "cli"
@@ -248,7 +249,7 @@ def native(base):
     check("S10 native: Hermes sanitizers keep every branch; caller() allows only USER_SOURCES (CLI via its stored source, ios) "
           "and refuses machine/unknown callers; job entry runs on the real adapter; registered handler answers",
           kept and all(a.get("type") == "object" for a in anthropic) and all(g.get("properties") for g in gemini)
-          and caller == {"native": "user", "phone": "user", "hook": "other", "q": "other", "missing": "other", "cli": "user",
+          and caller == {"native": "user", "phone": "user", "imessage": "user", "hook": "other", "q": "other", "missing": "other", "cli": "user",
                          "ios": "user", "webhook": "other", "api_server": "other", "kanban": "other", "local": "other"}
           and inherited == {"native": "user", "hook": "other", "q": "other", "missing": "other"}
           and out == {"intake": "", "nightly": "", "feed": ""}

@@ -33,23 +33,47 @@ jobs:
     runs-on: windows-latest
     env:
       PYTHONIOENCODING: utf-8  # the scripts print CJK results; Hermes runs launchers with PYTHONUTF8=1
+      PYTHONUTF8: '0'  # catch implicit-codepage fixture reads too
+      TMPDIR: ${{ github.workspace }}/scratch space café
+      TEMP: ${{ github.workspace }}/scratch space café
+      TMP: ${{ github.workspace }}/scratch space café
+      HERMES_HOME: ${{ github.workspace }}/scratch space café/profile
     strategy:
       matrix:
         python: ['3.11', '3.14']
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - run: python -c "import os; from pathlib import Path; Path(os.environ['HERMES_HOME']).mkdir(parents=True, exist_ok=True)"
       - run: python scripts/check_boundaries.py
       - run: python -m compileall -q hermes_muse dashboard scripts tests
       - run: python tests/kernel_acceptance.py
       - run: python tests/surface_acceptance.py
+      - run: python tests/store_v2_acceptance.py
   hermes:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: '3.14'}
+          - {os: windows-latest, python: '3.14'}
+    env:
+      HERMES_SOURCE: ${{ github.workspace }}/hermes-core
+      PYTHONPATH: ${{ github.workspace }}/hermes-core
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '0'
+      TMPDIR: ${{ github.workspace }}/scratch space café
+      TEMP: ${{ github.workspace }}/scratch space café
+      TMP: ${{ github.workspace }}/scratch space café
+      HERMES_HOME: ${{ github.workspace }}/scratch space café/profile
     defaults:
       run:
         working-directory: plugin
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,22 +86,31 @@ jobs:
           path: hermes-core
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: ${{ matrix.python }}
       # pip cannot honour Hermes' [tool.uv] overrides (Pillow pin); install from its uv.lock
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen --python 3.14
+      - run: uv sync --frozen --python ${{ matrix.python }}
         working-directory: hermes-core
-      - run: echo "$GITHUB_WORKSPACE/hermes-core/.venv/bin" >> "$GITHUB_PATH"
+      - name: Select host interpreter and isolated scratch
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            echo "$GITHUB_WORKSPACE/hermes-core/.venv/Scripts" >> "$GITHUB_PATH"
+          else
+            echo "$GITHUB_WORKSPACE/hermes-core/.venv/bin" >> "$GITHUB_PATH"
+          fi
+          python -c 'import os; from pathlib import Path; Path(os.environ["HERMES_HOME"]).mkdir(parents=True, exist_ok=True)'
       - run: python scripts/check_boundaries.py
       - run: python scripts/check_callers.py prompts templates skills after-install.md
       - run: python tests/native_host_contract.py
+      - run: python tests/local_session_acceptance.py
+      - run: python tests/local_receipt_acceptance.py
+      - run: python tests/continued_session_acceptance.py
       - run: python tests/store_v2_acceptance.py
       - run: python tests/kernel_acceptance.py
       - run: python tests/surface_acceptance.py
       - run: python tests/health_acceptance.py
       - run: python tests/wp6_acceptance.py
+      - run: python tests/native_windows_contract.py
+        if: runner.os == 'Windows'
       - name: Official plugin validation in a scratch profile
-        shell: bash
-        run: |
-          MUSE_TEST_HOME=$(mktemp -d)
-          HERMES_HOME="$MUSE_TEST_HOME" hermes plugins validate . --json
+        run: python tests/official_validation.py

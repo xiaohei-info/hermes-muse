@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from contextlib import closing
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -103,7 +104,7 @@ def sample(home, shape):
     if shape == "0.3.16":
         rec("mutation_request", "m1", {"action": "delegate", "status": "pending"})
 
-    with sqlite3.connect(muse / "state.db") as db:
+    with closing(sqlite3.connect(muse / "state.db")) as db, db:
         db.execute("CREATE TABLE records (kind TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(kind,id))")
         db.execute("PRAGMA user_version=1")
         db.executemany("INSERT INTO records VALUES(?,?,?)", [(k, i, json.dumps(d)) for k, i, d in rows])
@@ -123,7 +124,7 @@ def sample(home, shape):
 
 
 def dump(home):
-    with sqlite3.connect(home / "muse" / "state-v2.db") as db:
+    with closing(sqlite3.connect(home / "muse" / "state-v2.db")) as db, db:
         return [list(db.execute(f"SELECT * FROM {t} ORDER BY 1,2")) for t in ("entity", "event", "meta")]
 
 
@@ -160,6 +161,25 @@ def simulate_v2(home):
 
 OLD_PROBE = r"""
 import json, sys
+if sys.platform == "win32":
+    # Historical tags have only POSIX locking. Supply the current stdlib platform
+    # seam for this synthetic fixture; run their real Store and checkpoint logic.
+    import importlib.util, os, types
+    from contextlib import contextmanager
+    spec = importlib.util.spec_from_file_location("fixture_host", sys.argv[5] + "/hermes_muse/host/__init__.py")
+    host = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(host)
+    @contextmanager
+    def file_lock(path):
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            with host.exclusive(fd):
+                yield
+        finally:
+            os.close(fd)
+    locks = types.ModuleType("hermes_muse.locks")
+    locks.file_lock = file_lock
+    sys.modules[locks.__name__] = locks
 sys.path.insert(0, sys.argv[1])
 from hermes_muse.store import Store
 store = Store(sys.argv[2])
@@ -179,7 +199,7 @@ def old_view(home, shape, scratch):
         code.mkdir()
         archive = subprocess.run(["git", "-C", str(ROOT), "archive", f"v{shape}", "hermes_muse"], check=True, capture_output=True).stdout
         subprocess.run(["tar", "-x", "-C", str(code)], input=archive, check=True)
-    out = subprocess.run([sys.executable, "-I", "-c", OLD_PROBE, str(code), str(home), shape, str(NOW + 2 * H)],
+    out = subprocess.run([sys.executable, "-I", "-c", OLD_PROBE, str(code), str(home), shape, str(NOW + 2 * H), str(ROOT)],
                          check=True, capture_output=True, text=True).stdout
     return json.loads(out)
 
@@ -210,7 +230,7 @@ def run(shape, scratch):
           {"from_shape": report["from_shape"], "v1_records": len(rows), "unexplained": report["unexplained"], "reconcile": r,
            "notice_merged": report["notice_merged"], "skipped": report["skipped"]})
 
-    with sqlite3.connect(a / "muse" / "state-v2.db") as db:
+    with closing(sqlite3.connect(a / "muse" / "state-v2.db")) as db, db:
         entities = list(db.execute("SELECT kind, state, deadline FROM entity"))
     from hermes_muse.kernel.store import machine
     missing = [(k, s) for k, s, d in entities if not machine(k).terminal(s) and d is None]

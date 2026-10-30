@@ -189,7 +189,8 @@ class HostAdapter:
         arguments); the one classification hooks and tools share. Unknown fails closed as `other`."""
         from .sessions import caller
         try:
-            return caller(stored_source=lambda: self.sessions.source_of(session_id), **kwargs)
+            return caller(stored_source=lambda: self.sessions.user_source_of(session_id),
+                          stored_transport=lambda: self.sessions.source_of(session_id), **kwargs)
         except Exception as exc:
             self.fault("adapter.caller", exc)
             return "other"

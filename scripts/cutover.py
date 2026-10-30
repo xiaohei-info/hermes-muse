@@ -15,6 +15,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from contextlib import closing
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -29,7 +30,8 @@ def backup(home):
     source, target = home / "muse", home / f"muse-backup-{time.strftime('%Y%m%d-%H%M%S')}"
     shutil.copytree(source, target, ignore=shutil.ignore_patterns(*DB_FILES))
     for db in source.glob("*.db"):
-        with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as src, sqlite3.connect(target / db.name) as dst:
+        with closing(sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)) as src, \
+                closing(sqlite3.connect(target / db.name)) as dst:
             src.backup(dst)
     return str(target)
 

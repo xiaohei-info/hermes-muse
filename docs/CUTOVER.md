@@ -42,3 +42,37 @@ jobs the rollback paused (`muse-health`, `muse-deliver`) and leaves pauses you s
 
 Residual risk: 0.3.x does not dedupe against sent history, so an event that arrives after the rollback
 can still be notified twice; the bridge only guarantees that what v2 already sent is not sent again.
+
+## Windows acceptance
+
+The bridge uses the same stdlib mutation lock as normal writes (`flock` on POSIX,
+`msvcrt.locking` on Windows). This supports an existing custom Windows 0.3.x install;
+it does not make the historical upstream 0.3.x tags Windows-compatible. Reinstall the
+previous **Windows-compatible** checkout when rolling back such an installation.
+
+Run the acceptance scripts with a scratch `HERMES_HOME` and `TMPDIR`, never the active
+profile. `tests/local_session_acceptance.py` checks native gateway `source=local`
+with immutable `created_source=cli/tui/gui/acp` for private caller authority and signal
+intake. `tests/local_receipt_acceptance.py` covers native reservation rows whose later
+placeholder writer stamped `created_source=unknown`: only a matching immutable
+`gateway.local_policy.v1:` receipt can prove that exact root session, principal,
+route, LOCAL origin and interactive launch policy. A present invalid/machine receipt
+fails closed. Bare LOCAL/unknown, finite oneshot, machine/import creation labels,
+child, group, hidden and background turns remain excluded. Older schemas without
+provenance keep legacy source rules; LOCAL itself is never allowlisted. For live model acceptance,
+use the actual interactive gateway CLI (not an unlabeled finite `chat -q` run), and
+verify stored metadata plus create/read/update/cancel readbacks. Photon classification
+or registered-handler integration alone does not prove a Photon transport/model turn.
+With Hermes available, `python tests/native_windows_contract.py` additionally
+checks private Photon callers and background/group/import exclusion, a goal lifecycle,
+stale content CAS, real NTFS junction refusal, an occupied editor's replace failure and
+recovery, shared bridge/user/cron locks held past the Windows ten-second retry window,
+all six owned launchers, and Health without high items. The synthetic historical-store
+probe supplies only the current platform lock seam on Windows; it still executes the
+tags' real Store and pending-signal code. POSIX runs the tags without that seam.
+
+Home resolution is checked on local NTFS with spaces and non-ASCII names. It still
+resolves the home once through `host.resolve_home`; this is not a guarantee about
+subst/mapped drives, OneDrive or 8.3 aliases. Report those path shapes separately if used.
+Windows keeps an unrelated process cwd during host acceptance because it cannot delete
+the current directory; POSIX retains the deleted-cwd check. Both restore cwd before cleanup.
