@@ -187,11 +187,11 @@ def part_intake(base):
     return k, host, clock
 
 
-def patrol(k, items, verdict="send", priority="urgent", source="mail:work", text="Security alert", topic=None):
+def patrol(k, items, verdict="send", priority="urgent", source="mail:work", text="Security alert", topic=None, about=None):
     packet = seen(k.build_packet("patrol"))
     observed = k.observe(packet["id"], source, items)
     results = [{"candidate_ref": o["ref"], "verdict": verdict, "text": text, "priority": priority,
-                **({"topic": topic} if topic else {})} for o in observed["items"]]
+                **({"topic": topic} if topic else {}), **({"about": about} if about else {})} for o in observed["items"]]
     return packet, observed, k.submit(packet["id"], results)
 
 
@@ -345,6 +345,30 @@ def part_notifier(base):
     check("N7 concurrency: one claim, one issued packet per job and period",
           len(claimed) == 1 and len(set(ids)) == 1, {"claimed": len(claimed), "packets": ids})
 
+    # One event through several sources: the mail is notified; the PR comment about it names that event (`about`)
+    # instead of becoming a second notice, and code keeps its ID as the event's alias from then on.
+    clock[0] = datetime(2026, 11, 20, 10, 0, tzinfo=UTC).timestamp()
+    patrol(k, [{"upstream_id": "mail:<reply-1@example.invalid>", "title": "Re: synthetic PR reply"}], text="Your PR got a reply")
+    deliver_all(k, host)
+    event = next(e for e in k.store.query("notice") if e["natural_key"] == "src:reply-1@example.invalid")
+    sent = len(host.delivered)
+    comment = {"upstream_id": "https://example.invalid/pr/1/c9", "title": "Comment on synthetic PR"}
+    packet = seen(k.build_packet("patrol"))
+    ref = k.observe(packet["id"], "github:example", [comment])["items"][0]["ref"]
+    answers = [k.submit(packet["id"], [{"candidate_ref": ref, "verdict": v, "text": "x", **a}])[0] for v, a in (
+        ("send", {"about": event["id"]}), ("skip", {"about": "notice:not-in-this-packet"}), ("skip", {"about": event["id"]}))]
+    _, again, resend = patrol(k, [comment], text="Your PR got a comment")
+    _, _, update = patrol(k, [{"upstream_id": "https://example.invalid/pr/1/merged", "title": "Synthetic PR merged"}],
+                          verdict="supersede", text="Your PR was merged", about=event["id"])
+    deliver_all(k, host)
+    rail = [e for e in k.store.query("notice") if e["natural_key"] == event["natural_key"]]
+    check("C one event, several sources: context.notified lists it; `about` + send and a foreign ref are refused; skip "
+          "about aliases the item, which then never notifies again; supersede about updates the same event once",
+          event["id"] in [n["ref"] for n in packet["context"]["notified"]] and "error" in answers[0] and "error" in answers[1]
+          and answers[2]["result"] == "skipped" and again["items"][0]["notified"]["ref"] == event["id"]
+          and resend[0]["result"] == "existing" and update[0]["result"] == "superseded" and len(rail) == 2
+          and len(host.delivered) == sent + 1, {"answers": answers, "again": again["items"], "resend": resend, "update": update})
+
     # Source registry.
     for _ in range(4):
         four = sources.record(k.store, "calendar:apple", limitation_code="no_attendees", now=clock[0])
@@ -356,6 +380,19 @@ def part_notifier(base):
           and failing["state"] == "failing" and failing["payload"]["health"]
           and sources.interval("mail:work") == 1800 and sources.interval("calendar:x", {"calendar": 30}) == 1800,
           {"four": four["state"], "five": five["state"], "failing": failing["payload"].get("fail_streak")})
+    # a 0.3.x per-resource check as the migration keeps it: history only, never due, never a failing source
+    k.store.create("source", "source-0a1b2c3d", {"health": True, "error": "gone"}, state="failing", now=clock[0])
+    refused = []
+    for bad_id in ("source:source-0a1b2c3d", "source-0a1b2c3d", "all"):
+        try:
+            sources.check_id(bad_id)
+        except ValueError:
+            refused.append(bad_id)
+    due_ids = [s["source_id"] for s in sources.due(k.store, clock[0] + 7 * D)]
+    counted = invariants.sources(k.store, clock[0])["evidence"]
+    check("S2 sources: only <kind>:<account> ids are sources; a migrated 0.3.x check id is never due or counted failing",
+          len(refused) == 3 and "mail:old" in due_ids and "source-0a1b2c3d" not in due_ids
+          and not any("0a1b2c3d" in e for e in counted), {"refused": refused, "due": due_ids, "counted": counted})
     return k
 
 

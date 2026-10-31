@@ -93,10 +93,11 @@ def main():
         job = host.cron.ensure("patrol", schedule="every 30m", entry=entry, prompt="Patrol.", deliver="bot-chat")
         seed_state(home, job["id"])  # Bot Chat cwd=/workspace, local-* cron session, oneshot, unknown 'local' source
         with sqlite3.connect(home / "state.db") as db:
-            for content in ('{"ok": true}', '{"error": "missing request_id"}', "x" * 25000,
-                            "token sk-" + "a1b2c3d4" * 3, '{"success": true}'):
-                db.execute("INSERT INTO messages (session_id, role, content, timestamp) VALUES ('local-run','tool',?,?)",
-                           (content, time.time()))
+            for tool, content in (("muse_job", '{"ok": true}'), ("muse_job", '{"error": "missing request_id"}'),
+                                  ("muse_manage", "x" * 25000), ("muse_job", "token sk-" + "a1b2c3d4" * 3),
+                                  ("muse_job", '{"success": true}'), ("terminal", "y" * 25000 + " token=abc123def456")):
+                db.execute("INSERT INTO messages (session_id, role, content, timestamp, tool_name) "
+                           "VALUES ('local-run','tool',?,?,?)", (content, time.time(), tool))
         with profile_scope(home):
             finish(job["id"], "failed")
             from cron.jobs import update_job
@@ -118,11 +119,14 @@ def main():
             "probe.symbols": "ok", "probe.cron_sessions": "ok", "probe.delivery_semantics": "medium",
             "probe.delivery_target": "high", "probe.signal_purity": "high", "probe.config_location": "ok",
             "probe.home": "ok", "delivery": "high", "executions": "ok", "tool_errors": "medium",
-            "model_input": "medium", "jobs_late": "ok", "jobs_paused": "ok", "deliver_stalled": "high", "host_faults": "ok"}
+            "model_input": "medium", "jobs_late": "ok", "jobs_paused": "ok", "deliver_stalled": "high", "plugin_load": "ok",
+            "host_faults": "ok"}
         by = {f["id"]: f for f in report["invariants"]}
         check("H1 delivery failure is high within one run", levels["delivery"] == "high"
               and "invalid_params field=cwd" in by["delivery"]["detail"],
               {"delivery": levels["delivery"]})
+        check("H1b model_input counts only Muse's own tool results (another tool's large or token-like output is not a Muse read)",
+              "oversized (>20k) 1, credential patterns 1" in by["model_input"]["detail"], by["model_input"]["detail"])
         check("only v2 deliveries count: migrated 0.3.x duplicate sends and unknowns are not reported",
               by["notice_duplicates"]["value"] == 1 and "1 failed/unknown notices" in by["delivery"]["detail"],
               {k: [by[k]["value"], by[k]["detail"]] for k in ("notice_duplicates", "delivery")})
