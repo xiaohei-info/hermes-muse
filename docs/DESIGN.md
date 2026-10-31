@@ -40,7 +40,14 @@ host/               HostAdapter: sessions · cron · deliver · owners · config
 Hermes host
 ```
 
-Only `host/` imports Hermes or reads its `state.db`; `scripts/check_boundaries.py` enforces this. Entries translate
+Only `host/` imports Hermes or reads its `state.db`; `scripts/check_boundaries.py` enforces this.
+`register()` only builds objects and registers the Skill, prompt section, tools and hooks; install runs after it
+in a background thread (not a daemon, so a short-lived process finishes it before exiting). Hermes gives import + register a deadline (10 s by default) and abandons a load that
+passes it, dropping every later registration, and several Hermes processes load plugins at once on a cold boot.
+Install waits on profile locks, SQLite writers and the host's cron lock, so it must not hold the load. Its migration
+marker keeps jobs, the background tick and the tools quiet until it finishes. Each process records whether its load
+counted (`muse/loaded/<pid>`, `HostAdapter.loaded`); a job whose launcher's parent (the process running the job)
+abandoned the load stays silent instead of waking a model without Muse's tools, and Health raises `plugin_load`. Entries translate
 host arguments into Muse calls and classify the caller through `HostAdapter.caller()`, never from tool arguments.
 Health depends only on `host/` and a read-only Store, so a kernel bug cannot hide itself.
 
@@ -137,12 +144,21 @@ counts and state names come from code.
 2. **Patrol → Notice → delivery.** Patrol wakes every period because only the model can read external sources;
    the packet lists sources past their minimum interval and due notices. The model observes sources, then submits a
    verdict, text, priority and topic. The notifier derives the notice key (`src:<upstream id>` or a weak title+day
-   key), dedupes against 7 days of history and gates it: quiet hours and per-priority daily budgets; urgent may pass
+   key), dedupes against 7 days of history and gates it. One real event often reaches Muse through several sources
+   (the mail, the PR comment and a news item about one reply; one CI failure per push), each with its own upstream
+   id, and only the model can tell they are one event. So the packet lists the notified events of the last 7 days
+   (`context.notified`, refs), and the model answers an item about one of them with `about` that ref: `skip`, or
+   `supersede` for a real development (`send` with `about` is refused). Code then records the item's key as an alias
+   of the event, and an aliased key never drafts a new notice for 7 days. Code-derived thread identity was rejected:
+   Muse owns no connectors and cannot tell a provider id, a comment URL and a news id apart; topic grouping was
+   rejected because topics are free text that drifts. The gates are quiet hours and per-priority daily budgets; urgent may pass
    quiet hours only within `urgent_per_day` (default 2) and is gated as time-sensitive past it; blocked topics are
-   withdrawn. Only the owned no-agent `muse-deliver` job sends (the tick, other jobs and hooks never do): each run
+   withdrawn. Sources are `<kind>:<account>`; migrated 0.3.x per-resource check ids (`source-<hex>`) stay as history,
+   never due and never counted. A packet lists at most 20 due sources, least recently checked first.
+   Only the owned no-agent `muse-deliver` job sends (the tick, other jobs and hooks never do): each run
    re-checks the gates and claims the due notices as `sending` in one transaction, tied to its own host execution,
-   and prints them as one message (at most 5, separated by a rule, ending in a fixed footer line so no notice
-   text can act as Hermes' wake gate) that Hermes delivers to the job's route. A `deliver` preference becomes that
+   and prints them as one message (at most 5, separated by a rule; no signature, and a closing rule only when the
+   last line could parse as Hermes' `{"wakeAgent": false}` gate) that Hermes delivers to the job's route. A `deliver` preference becomes that
    route at the next run (that run stays silent). An
    urgent notice that may go now wakes `muse-deliver` at once instead of waiting up to 10 minutes. Reconciliation
    reads that execution's delivery receipt; an outcome that is unknown is never resent. Notices that 0.4.1 left
@@ -169,11 +185,26 @@ counts and state names come from code.
    `post_tool_call` records those receipts. `post_llm_call` runs a background tick and, after 5 quiet minutes, may
    wake intake (at most 3 times a day).
 
+## What the main session receives
+
+Hermes has no way for a plugin or a no-agent job to speak as the assistant without a turn: `post_message` refuses
+calls outside a session, `inject_message` queues a user turn, and the cron transcript mirror is a user-role row on
+platform sessions only. The `bot-chat` route (the default, and the only one for a Desktop-only profile) admits a
+job's stdout as an internal Bot Chat turn with Hermes' fixed prefix ("[Cronjob "<name>" output — scheduled job, not
+the user. Review it, act on anything that needs action, and summarize for the chat.]"). Platform routes start no
+turn but bypass the conversation and carry Hermes' "Cronjob Response" wrapper. So Muse keeps `bot-chat` and fixes
+the meaning of that turn on its side: the system prompt section and the communication reference say that whatever a
+`muse-*` job delivers (notices, a watch result, the weekly digest, a health alert) is a message the assistant has
+already sent the user in its own voice. The main session answers exactly `[SILENT]` (Hermes drops a bare silence
+marker on internal turns) and speaks only for a decision or an action it can take now, as itself; it never repeats,
+reviews or adds verification notes. Notices are written in the assistant's voice and carry no Muse signature.
+
 ## Health
 
 `health_entry.py` runs `health.run()` every 30 minutes and atomically writes `muse/health.json`: the 7 host probes
 (`symbols`, `cron_sessions`, `delivery_semantics`, `delivery_target`, `signal_purity`, `config_location`, `home`)
-plus invariants over the Store, deliveries, tool errors and jobs. Each health item has an id, level
+plus invariants over the Store, deliveries, Muse's own tool results (`muse_manage`, `muse_job`; other tools' output
+belongs to the host and the user's tools), jobs and the plugin load (`plugin_load`). Each health item has an id, level
 (`ok/low/medium/high`), detail, evidence and fix. Alerts never use the Notifier; they reach the user through the
 main-session injection, the Dashboard and Desktop page, cron stdout when the alert set changes, and an optional
 `health_deliver` route added as a second target of the health job, so Hermes delivers the same stdout to both.
@@ -194,7 +225,9 @@ into the 0.3.x database so the old version neither resends nor reprocesses them.
 ## Privacy
 
 Everything handed to the model is redacted first, read at most 12k at a time and 24k per item; long texts are
-head/tail excerpts. Only private user surfaces are read; groups and unlisted sources are neither read nor
+head/tail excerpts. There is one gate (`host.sessions.clean`) on both ways Muse reaches the model, tool results and
+Script Output, and every Muse read (files, entities, lists) pages at 12k with `next_offset`. A labelled credential is
+redacted only when its value looks like one (6+ characters with a digit), so prose and code are not mangled. Only private user surfaces are read; groups and unlisted sources are neither read nor
 authorizing. Forget clears the payload, writes a tombstone so later evidence cannot rebuild it, and says what remains.
 Retention is listed in [CATALOG-COMPATIBILITY.md](CATALOG-COMPATIBILITY.md).
 
