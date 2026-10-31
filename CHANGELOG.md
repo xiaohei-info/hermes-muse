@@ -1,3 +1,26 @@
+# 0.4.6 — Delivered notices are the assistant's own words; cold-start load off the critical path; one event, one notice; one gate to the model (2026-10-31)
+
+- Main session: what a `muse-*` job delivers (notices, a watch result, the weekly digest, a health alert) is a message
+  the assistant already sent, in its own voice. The system prompt section and the communication reference now say so:
+  the main session answers `[SILENT]` and speaks only for a decision or an action it takes now, instead of reviewing
+  the delivery or adding verification notes. Hermes has no way for a plugin to speak as the assistant without a turn,
+  so `bot-chat` stays the route (see DESIGN, "What the main session receives"). Notices carry no "— Hermes Muse"
+  signature; a closing rule is added only when a last line could parse as Hermes' wake gate.
+- Plugin load: `register()` only registers; install runs in a background thread. On a cold boot several Hermes
+  processes load plugins at once and install waited on profile locks, SQLite writers and the host's cron lock, so the
+  load passed Hermes' 10 s deadline and every registration was dropped. Each process now records whether its load
+  counted; a job whose Hermes process abandoned the load stays silent (it would have no Muse tools or skill) and
+  Health raises `plugin_load` (high). Tools answer `host_unavailable` while an install is still running.
+- Notices: patrol sees the notified events of the last 7 days (`context.notified`) and answers an item about one of
+  them with `about` (skip, or supersede for a real development; send is refused). Code keeps the item's key as an
+  alias of the event, so the same reply seen through mail, a PR comment and a news item, or one CI failure per push,
+  is notified once. `observe` reports the event an item belongs to.
+- Model input: one redaction gate on tool results and Script Output (`host.sessions.clean`); file, entity and list
+  reads page at 12k with `next_offset`; a labelled credential is redacted only when its value looks like one, so prose
+  and code are no longer mangled. Health's `model_input` and `tool_errors` count only Muse's own tools.
+- Sources: a source is `<kind>:<account>`; migrated 0.3.x per-resource check ids (`source-<hex>`) are history, never
+  due and never counted as failing, and a patrol packet lists at most 20 due sources, least recently checked first.
+
 # 0.4.5 — Notice gate returns the requested time inside the allowed window; deliver_stalled no longer double-counts (2026-10-30)
 
 - Notice gate: when the requested time is already inside the allowed window, the gate returns that time instead of a

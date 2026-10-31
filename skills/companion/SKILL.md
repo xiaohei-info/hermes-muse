@@ -1,7 +1,7 @@
 ---
 name: companion
 description: Goals, interests, watches, proactive notices, calendar views, notes, Feed and preferences in the current Hermes profile.
-version: 0.4.5
+version: 0.4.6
 ---
 # Companion
 
