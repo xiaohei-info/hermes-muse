@@ -6,12 +6,10 @@ External sources (`<kind>:<account>`, e.g. `mail:work`) have a minimum check int
 that observe() moves: the same limitation code 5 times in a row becomes `limited` (no longer a gap),
 an error is `failing` and flagged for Health after 3 in a row, a clean check is `ok`.
 """
-import re
-
 from ..host.sessions import classify  # noqa: F401 - one classification for intake, goals and the probe
 from .common import H, patch
+from .store.keys import SOURCE_ID
 
-SOURCE_ID = re.compile(r"[a-z0-9][a-z0-9_.:@-]{0,63}")
 # Seconds between checks per kind; plugin setting `source_intervals` ({id or kind: minutes}) overrides.
 INTERVALS = {"calendar": 2 * H, "mail": 30 * 60, "reminders": H, "web": 6 * H, "rss": 6 * H}
 DEFAULT_INTERVAL = H
@@ -21,7 +19,7 @@ LIMITED_AFTER, FAILING_ALERT = 5, 3
 def check_id(source_id):
     source_id = str(source_id or "").strip().lower()
     if not SOURCE_ID.fullmatch(source_id):
-        raise ValueError("source_id must match [a-z0-9][a-z0-9_.:@-]{0,63}, for example mail:work")
+        raise ValueError("source_id must be <kind>:<account> in [a-z0-9_.:@-], at most 64 characters, for example mail:work")
     return source_id
 
 
@@ -36,8 +34,8 @@ def interval(source_id, overrides=None):
 
 def due(store, now, overrides=None):
     """Known (observed or configured) sources whose minimum interval has passed, least recently checked first."""
-    states = {e["natural_key"]: e for e in store.query("source")}
-    configured = {str(k) for k in (overrides or {}) if ":" in str(k) and SOURCE_ID.fullmatch(str(k))}
+    states = {e["natural_key"]: e for e in store.query("source") if SOURCE_ID.fullmatch(e["natural_key"])}
+    configured = {str(k) for k in (overrides or {}) if SOURCE_ID.fullmatch(str(k))}
     out = []
     for source_id in set(states) | configured:
         e = states.get(source_id)

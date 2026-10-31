@@ -20,6 +20,7 @@ from .store import keys, notice_key
 EXCERPT_TOTAL = 24000
 READ_MAX, READ_TOTAL = 12000, 24000
 OBSERVE_MAX = 50
+SOURCES_DUE = 20  # per patrol packet, least recently checked first, so a longer list rotates
 JOBS = {  # cron period, packet lease, fixed items per packet (a batch when draining)
     "intake": {"type": "intake", "period": H, "lease": H, "items": 15, "drain": True},
     "patrol": {"type": "patrol", "period": 30 * 60, "lease": 30 * 60, "items": 8},
@@ -47,7 +48,8 @@ SCHEMAS = {  # design 2.6: one result shape per item kind group
     "patrol": obj(["candidate_ref", "verdict"], candidate_ref=REF, verdict=enum(*notifier.VERDICTS),
                   text={"type": "string", "maxLength": notifier.TEXT_MAX}, priority=enum(*notifier.PRIORITIES),
                   topic={"type": "string", "maxLength": 100,
-                         "description": "short topic label; the exact context.blocked_topics entry when the item is about one"}),
+                         "description": "short topic label; the exact context.blocked_topics entry when the item is about one"},
+                  about={"type": "string", "description": "a context.notified ref: the notified event this item is about"}),
     "goals": obj([], goal_id=REF, assessment=enum(*goals.ASSESSMENTS), progress_note=S,
                  create=obj(["signal_ref", "title", "criteria"], signal_ref=REF, title=S, criteria=S),
                  decline=obj(["signal_ref", "reason"], signal_ref=REF, reason={"type": "string", "maxLength": 500})),
@@ -75,7 +77,8 @@ def intake_items(k, n, now, offered):
 def patrol_items(k, n, now, offered):
     recent = [{"at": t["at"], "text": clip(t["text"], 500)} for t in k.adapter.sessions.user_turns(now - 6 * H)][-5:]
     return notifier.due_items(k, now), {
-        "sources_due": sources.due(k.store, now, k.settings().get("source_intervals")),
+        "sources_due": sources.due(k.store, now, k.settings().get("source_intervals"))[:SOURCES_DUE],
+        "notified": notifier.recent(k.store, now),
         "recent_user_messages": recent, "send_limit": n, "blocked_topics": blocked_topics(k)}
 
 
@@ -267,10 +270,9 @@ def observe(k, packet_id, source_id, items, limitation_code=None, error=None, no
         for item in clean:
             item["ref"] = f"o{len(observed) + 1}"
             key, _ = notice_key(item["upstream_id"], [item["url"]] if item["url"] else [], item["title"], item["ts"] or now)
-            known = next((e for e in k.store.query("notice", natural_key=key, since=now - 7 * D)
-                          if e["state"] in notifier.LIVE), None)
+            known = notifier.known(k.store, key, now)
             observed.append(item)
-            out.append({"ref": item["ref"], "notified": known["state"] if known else None})
+            out.append({"ref": item["ref"], "notified": known and {"ref": known["id"], "state": known["state"]}})
         patch(k.store, packet["id"], reason="observe", payload={"observed": observed}, now=now)
     return {"source": {"id": source_id, "state": state["state"], "gap": state["payload"].get("gap")}, "items": out}
 
@@ -302,8 +304,7 @@ def feed_result(k, item, r, now):
     out = {"result": "existing" if e["existing"] else "recorded", "feed": e["id"], "path": path}
     if notice:
         # patrol may have notified about the same page already: any source of the article counts
-        known = next((n for s in refs for n in k.store.query("notice", natural_key=keys.notice_key(s)[0], since=now - 7 * D)
-                      if n["state"] in notifier.LIVE), None)
+        known = next(filter(None, (notifier.known(k.store, keys.notice_key(s)[0], now) for s in refs)), None)
         n = known and {**known, "existing": True} or notifier.draft(
             k, text=notice.get("text"), priority=notice.get("priority") or "ordinary", title=title,
             upstream_id=notice["source_ref"], sources=refs, topic=str(notice.get("topic") or "").strip()[:100],
@@ -315,7 +316,7 @@ def feed_result(k, item, r, now):
 HANDLERS = {
     "intake": lambda k, i, r, now: {"state": intake.dispose(k, i["ref"], r.get("disposition"), r.get("facts"), r.get("goal_hint"), now)["state"]},
     "observed": lambda k, i, r, now: notifier.decide(k, i, r.get("verdict"), text=r.get("text"), priority=r.get("priority"),
-                                                     topic=r.get("topic"), now=now),
+                                                     topic=r.get("topic"), about=r.get("about"), now=now),
     "notice": lambda k, i, r, now: notifier.decide(k, i, r.get("verdict"), text=r.get("text"), priority=r.get("priority"), now=now),
     "goal": lambda k, i, r, now: goals.assess(k, i["ref"], r.get("assessment"), r.get("progress_note"), now),
     "signal": lambda k, i, r, now: {"result": "declined"} if r.get("decline") and not r.get("create") else goals.create(k, title=(r.get("create") or {}).get("title"),
@@ -341,6 +342,8 @@ def submit(k, packet_id, results, now):
             item = items.get(ref)
             if item is None:
                 raise KeyError(f"{ref!r} is not in this packet")
+            if r.get("about") and r["about"] not in {e["ref"] for e in (p.get("context") or {}).get("notified", ())}:
+                raise KeyError(f"about {r['about']!r} is not a context.notified ref of this packet")
             if item["kind"] == "observed" and r.get("verdict") in ("send", "supersede"):
                 sends += 1
                 if sends > p["budget"]["items"]:

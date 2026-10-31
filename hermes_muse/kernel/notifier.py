@@ -5,11 +5,17 @@ The model only says send / skip / withdraw / supersede.
 Keys come from kernel.store.notice_key (upstream ID; weak title+day key when there is none). A strong
 key with a drafted/scheduled/sending/sent notice in the last 7 days returns that notice; a weak key only
 meets unsent ones. Only supersede with a new observation makes a second notice for the same key.
+
+One real event reaches Muse through several sources (a mail, a PR comment, a news item), each with its own
+upstream ID, so the key alone cannot tell they are one event. Patrol sees the notified events of 7 days
+(`recent`) and answers an item about one of them with `about` (a ref): `skip` or `supersede` of that event.
+Code then records the item's key as an alias (`keys`) of the event, and an aliased key never drafts a new
+notice for 7 days (`draft`, `known`).
 """
 import hashlib
 from datetime import datetime, timedelta
 
-from .common import D, H, local_midnight, one, patch, preferences
+from .common import D, H, clip, local_midnight, patch, preferences
 from .store import keys
 
 PRIORITIES = ("urgent", "time_sensitive", "ordinary")
@@ -24,7 +30,7 @@ TEXT_MAX = 2000
 DELIVER = "deliver"   # cron key of the owned no-agent job that prints claimed notices
 PER_MESSAGE = 5       # notices in one delivered message; the rest go in the next run
 SEPARATOR = "\n\n---\n\n"
-FOOTER = "— Hermes Muse"  # fixed last line: no notice text can end the stdout as Hermes' {"wakeAgent": false} gate
+NOTIFIED = 20         # notified events shown to patrol, newest first
 
 
 def delivery_key(key, generation=0):
@@ -84,6 +90,29 @@ def stale(p, now):
     return p.get("topic") != FADE_TOPIC and (p.get("verified_at") or 0) < now - VERIFY_EVERY
 
 
+def events(store, now):
+    """Live notices of the last 7 days, newest first: what the user was told or is about to be."""
+    return store.query("notice", state=LIVE, since=now - 7 * D)
+
+
+def known(store, key, now):
+    """The notified event this notice key belongs to (its own key or an alias), or None."""
+    return next((e for e in events(store, now) if e["natural_key"] == key or key in e["payload"].get("keys", ())), None)
+
+
+def recent(store, now):
+    """Patrol's `context.notified`: refs to the notified events, so an item about one of them can name it."""
+    return [{"ref": e["id"], "state": e["state"], "title": e["payload"].get("title"), "topic": e["payload"].get("topic"),
+             "text": clip(text_of(e["payload"]), 200)}
+            for e in events(store, now) if e["payload"].get("topic") != FADE_TOPIC][:NOTIFIED]
+
+
+def alias(k, notice_id, key, now):
+    """Record `key` as one more upstream identity of the event `notice_id`."""
+    return patch(k.store, notice_id, reason="alias", now=now,
+                 payload=lambda e: {"keys": sorted({*e["payload"].get("keys", ()), key} - {e["natural_key"]})})
+
+
 def draft(k, *, text, priority="ordinary", title="", upstream_id=None, sources=(), source_id=None, topic="",
           goal_id=None, interest_id=None, evidence=(), expires=None, observed_at=None, notice_key=None, now):
     """Create (or return the live) notice for this notice key and schedule it."""
@@ -93,6 +122,9 @@ def draft(k, *, text, priority="ordinary", title="", upstream_id=None, sources=(
         key, strong = notice_key, True
     else:
         key, strong = keys.notice_key(upstream_id, sources, title, now if observed_at is None else observed_at)
+    event = next((e for e in events(k.store, now) if key in e["payload"].get("keys", ())), None)
+    if event:  # this item was tied to an event already notified
+        return {**event, "existing": True}
     payload = {"text": check_text(text), "priority": priority, "title": str(title or "")[:200], "upstream_id": upstream_id,
                "sources": [str(s)[:500] for s in sources or ()][:20], "source_id": source_id, "topic": topic or "",
                "goal_id": goal_id, "interest_id": interest_id, "evidence": list(evidence)[:20], "strong_key": strong, "generation": 0, "verified_at": now}
@@ -159,22 +191,28 @@ def supersede(k, old_id, *, text, evidence, now):
     return schedule(k, new, now)
 
 
-def decide(k, item, verdict, *, text=None, priority=None, topic=None, now):
-    """One patrol verdict on an observed item (send/skip/supersede) or a due notice (send/skip/withdraw)."""
+def decide(k, item, verdict, *, text=None, priority=None, topic=None, about=None, now):
+    """One patrol verdict on an observed item (send/skip/supersede, `about` a notified event) or a due notice
+    (send/skip/withdraw)."""
     if verdict not in VERDICTS:
         raise ValueError(f"verdict must be one of {', '.join(VERDICTS)}")
     if item["kind"] == "observed":
-        if verdict == "skip":
-            return {"result": "skipped"}
         if verdict == "withdraw":
             raise ValueError("withdraw applies to a due notice; skip an observed item instead")
         sources = [item["url"]] if item.get("url") else []
+        key, _ = keys.notice_key(item.get("upstream_id"), sources, item["title"], item.get("ts") or now)
+        if about and verdict == "send":
+            raise ValueError("an item about a notified event is `skip`, or `supersede` for a real development")
+        if verdict == "skip":
+            if about:
+                alias(k, about, key, now)
+            return {"result": "skipped", **({"about": about} if about else {})}
         if verdict == "supersede":
-            key, _ = keys.notice_key(item.get("upstream_id"), sources, item["title"], item.get("ts") or now)
-            live = one(k.store, "notice", key)
+            live = k.store.get(about) if about else known(k.store, key, now)
             if not live or live["state"] not in LIVE:
-                raise ValueError("nothing was notified for this item; use send")
+                raise ValueError("nothing was notified for this item; use send, or `about` a context.notified ref")
             e = supersede(k, live["id"], text=text, evidence=[item["ref"]], now=now)
+            alias(k, e["id"], key, now)
             return {"result": "superseded", "notice": e["id"], "state": e["state"]}
         if topic == FADE_TOPIC:
             raise ValueError(f"topic {FADE_TOPIC!r} is reserved for Muse's dormancy questions")
@@ -239,8 +277,11 @@ def claim(k, job, execution_id, now):
 
 
 def message(notices):
-    """The run's stdout: each claimed notice's own text and sources, separated by a rule ('' is silent)."""
-    return SEPARATOR.join(render(e["payload"]) for e in notices) + "\n\n" + FOOTER if notices else ""
+    """The run's stdout: each claimed notice's own text and sources, separated by a rule ('' is silent). It is the
+    assistant speaking, so there is no signature; a last line that could parse as Hermes' {"wakeAgent": false}
+    gate gets a closing rule, so no notice text can silence its own delivery."""
+    text = SEPARATOR.join(render(e["payload"]) for e in notices)
+    return text + ("\n\n—" if text.rstrip().rsplit("\n", 1)[-1].lstrip().startswith("{") else "")
 
 
 def apply(k, e, receipt, now):

@@ -26,8 +26,13 @@ Classify every source before you touch it:
 
 `source_id` is `<kind>:<account>`, for example `mail:work` or `calendar:family`. Keep it stable, because each kind has
 its own check interval. Record every item that could matter, with the upstream ID exactly as the source gives it:
-message-id or thread id, event id plus revision, reminder id, or URL. That ID is what keeps the user from hearing about
-the same thing twice.
+message-id or thread id, event id plus revision, reminder id, or URL. Use one form per source kind (for mail the
+RFC Message-ID, not a provider's internal id), so the same item keeps the same ID across runs.
+
+One event often arrives through several sources: the mail, the PR comment and a news item about the same reply, or
+one CI failure per push. `context.notified` lists what the user was told, or is about to be, in the last 7 days. An
+item about one of those events answers with `about` set to its ref: `skip` when it adds nothing, `supersede` only for
+a real development. Muse then remembers the item's ID as part of that event and will not notify it again.
 
 ## What earns an interruption
 
@@ -41,8 +46,9 @@ the same thing twice.
 - **Write it so it stands alone.** `text` is self-contained and in the user's language. Give the original title and
   time, what changed, why it matters now, the work already done, and the source link. Say "prepared" when you did not
   act.
-- **Supersede only on real change.** Use `supersede` only for an item Muse already notified about that has a real new
-  development, such as a moved date, a new deadline or a resolution. A re-crawl is not a development.
+- **Supersede only on real change.** Use `supersede` only for an event Muse already notified about (its own item, or
+  `about` a `context.notified` ref) that has a real new development, such as a moved date, a new deadline or a
+  resolution. A re-crawl, another source repeating it, or another failed run of the same CI is not a development.
 - **Re-confirm due notices.** A due notice comes back when its evidence is a day old or it has been stuck for 6 hours.
   `send` re-confirms it is still true; `withdraw` it if it is resolved, stale or already handled. A dormancy question
   belongs to Muse and never appears there.
