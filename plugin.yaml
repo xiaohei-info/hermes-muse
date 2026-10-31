@@ -1,6 +1,6 @@
 manifest_version: 2
 name: hermes-muse
-version: "0.4.5"
+version: "0.4.6"
 description: A provider-neutral companion with goals, deduplicated proactive notices, nightly review, a silent Feed and an independent health check, on a deterministic kernel.
 author: xiaohei-info
 license: MIT
