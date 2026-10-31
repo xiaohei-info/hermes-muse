@@ -18,7 +18,14 @@ class Kernel:
             adapter = HostAdapter(home)
         self.adapter = adapter
         (self.home / "muse").mkdir(parents=True, exist_ok=True)
-        self.store = store or Store.for_home(self.home, clock=clock)
+        self._store = store
+
+    @property
+    def store(self):
+        """Opened on first use: opening writes (schema check), so plugin registration must not do it."""
+        if self._store is None:
+            self._store = Store.for_home(self.home, clock=self.clock)
+        return self._store
 
     def tz(self):
         return self.adapter.now().tzinfo
