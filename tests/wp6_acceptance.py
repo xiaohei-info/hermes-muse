@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -145,6 +146,17 @@ def part_entry(home, ids):
     check("pre-run: patrol always wakes with a packet; weekly digest wakes with health + 7-day counts",
           patrol["wakeAgent"] and patrol["packet"]["id"] and weekly["wakeAgent"] and "last_7_days" in weekly and "health" in weekly,
           {"patrol_context": sorted(patrol["packet"].get("context") or {}), "week": weekly.get("last_7_days")})
+    from hermes_muse.health import invariants
+    from hermes_muse.host import HostAdapter
+    gateway = home / "muse" / "loaded" / str(os.getppid())  # the launcher's parent is the process running the job
+    gateway.parent.mkdir(parents=True, exist_ok=True)
+    gateway.write_text("abandoned")
+    unloaded = entry.run(home, "proactive-watch")
+    item = invariants.plugin_load(HostAdapter(home).load_failed())
+    gateway.unlink()
+    check("not loaded: a job that needs the model stays silent with the reason, Health raises plugin_load high",
+          unloaded["wakeAgent"] is False and "plugin_load" in unloaded["reason"] and item["level"] == "high"
+          and invariants.plugin_load(HostAdapter(home).load_failed())["level"] == "ok", {"run": unloaded, "item": item})
     from hermes_muse.kernel import Kernel, notifier
     k = Kernel(home)
     from hermes_muse.kernel.common import header, render
@@ -163,7 +175,7 @@ def part_entry(home, ids):
           "the due notice as plain stdout (no model), claimed for that execution on the new route; the next run is silent",
           printed[0][1] and printed[0][2].strip() == "" and printed[1][1]
           # migrated notices the install claim (5 per message) left over may join it
-          and printed[1][2].strip().startswith("Your synthetic reminder\n\n") and printed[1][2].strip().endswith(notifier.FOOTER)
+          and printed[1][2].strip().startswith("Your synthetic reminder") and "Hermes Muse" not in printed[1][2]
           and _parse_wake_gate(printed[1][2])
           and claimed["state"] == "sending" and claimed["payload"]["execution_id"] == printed[1][0]
           and claimed["payload"]["target"] == "telegram" == k.adapter.cron.job("deliver")["deliver"]
@@ -189,8 +201,21 @@ def part_hooks(home, ids):
     from hermes_muse.kernel.store import Store
 
     ctx = Ctx()
+    started = time.monotonic()
     hooks = runtime.register(ctx, plugin_root=ROOT)
+    took = time.monotonic() - started
+    installs = [t for t in threading.enumerate() if t.name == "hermes-muse-install"]
+    [t.join() for t in installs]
     names = [c[0] for c in ctx.calls]
+    marks = {p.name: p.read_text() for p in (home / "muse" / "loaded").iterdir()}
+    ctx.calls.clear()
+    ctx._load_abandoned = True  # Hermes passed its load deadline
+    runtime.register(ctx, plugin_root=ROOT)
+    [t.join() for t in threading.enumerate() if t.name == "hermes-muse-install"]
+    kept = (home / "muse" / "loaded" / str(os.getpid())).read_text()
+    check("register: registrations only (install in the background, no Store opened), this process marked loaded; a "
+          "late abandoned load does not undo it", installs and took < 2 and marks.get(str(os.getpid())) == "ok"
+          and kept == "ok" and not (home / "muse" / "migrating.json").exists(), {"took": took, "marks": marks})
     check("register: Skill, prompt section, muse_manage + muse_job, four hooks and unload",
           sorted(a[0] for n, a, _ in ctx.calls if n == "register_hook") == ["post_llm_call", "post_tool_call", "pre_llm_call", "pre_tool_call"]
           and "register_skill" in names and "register_system_prompt_section" in names and "on_unload" in names

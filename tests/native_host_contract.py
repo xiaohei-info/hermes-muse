@@ -159,7 +159,7 @@ def main():
             mark_execution_running(execution["id"])
             ok, out = _run_job_script(deliver["script"])  # the launcher as the scheduler runs it
         from cron.scheduler_prompt import _parse_wake_gate
-        assert ok and out.strip() == f"{text}\n\n{notifier.FOOTER}" and _parse_wake_gate(out), out
+        assert ok and out.strip() == f"{text}\n\n—" and _parse_wake_gate(out), out  # no signature; the gate stays open
         claimed = k.store.get(notice["id"])["payload"]
         assert claimed["execution_id"] == execution["id"] and claimed["job_id"] == deliver["id"], claimed
         assert host.deliver.receipt(deliver["id"], execution["id"])["status"] == "sending"

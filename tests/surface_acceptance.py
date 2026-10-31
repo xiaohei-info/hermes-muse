@@ -204,6 +204,24 @@ def dynamic(base):
           all(r["code"] == "permission_denied" for r in denied.values()) and all(r["ok"] for r in allowed),
           {n: r.get("code") for n, r in denied.items()})
 
+    # One gate to the model: every result redacted; every read pages at READ_MAX; no tool runs while install migrates.
+    body = "password: hunter22-synthetic\n" + "x" * 30000
+    call("muse_manage", "content_write", {"kind": "note", "id": "person:long", "body": body, "expected_revision": "absent"})
+    first = call("muse_manage", "read", {"kind": "note", "id": "person:long"})["result"]
+    rest = call("muse_manage", "read", {"kind": "note", "id": "person:long", "offset": first["next_offset"]})["result"]
+    for i in range(80):
+        call("muse_manage", "idea_add", {"title": f"synthetic idea {i} " + "y" * 150})
+    listed = call("muse_manage", "read", {"kind": "idea", "limit": 100})["result"]
+    marker = k.home / "muse" / "migrating.json"
+    marker.write_text(json.dumps({"at": clock[0], "pid": 1}))
+    busy = call("muse_manage", "read", {"kind": "goal"})
+    marker.unlink()
+    check("S12 model gate: results redacted, reads paged at 12k with next_offset, tools refused while an install runs",
+          "hunter22" not in json.dumps(first) and len(first["body"]) <= s.READ_MAX and first["next_offset"] == s.READ_MAX
+          and "next_offset" in rest and len(json.dumps(listed)) < 2 * s.READ_MAX and listed["next_offset"] == len(listed["items"])
+          and busy["code"] == "host_unavailable",
+          {"page": len(first["body"]), "listed": len(listed["items"]), "busy": busy})
+
 
 def native(base):
     try:
