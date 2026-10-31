@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from ..kernel.store import MACHINES
+from ..kernel.store.keys import SOURCE_ID
 
 H, D = 3600, 86400
 LEVELS = ("ok", "low", "medium", "high")
@@ -53,6 +54,14 @@ def host_faults(faults):
                    "; ".join(f"{c} x{n}" for c, n in calls.most_common()) or "no host call failed",
                    [f["error"][:200] for f in faults],
                    "A Hermes API or database changed shape; run tests/native_host_contract.py")
+
+
+def plugin_load(failed):
+    """B: Hermes abandoned Muse's load (deadline passed) in the process running its jobs; they stay silent."""
+    return item("plugin_load", "high" if failed else "ok", failed, False,
+                "Hermes abandoned Muse's plugin load in the process running its jobs: no Muse tools, skill or hooks "
+                "there, so the jobs that need the model stay silent" if failed else "loaded where Muse's jobs run",
+                fix="Restart the gateway; errors.log names the load error")
 
 
 # -- Store v2 ---------------------------------------------------------------------------------------
@@ -196,7 +205,8 @@ def goals(store, now):
 
 
 def sources(store, now):
-    failing = [s for s in store.query("source", state="failing") if s["payload"].get("health")]
+    failing = [s for s in store.query("source", state="failing")
+               if s["payload"].get("health") and SOURCE_ID.fullmatch(s["natural_key"])]
     return item("sources_failing", "medium" if failing else "ok", len(failing), 0,
                    f"{len(failing)} sources failing 3+ times in a row", ids(failing),
                    "Check the source's tool or credentials")
@@ -253,7 +263,7 @@ def tools(results):
             item("model_input", "medium" if exposed else "ok", len(exposed), 0,
                     f"oversized (>20k) {sum(s['oversized'] for s in results)}, credential patterns "
                     f"{sum(s['secrets'] for s in results)} in Muse cron tool results", exposed,
-                    "A read path skipped redaction or the excerpt limit")]
+                    "A Muse read path skipped redaction or its page limit")]
 
 
 def memory(stores):

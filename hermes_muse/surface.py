@@ -6,6 +6,8 @@ read, calendar_view and content_write of notes/dreams/alignment; a delegated chi
 muse_job: a Muse job run's read / observe / submit against the packet in its Script Output; the submit
 result shapes are kernel.packets.SCHEMAS. Code fills every ID, key, next_check and managed revision;
 only content files take an expected_revision.
+Every result passes one gate on its way to the model (`host.sessions.clean`: all text redacted), and every read
+pages at READ_MAX characters (offset/next_offset), so no Muse read hands the model unbounded or raw text.
 """
 import json
 import sys
@@ -14,7 +16,7 @@ from pathlib import Path
 
 from . import health, install
 from .content_io import DomainError, Files, revision
-from .host.sessions import redact
+from .host.sessions import READ_MAX, clean
 from .kernel import goals, packets, records
 from .kernel.common import header, one, render
 from .kernel.packets import enum, obj
@@ -95,7 +97,7 @@ MAIN = {  # action: (kind, summary, data schema)
     "content_write": ("write", "Write a note, person/group page, dream, alignment, TOOLS.md, AGENTS.md or goal file; read it first for its revision ('absent' when new).",
                       obj(["kind", "id", "body", "expected_revision"], kind=enum(*WRITABLE), id=text(200),
                           body=text(60000), expected_revision=text(80))),
-    "read": ("read", "Read Muse state: one entity or file by id, or a list (query filters, newest first). kind=status gives health and counts.",
+    "read": ("read", "Read Muse state: one entity or file by id, or a list (query filters, newest first). Text pages at 12k characters: pass next_offset as offset. kind=status gives health and counts.",
              obj(["kind"], kind=enum("status", *ENTITY_KINDS, *CONTENT), id=text(200), query=text(200),
                  limit=count(1, 100), offset=count(0, 10 ** 7))),
     "calendar_view": ("read", "Without window: the window for mode. With that window unchanged plus sources: the merged schedule.",
@@ -212,10 +214,16 @@ def content_path(kind, key):
             "working_lessons": "AGENTS.md", "preferences": "PROACTIVE_PREFERENCES.md"}[kind]
 
 
+def page(field, text, offset):
+    """At most READ_MAX characters of `text` from `offset`, with next_offset while more remains."""
+    part = text[offset:offset + READ_MAX]
+    return {field: part, **({"next_offset": offset + len(part)} if offset + len(part) < len(text) else {})}
+
+
 def row(e):
     p = e["payload"]
     label = p.get("title") or p.get("text") or p.get("message") or p.get("reason") or p.get("excerpt") or ""
-    return {"id": e["id"], "state": e["state"], "title": redact(str(label)[:200]), "updated": e["updated"],
+    return {"id": e["id"], "state": e["state"], "title": str(label)[:200], "updated": e["updated"],
             **({"deadline": e["deadline"]} if e["deadline"] else {})}
 
 
@@ -252,7 +260,10 @@ class Surface:
             schema = actions[action][2]
             check({**schema, "title": action}, data, "data")
             self.authorize(tool, action, data, caller)
-            return {"ok": True, "result": getattr(self, f"{tool}_{action}")(dict(data), caller)}
+            marker = install.migrating(self.k.home)
+            if marker and not marker.get("error"):  # an install still running may be migrating the Store
+                raise DomainError("host_unavailable", "Muse is installing or upgrading; try again in a minute")
+            return {"ok": True, "result": clean(getattr(self, f"{tool}_{action}")(dict(data), caller))}
         except DomainError as exc:
             return {"ok": False, "code": exc.code, "error": str(exc), **exc.details}
         except PermissionError as exc:
@@ -378,22 +389,26 @@ class Surface:
             return self.status()
         if kind in CONTENT:
             return self.read_content(kind, d)
-        store = self.k.store
+        store, offset = self.k.store, d.get("offset", 0)
         if d.get("id"):
             e = self.entity(kind, d["id"])
             out = {**e, "events": store.events(e["id"])[-10:]}
-            if kind == "signal":  # migrated v1 signals hold raw text
-                out["payload"] = {**e["payload"], "excerpt": redact(e["payload"].get("excerpt") or "")}
             found = kind == "goal" and goals.read(self.k.home, e["natural_key"])
             if found:
-                out.update(record=found[0], body=found[1])
+                out.update(record=found[0], **page("body", found[1], offset))
             if kind == "feed":
                 out["path"] = records.feed_path(e)
             return out
         rows = [row(e) for e in reversed(store.query(kind))
                 if not query or query in json.dumps(e["payload"], ensure_ascii=False).casefold()]
-        offset = d.get("offset", 0)
-        return {"kind": kind, "items": rows[offset:offset + limit], "total": len(rows)}
+        items, chars = [], 0
+        for r in rows[offset:offset + limit]:
+            chars += len(json.dumps(r, ensure_ascii=False, default=str))
+            if items and chars > READ_MAX:
+                break
+            items.append(r)
+        more = {"next_offset": offset + len(items)} if offset + len(items) < len(rows) else {}
+        return {"kind": kind, "items": items, "total": len(rows), **more}
 
     def entity(self, kind, entity_id):
         e = self.k.store.get(entity_id) or one(self.k.store, kind, entity_id) or self.k.store.get(f"{kind}:{entity_id}")
@@ -410,10 +425,7 @@ class Surface:
             raw = self.files.read(rel)
         except FileNotFoundError:
             return {"kind": kind, "path": rel, "revision": "absent", "body": ""}
-        body, offset = raw.decode("utf-8"), d.get("offset", 0)
-        page = body[offset:offset + 20000]
-        return {"kind": kind, "path": rel, "revision": revision(raw), "body": page,
-                **({"next_offset": offset + len(page)} if offset + len(page) < len(body) else {})}
+        return {"kind": kind, "path": rel, "revision": revision(raw), **page("body", raw.decode("utf-8"), d.get("offset", 0))}
 
     def status(self):
         open_states = {"goal": ("active", "waiting"), "notice": ("drafted", "scheduled", "sending", "unknown"),
