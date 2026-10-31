@@ -1,7 +1,8 @@
 """Pre-run script of every Muse cron job (cron_entry.py): decides whether the model wakes and with what.
 
 Prints one JSON line. `{"wakeAgent": false, ...}` keeps the run silent (Hermes wakes the model on empty
-stdout): plugin disabled, migration marker present, empty packet, unknown key or a watch whose goal is no
+stdout): plugin disabled, migration marker present, Muse not loaded in the Hermes process running the job
+(its agent would have no Muse tools or skill), empty packet, unknown key or a watch whose goal is no
 longer open. Otherwise the line carries the job's packet from build_packet (ids, refs, schema and budget
 filled in by code), which Hermes hands to the model as Script Output, and the run is registered with
 start_run so its outcome is computed later.
@@ -9,6 +10,7 @@ The no-agent `deliver` key prints plain text instead: the notices it claimed, or
 """
 from . import health
 from .host import HostAdapter
+from .host.sessions import clean
 from .install import JOBS, migrating, owned
 from .kernel import Kernel, goals, notifier
 from .kernel.common import D, preferences
@@ -63,7 +65,9 @@ def run(home, key, now=None):
         return silent("plugin absent or disabled")
     if migrating(adapter.home):
         return silent("migration in progress")
-    return output(Kernel(adapter.home, adapter=adapter), key, now)
+    if key != notifier.DELIVER and adapter.load_failed():  # muse-deliver needs no model and no Muse tool
+        return silent("Hermes abandoned Muse's plugin load in this process; restart the gateway (Health: plugin_load)")
+    return clean(output(Kernel(adapter.home, adapter=adapter), key, now))  # Script Output or the delivered message
 
 
 def output(k, key, now=None):

@@ -1,9 +1,14 @@
-"""Plugin registration: install/upgrade, the model surface, the Skill and system prompt section, the hooks.
+"""Plugin registration: the model surface, the Skill and system prompt section, the hooks, then install/upgrade.
 
+register() only builds objects and registers: Hermes abandons a load that passes its deadline (import +
+register), and install waits on profile locks, SQLite writers and the host's cron lock. Install therefore runs
+in a background thread after the registrations; its migration marker keeps jobs, the background tick and the
+tools quiet until it is done. Whether this process's load counted is recorded for launchers and Health.
 The model surface (tool schemas and handlers, design 2.6) is `surface.register`; tools and hooks classify
 their caller with the same HostAdapter.caller() from host kwargs, never from tool arguments.
 """
 import logging
+import threading
 from pathlib import Path
 
 from . import surface
@@ -21,10 +26,6 @@ def register(ctx, *, plugin_root):
         raise RuntimeError("Hermes Muse needs Hermes 0.21.5+ with prompt sections, plugin skills and unload hooks")
     root = Path(plugin_root).resolve()
     adapter = HostAdapter()
-    try:
-        install(adapter, root)
-    except Exception as exc:  # the marker keeps jobs silent and the main session is told; hooks still load
-        log.error("Hermes Muse install failed: %s", exc)
     kernel = Kernel(adapter.home, adapter=adapter)
     hooks = Hooks(kernel)
     prompt = ((root / "prompts" / "system.md").read_text(encoding="utf-8")
@@ -38,4 +39,15 @@ def register(ctx, *, plugin_root):
     ctx.register_hook("pre_tool_call", hooks.pre_tool)
     ctx.register_hook("post_tool_call", hooks.post_tool)
     ctx.on_unload(hooks.close)
+    adapter.loaded(not getattr(ctx, "_load_abandoned", False))  # set by Hermes when the load passed its deadline
+    # not a daemon: a short-lived process (a CLI command loads plugins too) finishes install before it exits,
+    # instead of leaving the marker behind and every job silent
+    threading.Thread(target=upgrade, args=(adapter, root), name="hermes-muse-install").start()
     return hooks
+
+
+def upgrade(adapter, root):
+    try:
+        install(adapter, root)
+    except Exception as exc:  # the marker keeps jobs silent and the main session is told
+        log.error("Hermes Muse install failed: %s", exc)

@@ -198,6 +198,34 @@ class HostAdapter:
         from .probe import run
         return run(self, **kwargs)
 
+    def loaded(self, ok):
+        """Record for this process whether it registered Muse (`ok`) or Hermes abandoned the load (timed out)."""
+        folder = self.home / "muse" / "loaded"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            if os.name == "posix":  # forget processes that are gone (on Windows os.kill would terminate them)
+                for mark in folder.iterdir():
+                    try:
+                        os.kill(int(mark.name), 0)
+                    except ProcessLookupError:
+                        mark.unlink(missing_ok=True)
+                    except (OSError, ValueError):
+                        pass
+            mark = folder / str(os.getpid())
+            if ok or not mark.is_file() or mark.read_text() != "ok":  # a late abandoned worker must not undo a later load
+                mark.write_text("ok" if ok else "abandoned")
+        except OSError as exc:  # unrecorded only means launchers and Health cannot tell; the load itself stands
+            self.fault("adapter.loaded", exc)
+
+    def load_failed(self):
+        """True when the Hermes process running this launcher (its parent) abandoned Muse's load: its cron agents
+        have no Muse tools or skill. shortcut: keyed by pid; a reused pid of a dead loader is pruned only at the
+        next load, upgrade to a process start time if that ever misfires."""
+        try:
+            return (self.home / "muse" / "loaded" / str(os.getppid())).read_text() == "abandoned"
+        except OSError:
+            return False
+
     def fault(self, call, exc):
         self.fault_count += 1
         self.faults.append({"at": time.time(), "call": call, "error": f"{type(exc).__name__}: {exc}"})

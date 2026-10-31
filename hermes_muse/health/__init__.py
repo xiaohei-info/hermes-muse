@@ -83,6 +83,7 @@ def check(adapter, now=None):
     items += inv.jobs(owned, now)
     items.append(inv.deliver_stalled(store, adapter.cron.job("deliver"), now, readable=bool(owned)))  # Health's own job is owned
     items.append(inv.memory(adapter.memory.stores()))
+    items.append(inv.plugin_load(adapter.load_failed()))
     items.append(inv.host_faults(list(adapter.faults)))
     return items
 
