@@ -32,7 +32,9 @@ COLUMNS = {
 EXCERPT = 8000
 READ_MAX = 12000
 SECRETS = [
-    (re.compile(r"(?i)((?:password|passwd|pwd|passcode|secret|token|api[_-]?key|密码|口令)\s*[:：=]\s*)\S+"), r"\1[REDACTED]"),
+    # a labelled value only when it looks like one (6+ chars with a digit): not prose ("page token: when") or code
+    (re.compile(r"(?i)((?:password|passwd|pwd|passcode|secret|token|api[_-]?key|密码|口令)[\"']?\s*[:：=]\s*[\"']?)"
+                r"(?=[^\s\"'<>,;()]*\d)[^\s\"'<>,;()]{6,}"), r"\1[REDACTED]"),
     (re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}"), "[REDACTED]"),
     (re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}"), "[REDACTED]"),
     (re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"), "[REDACTED]"),
@@ -96,6 +98,17 @@ def redact(text: str) -> str:
     for pattern, replacement in SECRETS:
         text = pattern.sub(replacement, text)
     return text
+
+
+def clean(value):
+    """The one gate for what Muse hands the model (tool results, Script Output): every string redacted."""
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {k: clean(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [clean(v) for v in value]
+    return value
 
 
 def excerpt(text: str) -> str:
@@ -216,9 +229,10 @@ class Sessions(Part):
         return [{**row, "job_id": match_job(row, jobs, executions)} for row in rows]
 
     @tolerant(list)
-    def tool_results(self, since, oversized=20000):
-        """Per owned-cron session after `since`: tool results, failures, results over `oversized` chars,
-        and results still matching a credential pattern (what reached the model unredacted)."""
+    def tool_results(self, since, oversized=20000, tools=("muse_manage", "muse_job")):
+        """Per owned-cron session after `since`: results of Muse's own `tools`, failures, results over `oversized`
+        chars, and results still matching a credential pattern (what Muse handed the model unredacted). Other
+        tools' output belongs to the host and the user's tools, not to a Muse read path."""
         runs = [s for s in self.cron_sessions(since) if s["job_id"]]
         out = []
         if not runs:
@@ -226,7 +240,9 @@ class Sessions(Part):
         with reader(self.path) as db:
             for run in runs:
                 stats = {"session_id": run["id"], "job_id": run["job_id"], "tools": 0, "failed": 0, "oversized": 0, "secrets": 0}
-                for (content,) in db.execute("SELECT content FROM messages WHERE session_id = ? AND role = 'tool'", (run["id"],)):
+                for (content,) in db.execute(
+                        f"SELECT content FROM messages WHERE session_id = ? AND role = 'tool' AND tool_name IN "
+                        f"({','.join('?' * len(tools))})", (run["id"], *tools)):
                     text = as_text(content or "")
                     stats["tools"] += 1
                     stats["failed"] += failed_result(text)

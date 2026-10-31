@@ -141,7 +141,7 @@ Write a note, person/group page, dream, alignment, TOOLS.md, AGENTS.md or goal f
 
 ### `read` (read)
 
-Read Muse state: one entity or file by id, or a list (query filters, newest first). kind=status gives health and counts.
+Read Muse state: one entity or file by id, or a list (query filters, newest first). Text pages at 12k characters: pass next_offset as offset. kind=status gives health and counts.
 
 | field | | type |
 |---|---|---|
@@ -227,6 +227,7 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | `text` |  | string; ≤2000 chars |
 | `priority` |  | urgent / time_sensitive / ordinary |
 | `topic` |  | string; ≤100 chars — short topic label; the exact context.blocked_topics entry when the item is about one |
+| `about` |  | string — a context.notified ref: the notified event this item is about |
 
 ### goals
 
