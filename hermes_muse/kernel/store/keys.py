@@ -4,6 +4,9 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
+# A source is `<kind>:<account>` (mail:work). 0.3.x per-resource check ids (source-<hex>, migrated as history)
+# and their `source:` copies are not sources: they are never due and never counted.
+SOURCE_ID = re.compile(r"(?=.{3,64}\Z)(?!source:)[a-z0-9][a-z0-9_.@-]*:[a-z0-9_.:@-]+")
 REFS = (re.compile(r"^gmail:(?:message|thread):([\w-]+)$", re.I), re.compile(r"^mail:<?([^<>\s]+)>?$", re.I))
 
 
