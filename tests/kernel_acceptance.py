@@ -357,14 +357,20 @@ def part_notifier(base):
     ref = k.observe(packet["id"], "github:example", [comment])["items"][0]["ref"]
     answers = [k.submit(packet["id"], [{"candidate_ref": ref, "verdict": v, "text": "x", **a}])[0] for v, a in (
         ("send", {"about": event["id"]}), ("skip", {"about": "notice:not-in-this-packet"}), ("skip", {"about": event["id"]}))]
+    try:
+        k.read(packet["id"], event["id"])
+        unread = ""
+    except KeyError as exc:
+        unread = str(exc)
     _, again, resend = patrol(k, [comment], text="Your PR got a comment")
     _, _, update = patrol(k, [{"upstream_id": "https://example.invalid/pr/1/merged", "title": "Synthetic PR merged"}],
                           verdict="supersede", text="Your PR was merged", about=event["id"])
     deliver_all(k, host)
     rail = [e for e in k.store.query("notice") if e["natural_key"] == event["natural_key"]]
-    check("C one event, several sources: context.notified lists it; `about` + send and a foreign ref are refused; skip "
-          "about aliases the item, which then never notifies again; supersede about updates the same event once",
-          event["id"] in [n["ref"] for n in packet["context"]["notified"]] and "error" in answers[0] and "error" in answers[1]
+    check("C one event, several sources: context.notified lists it (read points to `about`); `about` + send and a foreign "
+          "ref are refused; skip about aliases the item, which then never notifies again; supersede about updates the same event once",
+          event["id"] in [n["ref"] for n in packet["context"]["notified"]] and "`about`" in unread
+          and "error" in answers[0] and "error" in answers[1]
           and answers[2]["result"] == "skipped" and again["items"][0]["notified"]["ref"] == event["id"]
           and resend[0]["result"] == "existing" and update[0]["result"] == "superseded" and len(rail) == 2
           and len(host.delivered) == sent + 1, {"answers": answers, "again": again["items"], "resend": resend, "update": update})
