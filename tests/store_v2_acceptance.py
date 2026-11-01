@@ -5,16 +5,17 @@ Usage: python tests/store_v2_acceptance.py   (needs git tags v0.3.1 and v0.3.16)
 """
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from contextlib import closing
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from hermes_muse.kernel.store import Store, notice_key  # noqa: E402
-from hermes_muse.kernel.store.bridge import bridge  # noqa: E402
 from hermes_muse.kernel.store.migrate import copy_home, migrate, signal_revision  # noqa: E402
 
 NOW = 1_800_000_000.0
@@ -103,7 +104,7 @@ def sample(home, shape):
     if shape == "0.3.16":
         rec("mutation_request", "m1", {"action": "delegate", "status": "pending"})
 
-    with sqlite3.connect(muse / "state.db") as db:
+    with closing(sqlite3.connect(muse / "state.db")) as db, db:
         db.execute("CREATE TABLE records (kind TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(kind,id))")
         db.execute("PRAGMA user_version=1")
         db.executemany("INSERT INTO records VALUES(?,?,?)", [(k, i, json.dumps(d)) for k, i, d in rows])
@@ -123,7 +124,7 @@ def sample(home, shape):
 
 
 def dump(home):
-    with sqlite3.connect(home / "muse" / "state-v2.db") as db:
+    with closing(sqlite3.connect(home / "muse" / "state-v2.db")) as db, db:
         return [list(db.execute(f"SELECT * FROM {t} ORDER BY 1,2")) for t in ("entity", "event", "meta")]
 
 
@@ -210,7 +211,7 @@ def run(shape, scratch):
           {"from_shape": report["from_shape"], "v1_records": len(rows), "unexplained": report["unexplained"], "reconcile": r,
            "notice_merged": report["notice_merged"], "skipped": report["skipped"]})
 
-    with sqlite3.connect(a / "muse" / "state-v2.db") as db:
+    with closing(sqlite3.connect(a / "muse" / "state-v2.db")) as db, db:
         entities = list(db.execute("SELECT kind, state, deadline FROM entity"))
     from hermes_muse.kernel.store import machine
     missing = [(k, s) for k, s, d in entities if not machine(k).terminal(s) and d is None]
@@ -224,6 +225,10 @@ def run(shape, scratch):
     check("A5-migration", all(len(v) == 1 for v in live.values()) and not (set(live) & sent7),
           {"live_by_key": {k[:20]: v for k, v in sorted(live.items())}, "live_already_sent": sorted(set(live) & sent7)})
 
+    if os.name == "nt":
+        print("A12 SKIP historical 0.3.x rollback bridge is POSIX-only")
+        return
+    from hermes_muse.kernel.store.bridge import bridge
     sent_keys, settled = simulate_v2(a)
     report_bridge = bridge(a, now=NOW + 2 * H)
     second = bridge(a, now=NOW + 2 * H)

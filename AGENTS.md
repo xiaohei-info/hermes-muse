@@ -67,7 +67,7 @@ Hermes Muse 是一个独立的 Hermes 插件（standalone plugin，MIT）。它�
 1. **调用方只有一个分类函数**：`host.sessions.caller()`（经 `HostAdapter.caller(session_id, **host_kwargs)` 调用）返回 `user | cron | child | group | other`。工具和 hooks 都用它，Signal 捕获用同一份 `USER_SOURCES`。判定规则：
    - 会话行存在时，**存储的 `sessions.source` 决定**；本次调用的 platform 参数和继承来的 session 环境变量只能收紧，不能放宽；
    - 没有会话行时，只认宿主本次调用传入的 `platform` kwarg，单独的环境变量不算证据；
-   - 不在 `USER_SOURCES` 里（含空值、未分类值）一律是 `other`；群聊是 `group`；有父会话或处于委派上下文是 `child`。
+   - 不在 `USER_SOURCES` 里（含空值、未分类值）一律是 `other`；群聊是 `group`；显式委派调用上下文是 `child`，存储的父会话不改变压缩或 `/branch` 用户会话的授权。
    - 只有 `user` 构成授权，也只有 `user` 的轮次会收到注入。CLI/TUI 靠存储的 `sessions.source`（`cli`、`tui`）识别。
 2. **`user`（私聊主会话）**：可以使用 `muse_manage` 的全部 14 个动作。Goal 的状态和设置只能在这里修改。
 3. **`cron`（job run）** 只能做这些：
@@ -229,7 +229,7 @@ Hermes 宿主
 - `sessions`：
   - `user_turns(since, roles, limit)`：按来源白名单、私聊、脱敏、摘录返回会话轮次；
   - `read(ref, offset, length)`：单次 ≤12k，已脱敏；
-  - `source_of(session_id)`、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
+  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；LOCAL/Photon 规则见 DESIGN 的 Authorization）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
 - `cron`：
   - `ensure(key, …)` 创建或刷新自有 job `muse-<key>`（launcher 为 `scripts/hermes-muse-<key>.py`）；
   - `job(key)` 按 cron key 找自有 job；`pause`、`wake`、`jobs`、`owned_jobs`、`executions`；

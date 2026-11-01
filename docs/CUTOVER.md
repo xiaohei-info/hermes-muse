@@ -42,3 +42,10 @@ jobs the rollback paused (`muse-health`, `muse-deliver`) and leaves pauses you s
 
 Residual risk: 0.3.x does not dedupe against sent history, so an event that arrives after the rollback
 can still be notified twice; the bridge only guarantees that what v2 already sent is not sent again.
+
+## Windows acceptance
+
+With Hermes on `PYTHONPATH` and `HERMES_SOURCE` pointing to its checkout, run
+`python tests/native_windows_contract.py` with scratch `HERMES_HOME` and `TMPDIR`,
+never the active profile. Local NTFS homes with spaces and non-ASCII names are covered;
+subst drives, mapped drives, OneDrive and 8.3 path names remain untested.
