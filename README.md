@@ -1,4 +1,4 @@
-# Hermes Muse 0.4.6
+# Hermes Muse 0.4.7
 
 [简体中文](README.zh-CN.md) · [Design](docs/DESIGN.md) · [Interface](skills/companion/references/interface.md) · [Acceptance](docs/ACCEPTANCE.md) · [Changelog](CHANGELOG.md)
 
