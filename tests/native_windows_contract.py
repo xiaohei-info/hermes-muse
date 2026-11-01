@@ -127,7 +127,7 @@ def main():
 
         # A separate cron-side process holds the shared locks longer than LK_LOCK's first retry window.
         probe = base / "contend.py"
-        probe.write_text("import sys,time\nfrom pathlib import Path\nsys.path.insert(0,sys.argv[1])\nfrom hermes_muse.host import HostAdapter\nfrom hermes_muse.kernel.store.bridge import v1_lock\nh=Path(sys.argv[2])\nwith v1_lock(h/'muse'), HostAdapter(h).cron.lock():\n print('locked',flush=True)\n time.sleep(11)\n", encoding="utf-8")
+        probe.write_text("import sys,time\nfrom pathlib import Path\nsys.path.insert(0,sys.argv[1])\nfrom hermes_muse.host import HostAdapter\nfrom hermes_muse.locks import file_lock\nh=Path(sys.argv[2])\nwith file_lock(h/'muse/mutations.lock'), HostAdapter(h).cron.lock():\n print('locked',flush=True)\n time.sleep(11)\n", encoding="utf-8")
         process = subprocess.Popen([sys.executable, str(probe), str(ROOT), str(home)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             assert process.stdout.readline().strip() == "locked"
@@ -144,7 +144,7 @@ def main():
             process.stderr.close()
         assert call("goal_update", {"goal_id": goal_id, "status": "cancelled"})["ok"]
         assert read_goal(home, goal_id)[0]["status"] == "cancelled"
-        print("PASS bridge/user/cron shared locks serialize beyond 10s without EDEADLOCK")
+        print("PASS user/cron shared locks serialize beyond 10s without EDEADLOCK")
 
         # Execute every generated owned launcher, with actual host APIs but no scheduler or transport.
         for key in ("memory-upkeep", "proactive-watch", "nightly-review", "feed-pulse", "weekly-governance-review", "health"):

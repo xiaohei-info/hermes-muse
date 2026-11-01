@@ -372,6 +372,9 @@ def part_rollback(home, ids, adapter):
     check("cutover: preflight backup (SQLite via backup API) and probes; verify reports A4/A7",
           copied > 0 and pre["probes"] and set(verify) == {"alert", "A4_probes", "A7_signal_watermark"},
           {"entities": copied, "A4": verify["A4_probes"]["pass"], "A7": verify["A7_signal_watermark"]})
+    if os.name == "nt":
+        print("SKIP historical 0.3.x rollback and cancellation: bridge is POSIX-only")
+        return
     out = cutover.rollback(adapter)
     jobs = {j["id"]: j for j in list_jobs(include_disabled=True)}
     restored = all(jobs[ids[k]]["prompt"].startswith(f"[hermes-muse:abc123:{k}]") for k in V1_KEYS)

@@ -37,7 +37,7 @@ def main():
                 ('classic-unknown', 'local', 'unknown', 'dm', None),
                 ('unknown-origin', 'cli', 'unknown', 'dm', None),
                 ('import', 'local', 'imported', 'dm', None), ('background', 'local', 'cron', 'dm', None),
-                ('flipped', 'cli', 'kanban', 'dm', None), ('child', 'local', 'cli', 'dm', 'cli'),
+                ('flipped', 'cli', 'kanban', 'dm', None), ('child', 'subagent', 'subagent', 'dm', 'cli'),
                 ('hidden-session', 'local', 'cli', 'dm', None),
                 ('group', 'local', 'cli', 'group', None), ('photon', 'photon', 'photon', 'dm', None)]]
             db.executemany('INSERT INTO sessions(id,source,created_source,chat_type,parent_session_id,started_at) VALUES(?,?,?,?,?,0)', cases)
@@ -102,6 +102,27 @@ def main():
             clear_session_vars(tokens)
         assert adapter.caller(session_id='cli', parent_session_id='parent') == 'child'
         assert classify('local') == 'unclassified'
+        # Compression and /branch keep user authority on every surface; lineage is not delegation.
+        continued = {f'{kind}-{s}': s for kind in ('compression', 'branch')
+                     for s in ('local', 'cli', 'tui', 'gui', 'acp', 'photon', 'telegram')}
+        with closing(sqlite3.connect(home / 'state.db')) as db, db:
+            for sid, source in continued.items():
+                db.execute('INSERT INTO sessions(id,source,created_source,chat_type,parent_session_id,started_at) VALUES(?,?,?,?,?,0)',
+                           (sid, source, 'cli' if source == 'local' else source, 'dm', 'parent'))
+                db.execute('INSERT INTO messages(session_id,role,content,timestamp,message_uid) VALUES(?,?,?,?,?)',
+                           (sid, 'user', 'TEST ONLY ' + sid, 150, sid))
+        for sid, source in continued.items():
+            assert adapter.caller(session_id=sid) == 'user', sid
+        continued_turns = [r for r in adapter.sessions.user_turns(0) if r['session_id'] in continued]
+        assert {r['session_id'] for r in continued_turns} == set(continued)
+        for row in continued_turns:
+            assert adapter.sessions.read(row['ref'])['available'], row
+        k.store.set_meta('intake_since', 0)
+        intake.capture(k, 200)
+        assert set(continued) <= {e['payload']['session_id'] for e in k.store.query('signal')}
+        with closing(sqlite3.connect(home / 'state.db')) as db, db:
+            for sid in continued:
+                db.execute('DELETE FROM sessions WHERE id=?', (sid,))
         # Old native schemas retain their existing source policy, never infer LOCAL provenance.
         with closing(sqlite3.connect(home / 'state.db')) as db, db:
             for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions' AND sql LIKE '%created_source%'").fetchall():
@@ -110,8 +131,14 @@ def main():
         assert {r['session_id'] for r in adapter.sessions.user_turns(0)} == {'flipped', 'photon', 'reserved', 'unknown-origin'}
         assert adapter.caller(session_id='cli') == 'other'
         assert not adapter.faults, list(adapter.faults)
-    print('LOCAL native authority, intake, read, registered tool and producer exclusions PASS')
+    print('PASS LOCAL native authority, intake, read, tools, compression/branch and producer exclusions')
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f'FAIL local_session_acceptance: {exc}')
+        print('RESULT FAIL local_session_acceptance')
+        raise
+    print('RESULT PASS local_session_acceptance')
