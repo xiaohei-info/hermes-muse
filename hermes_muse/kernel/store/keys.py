@@ -1,5 +1,6 @@
 """Natural keys derived by code. Notifier (WP4) and the v1 migration must share these."""
 import hashlib
+import json
 import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -8,6 +9,24 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 # and their `source:` copies are not sources: they are never due and never counted.
 SOURCE_ID = re.compile(r"(?=.{3,64}\Z)(?!source:)[a-z0-9][a-z0-9_.@-]*:[a-z0-9_.:@-]+")
 REFS = (re.compile(r"^gmail:(?:message|thread):([\w-]+)$", re.I), re.compile(r"^mail:<?([^<>\s]+)>?$", re.I))
+
+
+def source_key(identity):
+    """Stable per-resource registry key from a complete legacy identity, never from prose or a legacy id.
+
+    Keep account/connection/resource opaque and case-sensitive; do not collapse inbox and all-mail scopes.
+    Unknown resource kinds need explicit registration instead of guessing a connector or access scope.
+    """
+    if not isinstance(identity, dict) or any(not isinstance(identity.get(k), str) or not identity[k].strip()
+                                             for k in ("connection", "account", "resource")):
+        return None
+    kind = identity["resource"].partition(":")[0]
+    kind = {"calendars": "calendar"}.get(kind, kind)
+    if kind not in {"mail", "calendar", "reminders", "web", "rss"}:
+        return None
+    raw = json.dumps({k: identity[k] for k in ("connection", "account", "resource")}, sort_keys=True,
+                     ensure_ascii=False, separators=(",", ":"))
+    return kind + ":" + hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
 def upstream(value):

@@ -3,7 +3,7 @@ import logging
 import time
 
 from ..host import resolve_home
-from . import goals, intake, notifier, packets, runs
+from . import goals, intake, notifier, packets, runs, sources
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -72,6 +72,7 @@ class Kernel:
                 log.warning("Muse kernel tick step %s failed: %s", name, exc)
                 errors[name] = f"{type(exc).__name__}: {exc}"
 
+        step("sources_registered", lambda: sources.bootstrap(self.store, now))
         step("goals_synced", lambda: goals.sync(self, now))
         step("signals_captured", lambda: intake.capture(self, now))
         step("receipts", lambda: notifier.reconcile(self, now))

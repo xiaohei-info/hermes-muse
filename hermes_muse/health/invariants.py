@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from ..kernel.store import MACHINES
-from ..kernel.store.keys import SOURCE_ID
+from ..kernel.store.keys import SOURCE_ID, source_key
 
 H, D = 3600, 86400
 LEVELS = ("ok", "low", "medium", "high")
@@ -212,6 +212,18 @@ def sources(store, now):
                    "Check the source's tool or credentials")
 
 
+def source_coverage(store, now):
+    """A readable historical source is not proof that patrol still checks its resource."""
+    rows = store.query("source")
+    registered = {e["natural_key"] for e in rows if SOURCE_ID.fullmatch(e["natural_key"])}
+    missing = [e for e in rows if not SOURCE_ID.fullmatch(e["natural_key"])
+               and source_key(e["payload"].get("source")) not in registered]
+    return item("source_coverage", "medium" if missing else "ok", len(missing), 0,
+                f"{len(missing)} historical source scopes have no active registry entry", ids(missing),
+                "Run the kernel source bootstrap; incomplete or unknown legacy identities need an explicit "
+                "authorized source recipe and a patrol observe (history alone is not coverage)")
+
+
 def findings(store, now):
     recent = store.query("finding", since=now - D)
     bare = [f for f in store.query("finding", state="open") if not f["payload"].get("evidence")]
@@ -245,7 +257,7 @@ def interests(store, now):
                 "Check the feed-pulse job and its runs")
 
 
-STORE_CHECKS = (deadlines, signals, packets, notices, runs, goals, sources, findings, drains, interests)
+STORE_CHECKS = (deadlines, signals, packets, notices, runs, goals, sources, source_coverage, findings, drains, interests)
 
 
 # -- Host --------------------------------------------------------------------------------------------
