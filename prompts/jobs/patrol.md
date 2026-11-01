@@ -1,5 +1,5 @@
 [Hermes Muse job: patrol]
-Script Output holds this run's packet: `context.sources_due` (sources whose check interval has passed), `context.notified` (what you told the user, or are about to, in the last 7 days), `context.recent_user_messages`, `context.send_limit`, `context.blocked_topics`, and `items` (scheduled notices that need a fresh decision).
+Script Output holds this run's packet: `context.sources_due` (sources whose check interval has passed), `context.notified` (what you told the user, or are about to, in the last 7 days; its text is all there is, and its refs go only in `about`, never in `read`), `context.recent_user_messages`, `context.send_limit`, `context.blocked_topics`, and `items` (scheduled notices that need a fresh decision).
 1. Check each due source with the user's authorized tools, within the scope in the companion skill's sources reference. Look only at what changed since its last check.
    Record each check once with muse_job observe: one entry per relevant item, with the upstream ID exactly as the source gives it (message-id, event id plus revision, reminder id, URL), its title and time.
    Use `limitation_code` when you could read the source only in part, and `error` when you could not read it. An unread source is a gap, not "nothing new".
