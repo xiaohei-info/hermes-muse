@@ -1,3 +1,18 @@
+# 0.4.7 — A Muse delivery is the assistant telling the user (2026-11-01)
+
+- Main session: a `muse-*` delivery is something the assistant just found out, and its reply is how the user hears
+  it. Hermes stores every bot-chat delivery as a user-role row that starts with its fixed "[Cronjob …]" header and
+  Desktop shows it as a bubble; a reply of `[SILENT]` left the user with only that bubble. The system prompt section
+  and the communication reference now ask for one or two first-person sentences tied to the conversation for a
+  notice, a watch result or the weekly digest, what is affected and who acts for a Health problem, and `[SILENT]`
+  only when nothing is new to the user (a recovery they never heard about, a patrol run's own output, something
+  already said). No review, no "not re-checked" notes, no job or sender names.
+- The bubble itself stays: no setting, hook or plugin API hides or retypes it, and an agent `muse-deliver` or a
+  platform route does not help (see DESIGN, "What the main session receives"). Removing it needs a Hermes change in
+  the bot-chat lane.
+- Patrol: `context.notified` refs are only for `about`. The prompt says so, and `muse_job read` on one now answers
+  that its text is in `context.notified` instead of a bare not-found.
+
 # 0.4.6 — Delivered notices are the assistant's own words; cold-start load off the critical path; one event, one notice; one gate to the model (2026-10-31)
 
 - Main session: what a `muse-*` job delivers (notices, a watch result, the weekly digest, a health alert) is a message
