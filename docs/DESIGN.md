@@ -147,7 +147,8 @@ counts and state names come from code.
    key), dedupes against 7 days of history and gates it. One real event often reaches Muse through several sources
    (the mail, the PR comment and a news item about one reply; one CI failure per push), each with its own upstream
    id, and only the model can tell they are one event. So the packet lists the notified events of the last 7 days
-   (`context.notified`, refs), and the model answers an item about one of them with `about` that ref: `skip`, or
+   (`context.notified`: ref, title and a clipped text; a ref is only for `about`, and `read` on one is refused with
+   that hint), and the model answers an item about one of them with `about` that ref: `skip`, or
    `supersede` for a real development (`send` with `about` is refused). Code then records the item's key as an alias
    of the event, and an aliased key never drafts a new notice for 7 days. Code-derived thread identity was rejected:
    Muse owns no connectors and cannot tell a provider id, a comment URL and a news id apart; topic grouping was
@@ -187,17 +188,27 @@ counts and state names come from code.
 
 ## What the main session receives
 
-Hermes has no way for a plugin or a no-agent job to speak as the assistant without a turn: `post_message` refuses
-calls outside a session, `inject_message` queues a user turn, and the cron transcript mirror is a user-role row on
-platform sessions only. The `bot-chat` route (the default, and the only one for a Desktop-only profile) admits a
-job's stdout as an internal Bot Chat turn with Hermes' fixed prefix ("[Cronjob "<name>" output — scheduled job, not
-the user. Review it, act on anything that needs action, and summarize for the chat.]"). Platform routes start no
-turn but bypass the conversation and carry Hermes' "Cronjob Response" wrapper. So Muse keeps `bot-chat` and fixes
-the meaning of that turn on its side: the system prompt section and the communication reference say that whatever a
-`muse-*` job delivers (notices, a watch result, the weekly digest, a health alert) is a message the assistant has
-already sent the user in its own voice. The main session answers exactly `[SILENT]` (Hermes drops a bare silence
-marker on internal turns) and speaks only for a decision or an action it can take now, as itself; it never repeats,
-reviews or adds verification notes. Notices are written in the assistant's voice and carry no Muse signature.
+A Muse delivery on the `bot-chat` route (the default, and the only one for a Desktop-only profile) reaches the
+conversation as an internal Bot Chat turn: Hermes stores the job's stdout as a `role=user` row
+(`display_kind=internal_notification`) whose content begins with Hermes' fixed header ("[Cronjob "<name>" output —
+scheduled job, not the user. Review it, act on anything that needs action, and summarize for the chat.]"), and
+Desktop renders that row as an ordinary message bubble. The header is part of the stored text, so every client
+shows it. Muse cannot replace it from the plugin side (checked against Hermes 0.22): the bot-chat lane has no
+setting (`cron.wrap_response` only covers platform routes), an agent job is wrapped the same way, the inbound
+hook `pre_gateway_dispatch` skips internal turns and the row is stored at admission, before any turn hook runs,
+`inject_message` queues a user turn,
+`post_message` is an unsaved notification outside a session's turn, and platform routes leave this conversation
+(their transcript mirror is a user-role "[Cron delivery: …]" row). Hiding or retyping the row needs a Hermes change
+in the bot-chat lane: a producer card kind for cron results, rendered as a notice row rather than a user bubble.
+
+So the assistant's voice is the main session's reply to that turn. The system prompt section and the communication
+reference treat a `muse-*` delivery as something the assistant just found out: for a notice, a watch result or the
+weekly digest it tells the user in one or two first-person sentences tied to the conversation, then any decision or
+action; for a Health problem it says what is affected and who does what next; it answers exactly `[SILENT]`
+(Hermes drops a bare silence marker on internal turns) only when nothing is new to the user, such as a recovery they
+never heard about, a patrol run's own output, or something already said in the conversation. It never reviews the
+delivery, mentions checking it, or names a job, a sender or Muse. Notices themselves are written in the assistant's
+voice and carry no Muse signature, so the delivered text also reads as the assistant's.
 
 ## Health
 

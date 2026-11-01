@@ -123,7 +123,7 @@ owned job 由 `install.JOBS` 定义，cron key 沿用 0.3.x 的名字，这样 j
    - 3 次 packet 或 72h 后仍未处置的 signal 转为 `parked`，计入 Health，**不阻塞水位**；
    - 记忆整理：有条目时 `upkeep.full` 经 `host.memory.stores()` 读用量，任一 store ≥90% 时 packet 带 `context.memory_full`（每天最多 3 次）。模型只能在保存新事实的同一个原生 memory batch 里**合并重复或缩短冗长条目**，不得直接删除；`hooks.pre_tool` 否决违规写入，`hooks.post_tool` 用前后快照由 `upkeep.record` 把改动写进 `meta.memory_changes` 和当天的 `memory/<日期>.md`。仍放不下的事实不作答，下个周期重试。Muse 从不写记忆文件，`memory.write_approval` 保持关闭（它会把 cron 的每次写入都暂存待批）。
 2. **Patrol → Notice → 投递**：
-   - patrol 每轮都唤醒，因为外部来源只有模型能读。packet 包含 `context.sources_due`（已过最小检查间隔的来源，最久未查的在前，最多 `packets.SOURCES_DUE`（20）个）、`context.notified`（7 天内的 LIVE Notice，即已告诉或将告诉用户的事件，最新的在前，最多 `notifier.NOTIFIED`（20）条，ref 为 notice id）和到期的 Notice（证据超过 1 天，或可发送已超过 6h）；
+   - patrol 每轮都唤醒，因为外部来源只有模型能读。packet 包含 `context.sources_due`（已过最小检查间隔的来源，最久未查的在前，最多 `packets.SOURCES_DUE`（20）个）、`context.notified`（7 天内的 LIVE Notice，即已告诉或将告诉用户的事件，最新的在前，最多 `notifier.NOTIFIED`（20）条，ref 为 notice id；正文摘要就在 context 里，ref 只用于 `about`，`read` 它会被拒绝并指向 `about`）和到期的 Notice（证据超过 1 天，或可发送已超过 6h）；
    - 模型先 `observe`，得到 `o1, o2…` 这些 ref（`notified` 给出它已属于的事件），再 `submit` verdict、text、priority、topic，以及可选的 `about`；
    - 同一事件常经多个来源到达（邮件、PR 评论、新闻；每次 push 一条 CI 失败），各有自己的上游 ID，只有模型能判断它们是一件事。属于 `context.notified` 中某事件的条目答 `about=<ref>`：`skip` 时 `notifier.alias` 把该条目的 notice key 记为事件的别名；`supersede` 时更新那个事件（新一代，并记别名）；`send` 带 `about` 被拒绝。`draft()` 遇到 7 天内某 LIVE 事件的别名时返回该事件（`existing`），所以别名不会再产生通知；`observe` 与 Feed 的已通知判断都用 `notifier.known`（自身 key 或别名）。不采用代码推导的线程身份（Muse 没有连接器，分不清 provider ID、评论 URL 和新闻 ID）和 topic 归并（topic 是会漂移的自由文本）；
    - `notifier.decide()` → `draft()` 用 notice key 去重 → `schedule()` 由 `gate()` 计算 `next_eligible`。门控规则：
@@ -131,7 +131,7 @@ owned job 由 `install.JOBS` 定义，cron key 沿用 0.3.x 的名字，这样 j
      - urgent 可以越过静默时段，但受 `urgent_per_day` 约束（默认 2），超出后按 time_sensitive 处理；
      - topic 在 blocked_topics 中的直接撤回（`goal-fade` 保留给淡出询问）。
    - `tick` 和主会话 hooks 都不投递。只有 owned no_agent job `muse-deliver`（每 10 分钟）投递：它的 run 先 tick，再由 `entry.deliver` 读到本次宿主 execution（claimed/running；读不到就静默，不认领），`notifier.claim()` 在一个事务里按 `gate()` 复查静默时段、预算、`urgent_per_day` 和 blocked_topics，把到期 Notice 认领为 `sending`（写入 `delivery_key`、`job_id`、`execution_id`），每轮最多 `PER_MESSAGE`（5）条，`notifier.message()` 用分隔线拼成一条消息（助手本人在说话，不加署名；只有末行可能被解析成 Hermes 的 `{"wakeAgent": false}` 门时才补一行分隔，任何通知正文都不能让自己的投递静默），作为 stdout 由 Hermes 投到该 job 的路由；
-   - 主会话收到的是 Hermes 固定前缀 + 消息正文的 Bot Chat 内部轮次（`[Cronjob "muse-deliver" output — … Review it, act on anything that needs action, and summarize for the chat.]`）。Hermes 没有让插件或 no_agent job 以助手身份直接发言而不起轮次的接口（`post_message` 在会话外拒绝，`inject_message` 排入一个 user 轮次，cron 镜像只写 user 行且只到平台会话），平台路由不起轮次但绕开这段对话、还带 Hermes 的 "Cronjob Response" 包装。所以保留 `bot-chat`，由 `prompts/system.md` 和 `communication.md` 规定语义：`muse-*` job 投进来的内容（通知、watch 结果、周报、health 告警）就是助手已经用自己的口吻对用户说过的话；主会话不复述、不评审、不写核实说明，只答 `[SILENT]`（Hermes 在内部轮次上丢弃单独的静默标记），只有需要用户决定或助手现在能动手时才以助手身份接话；
+   - 主会话收到的是 Bot Chat 内部轮次：Hermes 把 stdout 存成 `role=user`、`display_kind=internal_notification` 的一行，content 以固定前缀开头（`[Cronjob "muse-deliver" output — scheduled job, not the user. Review it, act on anything that needs action, and summarize for the chat.]`，`cron/scheduler_delivery.py` 的 `bot_chat_message`），Desktop 把它渲染成普通气泡，所有客户端都看得到。插件侧换不掉它：bot-chat 通道没有配置项（`cron.wrap_response` 只管平台路由的 "Cronjob Response" 包装），agent job 同样被包装，`pre_gateway_dispatch` 不处理内部轮次且该行在 admission 时就已入库，`inject_message` 排入 user 轮次，`post_message` 在会话轮次之外拒绝、在本地会话里只是不入库的通知，平台路由离开这段对话（镜像也只是 user 行）。去掉气泡需要 Hermes 在 bot-chat 通道支持 cron 结果的 producer card（渲染为通知行而非 user 气泡），Muse 不改宿主。所以保留 `bot-chat`，助手的声音就是主会话对该轮的回复，由 `prompts/system.md` 和 `communication.md` 规定：`muse-*` 投递是助手刚得知的事；通知、watch 结果、周报用一两句第一人称接上对话说出要点，再给需要的决定或动作；health 告警说清影响和下一步由谁做什么；只有对用户没有新信息时才答 `[SILENT]`（Hermes 在内部轮次上丢弃单独的静默标记），即用户没听说过的问题的恢复、patrol 自身的输出、本对话已说过的事；不评审投递、不提核对与否、不点名 job、发送方或 Muse；
    - 偏好 `deliver` 有值且与 job 路由不同时，deliver run 先用 `cron.set_route` 改 job 的路由，本轮静默（Hermes 按本轮开始时的路由投递），下一轮起走新路由；`null` 保留 job 现有路由；
    - `schedule()` 排出一条立即可发的 urgent 时，用 `cron.wake` 唤醒 `muse-deliver`，不等下一个 10 分钟；
    - `reconcile()`（在 tick 中）按 `execution_id` 读该 run 的 delivery receipt（`Deliver.receipt`），把 Notice 推进到 `sent`、`failed` 或 `unknown`；任何情况下都不重发；
@@ -539,6 +539,7 @@ Hermes 宿主
 - **记忆快照只在同一进程内配对**：`pre_tool_call` 的快照存在 hooks 的进程内存里；若别的插件否决了该调用、`post_tool_call` 不来，快照留到进程结束。
 - **读到的内容文件已脱敏**：`read` 返回的文件正文经过统一脱敏；模型据此 `content_write` 回写时，原文里像凭据的值会变成 `[REDACTED]`。内容文件本不该存凭据，所以接受。
 - **`about` 依赖模型选对 ref**：模型偶尔把正文写给了另一个条目；`about` 指错时，错的那个事件会多一个别名。别名只抑制 7 天内的再通知，不改已发内容。
+- **Bot Chat 里的 Muse 投递带宿主气泡**：Hermes 把每条 bot-chat 投递存成带 `[Cronjob …]` 前缀的 user 行并按普通气泡渲染，插件侧无法隐藏或改写（见第 2.3 节）。用户先看到这个气泡，再看到主会话用助手口吻的回复；要去掉它需宿主支持。
 - **Feed 记录与正文之间崩溃会丢正文**：`feed` 实体写入后、`records.write_feed` 落盘前如果崩溃，正文会丢失，而且无法恢复：重新提交会返回 `existing`，不再写正文。
 
 **刻意的取舍**：
