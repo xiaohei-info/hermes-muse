@@ -234,6 +234,8 @@ def read(k, packet_id, ref, offset=0, now=None):
     packet = packet_of(k, packet_id)
     item = next((i for i in packet["payload"]["items"] if i["ref"] == ref), None)
     if item is None or not item.get("pointer"):
+        if ref in {n["ref"] for n in (packet["payload"].get("context") or {}).get("notified", ())}:
+            raise KeyError(f"{ref!r} is a context.notified event: its text is in context.notified; name it only in `about`")
         raise KeyError(f"{ref!r} has no original text in this packet")
     allowed = min(READ_MAX, READ_TOTAL - packet["payload"]["reads"].get(ref, 0))
     if allowed <= 0:
