@@ -959,11 +959,47 @@ def part_native(base):
           {"state": sent["state"], "faults": list(k.adapter.faults)[-2:]})
 
 
+def part_source_upgrade(base):
+    host = FakeHost(lambda: T0)
+    k = Kernel(make_home(base), adapter=host, clock=lambda: T0)
+    # Synthetic migrated history: preserve the resource identity and successful watermark.
+    identity = {"connection": "imap", "account": "work", "resource": "mail:inbox"}
+    old = k.store.create("source", "source-0123456789abcdef", {"source": identity,
+                         "last_checked": T0 - 4 * H, "last_success": T0 - 4 * H, "cursor": "opaque"}, now=T0 - 4 * H)
+    before = k.store.get(old["id"])
+    lost = invariants.source_coverage(k.store, T0)
+    check("SRC migration coverage is visible before bootstrap", lost["level"] == "medium" and lost["value"] == 1)
+    k.tick()
+    due = sources.due(k.store, T0)
+    check("SRC upgrade bootstraps structured history preserving scope and watermarks",
+          len(due) == 1 and due[0]["source"] == identity and due[0]["last_success"] == T0 - 4 * H
+          and due[0]["cursor"] == "opaque" and k.store.get(old["id"]) == before, due)
+    check("SRC repeated bootstrap leaves history and new registry unchanged", k.tick().get("sources_registered") == 0)
+    # Distinct resource scopes must not collide; incomplete/unknown identities must not be guessed.
+    from hermes_muse.kernel.store.keys import source_key
+    check("SRC keys are deterministic, scope-specific and reject incomplete identities",
+          source_key(identity) == source_key(dict(reversed(list(identity.items()))))
+          and source_key(identity) != source_key({**identity, "resource": "mail:all"})
+          and source_key({"resource": "mail:inbox"}) is None
+          and source_key({**identity, "resource": "unknown:all"}) is None)
+    notices_before = k.store.query("notice")
+    sources.bootstrap(k.store, T0 + H)
+    check("SRC bootstrap never changes delivery history", k.store.query("notice") == notices_before)
+    if due:
+        active = due[0]["source_id"]
+        sources.record(k.store, active, now=T0)
+        k.tick()
+        check("SRC observation advances only active registry; bootstrap never rewinds it",
+              not sources.due(k.store, T0) and k.store.get(old["id"]) == before
+              and invariants.source_coverage(k.store, T0)["level"] == "ok")
+    return k
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="muse-kernel-") as temporary:
         base = Path(temporary).resolve()
         kernels = []
-        for name, part in (("intake", part_intake), ("notifier", part_notifier), ("goals", part_goals), ("drain", part_drain),
+        for name, part in (("source_upgrade", part_source_upgrade), ("intake", part_intake), ("notifier", part_notifier), ("goals", part_goals), ("drain", part_drain),
                            ("intake_drain", part_intake_drain), ("reviews", part_reviews), ("proposals", part_proposals), ("feed", part_feed), ("upkeep", part_upkeep)):
             (base / name).mkdir()
             result = part(base / name)
