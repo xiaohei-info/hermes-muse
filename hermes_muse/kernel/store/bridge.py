@@ -8,8 +8,10 @@
 - cursor(proactive-watch) = now; source_check.last_success takes the newer v2 watermark.
 Goals need nothing: GOAL.md is shared. Idempotent; --dry-run works on a scratch copy.
 """
+import fcntl
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -29,15 +31,17 @@ SETTLED = ("disposed", "parked")
 
 @contextmanager
 def v1_lock(muse):
-    from ...locks import file_lock
-
-    with file_lock(muse / "mutations.lock"):
+    fd = os.open(muse / "mutations.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
         yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
 
 
 def bridge(home, *, dry_run=False, now=None):
-    # Canonicalize the profile root like HostAdapter (macOS /var is an alias).
-    home = Path(home).resolve()
+    home = Path(home)
     if dry_run:
         with tempfile.TemporaryDirectory(prefix="muse-bridge-dry-") as scratch:
             (Path(scratch) / "muse").mkdir()

@@ -67,7 +67,7 @@ Hermes Muse 是一个独立的 Hermes 插件（standalone plugin，MIT）。它�
 1. **调用方只有一个分类函数**：`host.sessions.caller()`（经 `HostAdapter.caller(session_id, **host_kwargs)` 调用）返回 `user | cron | child | group | other`。工具和 hooks 都用它，Signal 捕获用同一份 `USER_SOURCES`。判定规则：
    - 会话行存在时，**存储的 `sessions.source` 决定**；本次调用的 platform 参数和继承来的 session 环境变量只能收紧，不能放宽；
    - 没有会话行时，只认宿主本次调用传入的 `platform` kwarg，单独的环境变量不算证据；
-   - 不在 `USER_SOURCES` 里（含空值、未分类值）一律是 `other`；群聊是 `group`；有父会话或处于委派上下文是 `child`。
+   - 不在 `USER_SOURCES` 里（含空值、未分类值）一律是 `other`；群聊是 `group`；显式委派调用上下文是 `child`，存储的父会话不改变压缩或 `/branch` 用户会话的授权。
    - 只有 `user` 构成授权，也只有 `user` 的轮次会收到注入。CLI/TUI 靠存储的 `sessions.source`（`cli`、`tui`）识别。
 2. **`user`（私聊主会话）**：可以使用 `muse_manage` 的全部 14 个动作。Goal 的状态和设置只能在这里修改。
 3. **`cron`（job run）** 只能做这些：
@@ -212,7 +212,7 @@ Hermes 宿主
   - surface、hooks、entry、install 只把参数映射成 kernel 函数调用（`surface_acceptance` S11 会检查）；
   - views、health 和 dashboard 只用 `Store(..., readonly=True)` 读。
   - 所有 natural_key 都在 `kernel/store/keys.py` 中派生，goal slug、watch 槽位和淡出询问键由 `goals` 派生。
-- `kernel/store/` 只依赖 stdlib；回滚桥的文件锁复用共享基础层 `locks.file_lock`，平台锁仍只在 `host.exclusive`。
+- `kernel/store/` 只依赖 stdlib。
 - `kernel/` 依赖 store、共享基础和 host：
   - 宿主调用经 `Kernel.adapter` 发出；
   - 可以引用 `host.sessions` 的纯函数和常量（`redact`、`excerpt`、`EXCERPT`、`USER_SOURCES`、`MACHINE_SOURCES`、`classify`）；
@@ -229,7 +229,7 @@ Hermes 宿主
 - `sessions`：
   - `user_turns(since, roles, limit)`：按来源白名单、私聊、脱敏、摘录返回会话轮次；
   - `read(ref, offset, length)`：单次 ≤12k，已脱敏；
-  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；原生 `local` + `created_source=cli/tui/gui/acp` 或严格匹配同一 session/principal/route 的不可变 LOCAL 交互创建回执；无回执的 unknown 拒绝；排除 child/group/hidden/机器或导入来源）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
+  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；LOCAL/Photon 规则见 DESIGN 的 Authorization）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
 - `cron`：
   - `ensure(key, …)` 创建或刷新自有 job `muse-<key>`（launcher 为 `scripts/hermes-muse-<key>.py`）；
   - `job(key)` 按 cron key 找自有 job；`pause`、`wake`、`jobs`、`owned_jobs`、`executions`；
@@ -553,4 +553,4 @@ Hermes 宿主
   - hooks 的“只在变化时注入”记在进程内存中，进程重启后摘要会再注入一次（`hooks.Hooks`）；
   - 加载记录按 pid：一个已退出加载进程的 pid 被复用时，记录要到下一次加载时才清掉（`HostAdapter.load_failed`）；
   - 记忆守卫只要求 remove 数不超过 patch 数，不核对内容是否真被合并；被删的原文已记录，可恢复（`upkeep.guard`）；
-  - Windows 没有 `dir_fd`/`O_NOFOLLOW`：内容路径逐级按属性拒绝 symlink/junction 后再按绝对路径使用，检查与使用之间换入的 junction 拦不住（`content_io._windows_directory`）。回滚桥复用同一文件锁，支持已有自定义 Windows 0.3.x 安装的回滚。
+  - Windows 没有 `dir_fd`/`O_NOFOLLOW`：内容路径逐级按属性拒绝 symlink/junction 后再按绝对路径使用，检查与使用之间换入的 junction 拦不住（`content_io._windows_directory`）；回滚桥 `bridge.py` 仍只支持 POSIX。

@@ -175,22 +175,6 @@ def local_surface(raw, session_id, route, chat_id, user_id):
         return "other"
 
 
-def native_continuation(raw, parent_id, end_reason):
-    """Native reset/compression metadata, never a delegated or branched task.
-
-    A sessions.parent_session_id is also used by user transcript rotation. It
-    is not the explicit caller(parent_session_id=...) delegation context.
-    """
-    try:
-        config = json.loads(raw or "{}")
-        if not isinstance(config, dict) or any(config.get(k) is not None for k in ("_delegate_from", "_branched_from")):
-            return False
-        return (end_reason in ("session_reset", "session_switch") and config.get("_reset_from") == parent_id
-                or end_reason == "compression")
-    except (ValueError, TypeError, RecursionError):
-        return False
-
-
 def private_user(db):
     """Shared authority/intake/read predicate; native provenance, never a caller override.
 
@@ -202,9 +186,10 @@ def private_user(db):
     labels = ",".join(f"'{s}'" for s in LOCAL_SURFACES)
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "state_meta" in tables and {"session_key", "chat_id", "user_id"} <= columns:
+        from hermes_state_local import POLICY_PREFIX
         db.create_function("muse_local_surface", 5, local_surface, deterministic=True)
         native = ("(SELECT muse_local_surface(value,s.id,s.session_key,s.chat_id,s.user_id) "
-                  "FROM state_meta WHERE key = 'gateway.local_policy.v1:' || s.id)")
+                  f"FROM state_meta WHERE key = '{POLICY_PREFIX}' || s.id)")
     if "created_source" in columns:
         source = f"CASE WHEN s.source = 'local' AND s.created_source IN ({labels}) THEN s.created_source ELSE s.source END"
         guards.append("(s.created_source IS NULL OR s.created_source = '' OR s.created_source IN ("
@@ -212,23 +197,6 @@ def private_user(db):
                       + f") OR (s.created_source = 'unknown' AND {native} IN ({labels})))")
     source = (f"CASE WHEN s.source IN ('local',{labels}) THEN "
               f"COALESCE(NULLIF({native},''),({source})) ELSE s.source END")
-    if "parent_session_id" in columns:
-        lineage = "COALESCE(s.parent_session_id,'') = ''"
-        # Messaging resets/compression preserve a native private route and
-        # principal. LOCAL receipt lineages need their own receipt validation;
-        # an inherited CLI source or merely a matching parent is insufficient.
-        if {"model_config", "end_reason", "session_key", "chat_id", "user_id", "created_source", "hidden"} <= columns:
-            db.create_function("muse_native_continuation", 3, native_continuation, deterministic=True)
-            lineage += (" OR EXISTS (SELECT 1 FROM sessions p WHERE p.id = s.parent_session_id "
-                        "AND s.source = p.source AND s.source NOT IN ('local'," + labels + ") "
-                        "AND COALESCE(p.created_source,'') IN (''," + ",".join(repr(s) for s in sorted(USER_SOURCES)) + ") "
-                        "AND COALESCE(p.hidden,0) = 0 "
-                        "AND LOWER(COALESCE(p.chat_type,'')) NOT IN (" + ",".join(repr(s) for s in GROUP_CHATS) + ") "
-                        "AND COALESCE(s.session_key,'') != '' AND s.session_key = p.session_key "
-                        "AND COALESCE(s.chat_id,'') != '' AND s.chat_id = p.chat_id "
-                        "AND COALESCE(s.user_id,'') != '' AND s.user_id = p.user_id "
-                        "AND muse_native_continuation(s.model_config,p.id,p.end_reason))")
-        guards.append("(" + lineage + ")")
     if "hidden" in columns:
         guards.append("COALESCE(s.hidden,0) = 0")
     predicate = PRIVATE_USER.replace("s.source", f"({source})")

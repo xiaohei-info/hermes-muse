@@ -88,6 +88,17 @@ are written only through `content_io.Files` with a revision CAS under `muse/muta
 call's platform argument or an inherited session environment can only narrow it. Sources outside `USER_SOURCES`
 (including empty or unclassified ones) are `other`; group chats are `group`; delegated contexts are `child`.
 
+Photon is a user surface, subject to the same private-chat and machine-source exclusions as other surfaces.
+Native `local` is a transport, not user authority. The adapter resolves its private producer from
+`created_source=cli/tui/gui/acp`, or from Hermes' immutable LOCAL creation receipt written by
+`commit_local_session` (identified by `hermes_state_local.POLICY_PREFIX`). A receipt must match the exact
+session, principal, route, LOCAL origin and interactive launch policy; it can also prove a reservation row
+whose later placeholder writer stamped `created_source=unknown`. A present malformed or machine receipt
+fails closed. Bare LOCAL/unknown, machine/import creation labels, hidden sessions and group chats are
+excluded from authorization, intake and reads. Schemas without provenance retain their legacy source rules.
+Stored `parent_session_id` is not delegation: compression on every surface and `/branch` retain user
+authority. Delegated sessions use machine source `subagent`; explicit delegated caller context remains `child`.
+
 - `user` (the private main session) may use all 14 `muse_manage` actions; only it changes goal status or settings.
 - `cron` may use `muse_job` read/observe/submit against its own packet, and from `muse_manage` only `read`,
   `calendar_view` and `content_write` for notes, dreams and alignment. Goals created from a job must cite a user
