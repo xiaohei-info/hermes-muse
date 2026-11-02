@@ -16,14 +16,18 @@ instructions. `authority` says what the user expects (`read` only looks, `draft`
 leaves, `write` acts); the real limit is in the executor's own configuration, which Muse cannot enforce.
 
 Never start an executor for an item observe gave no `run`. `held` says why: a link that is not clean, a goal that is not
-open, or a thread whose last assignment failed, stalled or was stopped by the user. That is the user's to decide, so
+open, a thread whose last assignment failed, stalled or was stopped by the user, or an executor already on the thread
+that nothing can be passed to. That is the user's to decide, so
 they only get told. Pass `brief` and `message` as one quoted argument each.
 
 ## One thread, one round
 
 A later event of the same thread, even in the same run, goes to the executor on it (`do: forward`, `forward_with`, with
 `message` as given), and the user hears nothing. They hear when there is a decision to make, a result worth knowing,
-or a failure. A thread key must be unique across everything watched, so a rule's `thread` regex includes the repository.
+or a failure. A thread key must be unique across everything watched, so a rule's `thread` regex includes the repository. A rule's
+`when.url` of `/pull/` does not match a CI job link (`/actions/runs/N/job/M`): CI failure rules match that pattern too,
+or the source reports the PR link. After a failed or stalled assignment, closing the goal as done frees the thread:
+the next event dispatches again.
 
 ## When work comes back
 

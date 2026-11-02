@@ -185,9 +185,11 @@ counts and state names come from code.
    (`rules.match`) and answers `observe` with what the rule requires; the model does not weigh it. For `dispatch` the
    patrol's model starts the executor with the user's tools and a brief of the ask, the authority and a link, never the
    event's text, then reports the handle; code makes the goal and the `assignment`. An executor cannot be called back, so
-   code decides before `observe` hands out a template (`assignments.blocker`): an item with no clean link (`https?://`, no
-   whitespace or shell metacharacters), a goal that is not open, or a thread whose last assignment failed, stalled or was
-   stopped by the user gets no template and `do: tell` with the reason. A later event of the thread, even in the same packet,
+   code decides before `observe` hands out a template (`assignments.blocker`): an item with no clean link (`https?://`,
+   no userinfo, whitespace or shell metacharacters, at most 300 characters, unchanged by redaction; only the url, never
+   a fallback to another field), a goal that is not open, or a thread whose last assignment failed, stalled or was
+   stopped by the user (until the user closes that goal as done) gets no template and `do: tell` with the reason; so
+   does a later event that cannot be passed on. A later event of the thread, even in the same packet,
    goes to that executor and is only recorded. A thread the user cancelled starts nothing under any rule, so a
    thread key must be globally unique. Only the patrol dispatches: intake only records progress on a goal it recognises.
    Muse runs no command, so the kernel has no shell and no host call was added. A rule's `thread` regex is the one place
