@@ -146,6 +146,24 @@ def main():
         assert host.sessions.job_of(f"cron_{job['id']}_20261029_120000") == job["id"]
         assert host.sessions.job_of("other-run") is None and host.sessions.job_of("chat") is None
 
+        # The canonical Bot Chat is born hidden and is the main session; any other hidden row stays excluded. The query
+        # must reach messages through sessions(source), not by scanning them.
+        from hermes_muse.host.sessions import BOT_CHAT, turns_query
+        from hermes_state import SessionDB
+        assert SessionDB.CANONICAL_BOT_CHAT_TITLE == BOT_CHAT
+        with closing(sqlite3.connect(home / "state.db")) as db, db:
+            db.execute("UPDATE sessions SET source='desktop', created_source='desktop', hidden=1 WHERE id='bot'")
+            db.execute("INSERT INTO sessions (id, source, created_source, chat_type, title, hidden, started_at) "
+                       "VALUES ('shelved','desktop','desktop','dm','Put away',1,0)")
+            for i, sid in enumerate(("bot", "shelved")):
+                db.execute("INSERT INTO messages (session_id, role, content, timestamp, message_uid) VALUES (?,'user','Hi',?,?)",
+                           (sid, time.time() + 10 + i, f"hidden-{sid}"))
+            sql, args = turns_query(db, 0, ("user",), 500)
+            plan = " | ".join(r[3] for r in db.execute("EXPLAIN QUERY PLAN " + sql, args))
+        assert host.caller(session_id="bot", platform="desktop") == "user" and host.caller(session_id="shelved", platform="desktop") == "other"
+        assert {t["session_id"] for t in host.sessions.user_turns(time.time())} == {"bot"}
+        assert "SEARCH s USING" in plan and "idx_messages_session " in plan and "SCAN m" not in plan and "idx_messages_display_page" not in plan, plan
+
         # deliver: the owned no-agent muse-deliver run prints the notices it claimed; Hermes delivers that stdout and the
         # receipt is read from the run's execution (native ledger, native Bot Chat key). Nothing is created per notice.
         from cron.executions import finish_execution, mark_execution_running
