@@ -5,13 +5,16 @@ user's tools and templates from RULES.md, and reports here.
 Nobody waits on a process: an assignment comes due, the patrol checks it with the `status` template and submits what it
 found. Hermes' own delegation (executor `native`) closes by code through HostAdapter.owners. `failed` ends one
 assignment; its goal stays open and the user is asked to retry (a new assignment, n + 1) or give up (cancel the goal).
+
+An executor cannot be called back once started, so whether an item may start one is decided before observe hands out
+its template (`blocker`), not when the ledger hears about it afterwards.
 """
 from datetime import datetime
 
 from .. import rules
 from . import goals, notifier
 from .common import D, H, patch
-from .store import keys
+from .store import keys, machine
 
 CHECK_EVERY = 2 * H
 MAX_UNANSWERED = 3  # patrol packets in a row that left a due assignment unanswered
@@ -81,38 +84,69 @@ def record(k, goal_id, *, executor, handle, expected_end=None, note=None, now):
     return e
 
 
+def current(k, rule, thread):
+    """(the open goal this rule and thread belong to, its live assignment); each None when there is none."""
+    auto = rule.get("goal") in (None, "auto")
+    goal = (goals.open_for_thread(k, thread) if thread else None) if auto else k.store.get(f"goal:{rule['goal']}")
+    goal = goal if goal and goal["state"] in goals.OPEN else None
+    return goal, goal and live_of(k, goal["natural_key"]) or None
+
+
+def blocker(k, rule, item, thread, goal):
+    """Why this item may not start its rule's executor, or None. Writes nothing. Observe gives no run template when there
+    is a reason, and dispatch refuses on the same one."""
+    if not rules.link(item):
+        return "the item has no clean http(s) link to give the executor"
+    auto = rule.get("goal") in (None, "auto")
+    if not auto and not goal:
+        return f"goal {rule['goal']!r} is not open"
+    if auto and not goal and goals.dropped(k, thread):
+        return "the user cancelled this thread's goal"
+    rows = of_goal(k, rule["goal"]) if not auto else sorted(
+        (e for e in k.store.query("assignment") if e["payload"].get("thread_key") == thread),
+        key=lambda e: e["payload"].get("opened_at") or 0, reverse=True)
+    latest = next(iter(rows), None)
+    if latest and (latest["state"] in HOLDS or (goal and latest["state"] == "stopped" and latest["payload"].get("stopped_by"))):
+        return f"{latest['id']} {latest['state']}: the user decides what happens next"
+    return None
+
+
 def dispatch(k, item, r, now):
     """Patrol verdict `dispatch`: the model started the rule's executor with its template and reports the handle."""
     rule = item.get("rule") or {}
     if rule.get("do") != "dispatch":
-        raise ValueError("dispatch needs an item whose rule says do=dispatch; judge any other item with send or skip")
+        raise ValueError("an executor has this thread; answer `forwarded`" if rule.get("do") == "forward" else
+                         f"{item.get('held') or 'observe did not mark this item do=dispatch'}; judge it with send or skip")
     handle = str(r.get("handle") or "").strip()[:200]
     if not handle:
         raise ValueError("dispatch needs handle: what the executor's run template returned")
     if r.get("executor") not in (None, rule["executor"]):
         raise ValueError(f"this rule's executor is {rule['executor']!r}")
-    if rule.get("goal") not in (None, "auto"):
-        slug = rule["goal"]
-    else:
-        if not item.get("thread"):
-            raise ValueError("a rule's automatic goal needs an item with upstream_id or url")
-        slug = goals.for_thread(k, rule=rule["name"], thread=item["thread"], title=item["title"], criteria=rule["ask"], now=now)
-    latest = next(iter(of_goal(k, slug)), None)
-    if latest and latest["state"] in LIVE and latest["payload"].get("handle") != handle:
-        raise ValueError(f"{latest['id']} is already working on this; answer `forwarded` instead")
-    if latest and latest["state"] in HOLDS:
-        raise ValueError(f"{latest['id']} {latest['state']}: the user decides whether to retry; skip this item")
-    e = open(k, goal_id=slug, executor=rule["executor"], handle=handle, rule=rule["name"], thread=item.get("thread"),
-             tell=rule.get("tell") or "needed", authority=rule.get("authority"), by="patrol", now=now,
-             expected_end=end_time(k, r.get("expected_end"), now + rules.seconds(rule.get("expect") or rules.EXPECT), now))
+    thread = item.get("thread")
+    goal, live = current(k, rule, thread)
+    if live and live["payload"].get("handle") != handle:
+        raise ValueError(f"{live['id']} is already working on this; answer `forwarded` instead")
+    why = None if live else blocker(k, rule, item, thread, goal)
+    if why:
+        raise ValueError(f"{why}; skip this item")
+    slug = goal["natural_key"] if goal else rule["goal"] if rule["goal"] != "auto" else goals.for_thread(
+        k, rule=rule["name"], thread=thread, title=item["title"], criteria=rule["ask"], now=now)
+    default = now + rules.seconds(rule.get("expect") or rules.EXPECT)
+    try:
+        end = end_time(k, r.get("expected_end"), default, now)
+    except ValueError:  # the executor is running: a bad estimate must not lose its record
+        end = default
+    e = open(k, goal_id=slug, executor=rule["executor"], handle=handle, rule=rule["name"], thread=thread, expected_end=end,
+             tell=rule.get("tell") or "needed", authority=rule.get("authority"), by="patrol", now=now)
     return {"result": "existing" if e["existing"] else "dispatched", "assignment": e["id"], "goal": slug}
 
 
 def forward(k, item, now):
-    """Patrol verdict `forwarded`: a new item of a thread went to the executor with its `send` template."""
-    e = k.store.get(item.get("assignment") or "")
-    if not e or e["state"] not in LIVE:
-        raise ValueError("forwarded needs an item whose thread has a live assignment (see observe's answer)")
+    """Patrol verdict `forwarded`: a new item of a thread went to the executor with its `send` template. Looked up now,
+    since the executor may have been started by an earlier item of this very packet."""
+    _, e = current(k, item.get("rule") or {}, item.get("thread"))
+    if not e:
+        raise ValueError("forwarded needs a live assignment on this item's thread; dispatch the thread's first item, or skip")
     moved = patch(k.store, e["id"], expect=LIVE, reason="forward", now=now,
                   payload=lambda c: {"forwards": c["payload"].get("forwards", 0) + 1, "forwarded_at": now})
     # Not activity (by=patrol): an event arriving is not anyone moving the work forward.
@@ -169,7 +203,11 @@ def report(k, assignment_id, state, *, conclusion=None, evidence=None, question=
         state = "stalled"
     if state == e["state"] and state != "running":
         return {"result": "unchanged", "assignment": e["id"], "state": state}
+    if state != e["state"] and (e["state"], state) not in machine("assignment").edges:
+        legal = sorted(to for at, to in machine("assignment").edges if at == e["state"])
+        raise ValueError(f"state: this assignment is {e['state']}; it can only become {', '.join(legal)}")
     data = {"unanswered": 0, "checked_at": now, "expected_end": end, "stalled_told": state == "stalled",
+            **({"stopped_by": by} if state == "stopped" else {}),
             **{f: v for f, v in (("conclusion", conclusion), ("evidence", evidence), ("question", question)) if v}}
     moved = patch(k.store, e["id"], state, expect=(e["state"],), reason=f"report:{by}:{state}", payload=data, now=now,
                   deadline=next_check(end, now) if state == "running" else None)
@@ -197,8 +235,8 @@ def report(k, assignment_id, state, *, conclusion=None, evidence=None, question=
 
 def sweep(k, now):
     """Tick step: end what lost its goal, close native delegations from the host, give up on a patrol that stopped
-    answering, and tell the user about a question left waiting into `stalled`."""
-    counts = {"stopped": 0, "closed": 0, "lost": 0, "told": 0}
+    answering, tell the user about a question left waiting into `stalled`, and withdraw questions about closed goals."""
+    counts = {"stopped": 0, "closed": 0, "lost": 0, "told": 0, "withdrawn": 0}
     store = k.store
     for e in store.query("assignment", state=LIVE):
         p = e["payload"]
@@ -220,6 +258,12 @@ def sweep(k, now):
             if moved:
                 counts["told"] += 1
                 tell(k, moved, "stalled", told_text(k, moved, STALLED), priority="time_sensitive", now=now)
+    for e in store.query("notice", state=notifier.UNSENT):  # goals.fade withdraws its own
+        p = e["payload"]
+        if p.get("kind") == "ask" and p.get("goal_id") and p.get("topic") != notifier.FADE_TOPIC:
+            goal = store.get(f"goal:{p['goal_id']}")
+            if goal and goal["state"] not in goals.OPEN:
+                counts["withdrawn"] += bool(notifier.withdraw(k, e["id"], reason="goal_closed", now=now, by_code=True))
     return counts
 
 
@@ -258,28 +302,43 @@ def offered(k, items, now):
                   payload=lambda e: {"unanswered": e["payload"].get("unanswered", 0) + 1})
 
 
-def annotate(k, item, table):
-    """What the rules say about one observed item; stored on it and answered by observe. {} when no rule matches."""
+def annotate(k, item, table, earlier=()):
+    """What the rules say about one observed item, stored on it and answered by observe; {} when no rule matches. `earlier`
+    are this packet's previous items: one of them may be about to start the executor this item's thread needs.
+    `do` is final: dispatch (run and brief given), forward (an executor has the thread), ask, tell, ignore. A dispatch rule
+    that may not start anything now is `tell` with `held` saying why."""
     rule = rules.match(table["rules"], item)
     if not rule:
         return {}
     thread = rules.thread(rule, item)
     auto = rule["goal"] == "auto"
-    goal = (goals.open_for_thread(k, thread) if thread else None) if auto else k.store.get(f"goal:{rule['goal']}")
-    goal = goal if goal and goal["state"] in goals.OPEN else None
-    do = "ignore" if auto and thread and not goal and goals.dropped(k, rule["name"], thread) else rule["do"]
-    live = goal and do != "ignore" and live_of(k, goal["natural_key"]) or None
+    goal, live = current(k, rule, thread)
+    opener = next((o for o in earlier if (o.get("rule") or {}).get("do") == "dispatch"
+                   and (o["thread"] == thread if auto else o["rule"].get("goal") == rule["goal"])), None)
+    do, held = rule["do"], None
+    if auto and thread and not goal and goals.dropped(k, thread):
+        do = "ignore"
+    elif do != "ignore" and (live or opener):
+        do = "forward"
+    elif do == "dispatch":
+        held = blocker(k, rule, item, thread, goal)
+        do = "tell" if held else do
     kept = {f: rule.get(f) for f in ("name", "executor", "ask", "tell", "authority", "expect", "goal")}
-    item.update(rule={**kept, "do": do}, thread=thread, goal=goal and goal["natural_key"], assignment=live and live["id"])
+    item.update(rule={**kept, "do": do}, thread=thread, goal=goal and goal["natural_key"], assignment=live and live["id"], held=held)
     out = {"rule": rule["name"], "do": do, "thread": thread, "goal": item["goal"], "assignment": item["assignment"]}
-    templates = table["executors"].get((live and live["payload"].get("executor")) or rule.get("executor") or "", {})
-    if live:
-        out.update(forward_with=templates.get("send"), handle=live["payload"].get("handle"))
+    executor = (live and live["payload"].get("executor")) or (opener and opener["rule"].get("executor")) or rule.get("executor")
+    templates = table["executors"].get(executor or "", {})
+    if do == "forward":
+        note = rules.forward_note(item)
+        if note and templates.get("send"):
+            out.update(forward_with=templates["send"], message=note, **({"handle": live["payload"].get("handle")} if live else {"handle_from": opener["ref"]}))
+        else:
+            held = "nothing can be passed on: no clean link, or the executor has no send template; skip it"
     elif do == "dispatch":
         out.update(run=templates.get("run"), brief=rules.brief(rule, item))
-    elif rule.get("ask"):
+    elif do == "ask" and rule.get("ask"):
         out["ask"] = rule["ask"]
-    return out
+    return {**out, **({"held": held} if held else {})}
 
 
 def rule_context(k, items):

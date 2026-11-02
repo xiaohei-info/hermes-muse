@@ -3,7 +3,7 @@
 Shared layer, so Health can check the file without calling kernel business. Nothing here runs a command, reads a
 source or writes state. Matching belongs to code: the model does not judge whether a rule applies, it follows it.
 `thread` is the rule author's regex for the event thread (PR, ticket); Muse owns no connectors, so only the author
-can say how to read one from a URL. Without a rule, whether two items are one event stays the model's call (`about`).
+can say how to read one from a URL, and a thread key must be globally unique (include the repository). Without a rule, whether two items are one event stays the model's call (`about`).
 """
 import json
 import re
@@ -21,6 +21,7 @@ WHEN = ("source_id", "title", "url")
 EXPECT = "2h"
 DURATION = re.compile(r"([1-9][0-9]*)([mhd])")
 UNIT = {"m": 60, "h": 3600, "d": 86400}
+LINK = re.compile(r"https?://[A-Za-z0-9._~:/?#=%+,@-]+")  # no whitespace or shell metacharacters: it goes into a command
 EMPTY = {"executors": {}, "rules": []}
 
 
@@ -130,7 +131,18 @@ def thread(rule, item):
     return next((str(value) for value in fields if value), None)
 
 
+def link(item):
+    """The item's URL if it is safe to hand to an executor, else None. An outsider writes this text too, so it must fully
+    match LINK; a free-text upstream id never stands in for it."""
+    return next((str(v) for v in (item.get("url"), item.get("upstream_id")) if v and LINK.fullmatch(str(v))), None)
+
+
 def brief(rule, item):
-    """What an executor gets: the rule's ask, its authority and a link. The event's text never goes in: the executor
-    reads the original itself, so nothing an outsider wrote reaches its instructions through Muse."""
-    return f"{rule['ask']}\nAuthority: {rule['authority']}\nEvent: {item.get('url') or item.get('upstream_id')}"
+    """What an executor gets, only for an item with a `link`: the rule's ask, its authority and that link. The only outside
+    text in it is the checked link; the event's own text stays out, and the executor reads the original itself."""
+    return f"{rule['ask']}\nAuthority: {rule['authority']}\nEvent: {link(item)}"
+
+
+def forward_note(item):
+    """What a running executor gets about a later event of its thread, or None without a `link`."""
+    return link(item) and f"New event on this thread: {link(item)}"

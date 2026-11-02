@@ -241,7 +241,7 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | `ref` | required | string — a ref from this packet |
 | `disposition` | required | saved / ignored / context |
 | `facts` |  | array |
-| `goal_hint` |  | string — an open goal id, or 'new' to propose a goal |
+| `goal_hint` |  | string — the id of the context.open_goals entry this message is about, or 'new' to propose a goal |
 
 ### patrol
 

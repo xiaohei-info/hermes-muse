@@ -46,7 +46,7 @@ ASSIGNED = ("dispatch", "forwarded")  # patrol verdicts on an observed item that
 SCHEMAS = {  # design 2.6: one result shape per item kind group
     "intake": obj(["ref", "disposition"], ref=REF, disposition=enum(*intake.DISPOSITIONS),
                   facts={"type": "array", "items": S, "maxItems": 20},
-                  goal_hint={"type": "string", "description": "an open goal id, or 'new' to propose a goal"}),
+                  goal_hint={"type": "string", "description": "the id of the context.open_goals entry this message is about, or 'new' to propose a goal"}),
     "patrol": obj(["candidate_ref", "verdict"], candidate_ref=REF, verdict=enum(*notifier.VERDICTS, *ASSIGNED),
                   text={"type": "string", "maxLength": notifier.TEXT_MAX}, priority=enum(*notifier.PRIORITIES),
                   topic={"type": "string", "maxLength": 100,
@@ -83,7 +83,7 @@ def intake_items(k, n, now, offered):
     """New signals not offered this period, oldest first."""
     rows = sorted((e for e in k.store.query("signal", state="new") if e["natural_key"] not in offered),
                   key=lambda e: (e["payload"].get("created") or 0, e["id"]))
-    return [intake.item(e) for e in rows], {}
+    return [intake.item(e) for e in rows], {"open_goals": goals.open_list(k)}
 
 
 def patrol_items(k, n, now, offered):
@@ -294,7 +294,7 @@ def observe(k, packet_id, source_id, items, limitation_code=None, error=None, no
             known = notifier.known(k.store, key, now)
             observed.append(item)
             out.append({"ref": item["ref"], "notified": known and {"ref": known["id"], "state": known["state"]},
-                        **assignments.annotate(k, item, table)})
+                        **assignments.annotate(k, item, table, observed[:-1])})
         patch(k.store, packet["id"], reason="observe", payload={"observed": observed}, now=now)
     return {"source": {"id": source_id, "state": state["state"], "gap": state["payload"].get("gap")}, "items": out,
             **({"rules_error": broken} if broken else {})}
@@ -347,8 +347,8 @@ def observed_result(k, item, r, now):
     if verdict in ("send", "supersede"):
         if rule.get("do") == "ignore":
             raise ValueError(f"rule {rule.get('name')!r} ignores this item; skip it")
-        if item.get("assignment"):
-            raise ValueError(f"{item['assignment']} is working on this thread; pass it on and answer `forwarded`, or skip")
+        if rule.get("do") == "forward":
+            raise ValueError("an executor has this thread; pass it on and answer `forwarded`, or skip")
     return notifier.decide(k, item, verdict, text=r.get("text"), priority=r.get("priority"), topic=r.get("topic"), about=r.get("about"),
                            kind="ask" if rule.get("do") == "ask" else "tell", now=now)
 

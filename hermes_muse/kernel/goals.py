@@ -36,6 +36,7 @@ CRON_FIELDS = {"progress_note", "assessment"}
 WRITERS = {"user": (USER_FIELDS, ("active", "done", "cancelled")), "fade": (CRON_FIELDS | {"status"}, ("cancelled",)),
            "executor": ({"status", "evidence", "progress_note"}, ("active", "done"))}
 ACTIVITY = ("user", "kernel", "executor")  # kernel: a user message about this goal (intake's goal_hint)
+OPEN_LISTED = 50
 FADE_ASKS_PER_DAY = 3  # so an upgrade that finds many dormant goals asks gradually; the cancel clock starts on delivery
 DONE_TOPIC = "goal-done"
 ASK = "The goal “{title}” has had no progress for {days} days. Do you still want it?"
@@ -68,7 +69,7 @@ def mirror(k, slug, record, file_revision, now, reason):
         return None
     payload = {"revision": file_revision, **{f: record.get(f) for f in (
         "title", "session_id", "parent_id", "deadline", "no_fade", "owner", "created", "updated", "next_check_at",
-        "thread_key", "rule", "evidence")}}
+        "thread_key", "rule", "evidence", "cancelled_by")}}
     deadline = (record.get("next_check_at") or now) if state in OPEN else None
     store = k.store
     with store.atomic():
@@ -224,20 +225,23 @@ def open_for_thread(k, thread):
     return next((e for e in k.store.query("goal", state=OPEN) if e["payload"].get("thread_key") == thread), None)
 
 
-def dropped(k, rule, thread):
-    """True when the user cancelled this rule's goal for this thread: later events do not start it again."""
-    found = read(k.home, rule_slug(rule, thread))
-    return bool(found) and found[0].get("cancelled_by") == "user"
+def dropped(k, thread):
+    """True when the user cancelled a goal of this thread, whichever rule made it: later events start nothing."""
+    return any(e["payload"].get("thread_key") == thread and e["payload"].get("cancelled_by") == "user"
+               for e in k.store.query("goal", state="cancelled"))
+
+
+def open_list(k):
+    """Open goals as intake sees them, so a message about one can name it (goal_hint), latest first."""
+    return [{"id": e["natural_key"], "title": e["payload"].get("title")} for e in k.store.query("goal", state=OPEN)][:OPEN_LISTED]
 
 
 def for_thread(k, *, rule, thread, title, criteria, now):
-    """The goal slug for an event thread under a rule: the open one, or a new one, or the rule's finished one reopened
-    (a new event on a thread the user gave up on is refused)."""
+    """The goal slug for an event thread under a rule: the open one, or a new one, or the rule's finished one reopened.
+    Writes, so the caller has asked assignments.blocker first."""
     goal = open_for_thread(k, thread)
     if goal:
         return goal["natural_key"]
-    if dropped(k, rule, thread):
-        raise PermissionError("the user cancelled this thread's goal; skip this item")
     slug = create(k, title=title, criteria=criteria, now=now, by="rule", rule=rule, thread=thread)["goal_id"]
     if read(k.home, slug)[0].get("status") != "active":
         update(k, slug, {"status": "active", "progress_note": "Reopened by a new event on this thread."}, by="executor", now=now)

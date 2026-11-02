@@ -395,13 +395,16 @@ class Surface:
 
     def muse_manage_content_write(self, d, call):
         rel = content_path(d["kind"], d["id"])
-        if d["kind"] == "goal_file" and not goals.read(self.k.home, d["id"].partition("/")[0]):
-            raise KeyError(f"unknown goal {d['id'].partition('/')[0]!r}")
+        goal = d["id"].partition("/")[0] if d["kind"] == "goal_file" else None
+        if goal and not goals.read(self.k.home, goal):
+            raise KeyError(f"unknown goal {goal!r}")
         if d["kind"] == "rules":
             rules.parse(d["body"])
         raw = d["body"].encode("utf-8")
         with self.lock():
             changed = self.files.replace(rel, raw, d["expected_revision"])
+        if goal:  # the main session working on a goal's files is activity
+            goals.touch_if_open(self.k, goal, self.now())
         return {"result": "written" if changed else "unchanged", "path": rel, "revision": revision(raw)}
 
     # -- muse_manage reads -------------------------------------------------------------------------
