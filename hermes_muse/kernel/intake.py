@@ -48,7 +48,8 @@ def item(e):
 
 
 def dispose(k, ref, disposition, facts=(), goal_hint=None, now=None):
-    """saved / ignored / context; idempotent. A goal_hint naming an open goal touches it (activity, next check)."""
+    """saved / ignored / context; idempotent. A goal_hint naming an open goal records it as progress (activity, next
+    check) and notifies nobody; assignments are started only by the patrol."""
     if disposition not in DISPOSITIONS:
         raise ValueError(f"disposition must be one of {', '.join(DISPOSITIONS)}")
     e = one(k.store, "signal", ref)
@@ -61,7 +62,7 @@ def dispose(k, ref, disposition, facts=(), goal_hint=None, now=None):
                   payload={"disposition": disposition, "facts": facts, "goal_hint": goal_hint}, now=now)
     if goal_hint and goal_hint != "new":
         from . import goals
-        goals.touch_if_open(k, goal_hint, now)
+        goals.touch_if_open(k, goal_hint, now, "; ".join(facts)[:1000] or None)
     return moved or one(k.store, "signal", ref)
 
 
