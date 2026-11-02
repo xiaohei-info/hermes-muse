@@ -6,7 +6,7 @@ version: 0.4.7
 # Companion
 
 Muse keeps the user's accepted work, interests and proactive notices for this profile. It has two tools:
-- `muse_manage` for the user's private conversation: 11 writes and 3 reads.
+- `muse_manage` for the user's private conversation: 13 writes and 3 reads.
 - `muse_job` for Muse's own job runs: read, observe and submit against the run's packet.
 
 All fields, types and limits are in [interface](references/interface.md). That file is generated from the code, so
@@ -16,6 +16,7 @@ fix that field and do not resend an unchanged call.
 
 Judgment, by topic:
 - Accepted work, interests, ideas, watches and dormancy: [goals](references/goals.md).
+- Work handed to executors, the user's rules and their decisions: [dispatch](references/dispatch.md).
 - What deserves an interruption, and the patrol's source scope: [proactivity](references/proactivity.md), [sources](references/sources.md), [calendar](references/calendar.md), [weather](references/weather.md) (only when the user turned it on).
 - What to remember and forget: [memory](references/memory.md), [content](references/content.md).
 - Conversation review findings: [review](references/review.md).

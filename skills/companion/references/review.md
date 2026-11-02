@@ -8,6 +8,7 @@ Each night Muse code picks turns from the last three days of private conversatio
 
 The model judges each pick:
 - `agent_gap`: the assistant fell short. It claimed work it did not do, dropped a failure, or missed what the user meant. This opens a finding for 14 days.
+- `friction`: the user corrected or redid something a skill or rule could have settled. This opens a finding tagged `friction`, counted in the weekly digest. It is a suggestion: nothing changes a rule or skill by itself.
 - `latent_need`: the user showed a need nobody recorded. This becomes an idea candidate.
 - `fine`: the rule fired but nothing is wrong.
 
