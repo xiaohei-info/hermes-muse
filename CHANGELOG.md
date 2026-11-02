@@ -1,3 +1,17 @@
+# 0.5.1 — The main conversation is the user again (2026-11-03)
+
+**Upgrade notes.** No Store schema change, no new cron job, no contract change. Upgrade from 0.5.0 as soon as you can.
+
+- **Since 0.5.0 the main conversation was treated as not the user.** Hermes' canonical Bot Chat is a hidden session, and
+  the guard that excludes hidden sessions caught it too. There, `muse_manage` was refused, health and memory-write
+  injections stopped, and intake captured nothing from it. Other hidden sessions stay excluded. Turns from that time are
+  captured after upgrading, unless a message in another private session moved intake's watermark past them: those stay
+  uncaptured.
+- **Reading user turns uses its index again.** The same change had made intake scan all messages, adding about a minute
+  to every tick on a large `state.db`.
+- **Health `main_session`** (high): a Bot Chat with recent user turns whose caller is not the user, or that yielded no
+  signal. A profile with no Bot Chat is not checked.
+
 # 0.5.0 — Agent automation: events find their executor; every waiting state has a clock and an exit (2026-11-02)
 
 **Contract changes.** `muse_manage` goes from 14 to 16 actions (`assignment_record`, `assignment_update`); `goal_update`
