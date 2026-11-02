@@ -70,6 +70,7 @@ Hermes Muse 是一个独立的 Hermes 插件（standalone plugin，MIT）。它�
    - 会话行存在时，**存储的 `sessions.source` 决定**；本次调用的 platform 参数和继承来的 session 环境变量只能收紧，不能放宽；
    - 没有会话行时，只认宿主本次调用传入的 `platform` kwarg，单独的环境变量不算证据；
    - 不在 `USER_SOURCES` 里（含空值、未分类值）一律是 `other`；群聊是 `group`；显式委派调用上下文是 `child`，存储的父会话不改变压缩或 `/branch` 用户会话的授权。
+   - 隐藏会话是 `other`，只有 Hermes 的规范 Bot Chat 例外（`sessions.BOT_CHAT`：生来隐藏，靠确切标题识别，它就是主会话）；
    - 只有 `user` 构成授权，也只有 `user` 的轮次会收到注入。CLI/TUI 靠存储的 `sessions.source`（`cli`、`tui`）识别。
 2. **`user`（私聊主会话）**：可以使用 `muse_manage` 的全部 16 个动作。Goal 的状态和设置只能在这里修改；例外只有规则建的目标（`goals.create(by="rule")`）：用户写的规则构成授权，分派 `done` 带证据后由代码置 `done`。`status=done` 必须带 `evidence`（链接、提交、文件路径或一句可核对的观测），由代码校验。
 3. **`cron`（job run）** 只能做这些：
@@ -159,7 +160,7 @@ owned job 由 `install.JOBS` 定义，cron key 沿用 0.3.x 的名字，这样 j
    - 询问被撤回、过期、失败、closed_unknown 或 superseded 时，attempt+1 重问，最多 3 次；3 次都失败时写 `fade_blocked`，由 Health 报告；
    - 询问确实送达（notice `sent`）后，按 `dispatched_at + goal_fade_days` 算出 `fade_at` 写进 goal payload；到期仍无活动时由代码取消目标；`goal_update(status=active)` 可复活；
    - waiting 的目标同样淡出。扣住目标的只有：未来的 Goal `deadline` 字段、活跃 watch、活跃分派（`waiting` 3 天转 `stalled` 后不再扣住）、运行中的原生 owner、`no_fade`；模型不能撤回或 supersede 淡出询问。
-7. **Health**：`health_entry.py` 调 `health.run()`，写出 `muse/health.json`（`model_input`/`tool_errors` 只统计 Muse 自己的工具 `muse_manage`、`muse_job` 的结果；`plugin_load` 报告运行 job 的 Hermes 进程放弃了 Muse 的加载）。告警有 4 个出口，**都不经过 Notifier**（内核坏了也能被发现）：
+7. **Health**：`health_entry.py` 调 `health.run()`，写出 `muse/health.json`（`model_input`/`tool_errors` 只统计 Muse 自己的工具 `muse_manage`、`muse_job` 的结果；`plugin_load` 报告运行 job 的 Hermes 进程放弃了 Muse 的加载；`main_session` 绕过授权谓词读 Bot Chat 的用户轮次（`sessions.main_sessions`），近 6 小时有轮次而调用方不是 `user`，或超过 1 小时的轮次一条 signal 都没捕获时报 high）。告警有 4 个出口，**都不经过 Notifier**（内核坏了也能被发现）：
    - 主会话注入；
    - Dashboard 的 `/health`；
    - cron stdout，只在告警集合变化时输出；
@@ -239,7 +240,7 @@ Hermes 宿主
 - `sessions`：
   - `user_turns(since, roles, limit)`：按来源白名单、私聊、脱敏、摘录返回会话轮次；
   - `read(ref, offset, length)`：单次 ≤12k，已脱敏；
-  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；LOCAL/Photon 规则见 DESIGN 的 Authorization）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
+  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；LOCAL/Photon 规则见 DESIGN 的 Authorization）、`main_sessions(since)`（只供 Health）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
 - `cron`：
   - `ensure(key, …)` 创建或刷新自有 job `muse-<key>`（launcher 为 `scripts/hermes-muse-<key>.py`）；
   - `job(key)` 按 cron key 找自有 job；`pause`、`wake`、`jobs`、`owned_jobs`、`executions`；
@@ -571,5 +572,6 @@ Hermes 宿主
   - 安装时解析不了 prompt 的旧 watch 保留原 prompt，需要用户重建（`install.jobs`）；
   - hooks 的“只在变化时注入”记在进程内存中，进程重启后摘要会再注入一次（`hooks.Hooks`）；
   - 加载记录按 pid：一个已退出加载进程的 pid 被复用时，记录要到下一次加载时才清掉（`HostAdapter.load_failed`）；
+  - Health 的 `main_session` 只看 Bot Chat：只用平台私聊、没有 Bot Chat 的 profile 不在检查内（`invariants.main_session`）；
   - 记忆守卫只要求 remove 数不超过 patch 数，不核对内容是否真被合并；被删的原文已记录，可恢复（`upkeep.guard`）；
   - Windows 没有 `dir_fd`/`O_NOFOLLOW`：内容路径逐级按属性拒绝 symlink/junction 后再按绝对路径使用，检查与使用之间换入的 junction 拦不住（`content_io._windows_directory`）；回滚桥 `bridge.py` 仍只支持 POSIX。

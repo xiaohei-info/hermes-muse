@@ -97,7 +97,8 @@ Native `local` is a transport, not user authority. The adapter resolves its priv
 session, principal, route, LOCAL origin and interactive launch policy; it can also prove a reservation row
 whose later placeholder writer stamped `created_source=unknown`. A present malformed or machine receipt
 fails closed. Bare LOCAL/unknown, machine/import creation labels, hidden sessions and group chats are
-excluded from authorization, intake and reads. Schemas without provenance retain their legacy source rules.
+excluded from authorization, intake and reads; the canonical Bot Chat, born hidden and identified by its exact title,
+is the main session and is not excluded. Schemas without provenance retain their legacy source rules.
 Stored `parent_session_id` is not delegation: compression on every surface and `/branch` retain user
 authority. Delegated sessions use machine source `subagent`; explicit delegated caller context remains `child`.
 
@@ -258,14 +259,16 @@ voice and carry no Muse signature, so the delivered text also reads as the assis
 `health_entry.py` runs `health.run()` every 30 minutes and atomically writes `muse/health.json`: the 7 host probes
 (`symbols`, `cron_sessions`, `delivery_semantics`, `delivery_target`, `signal_purity`, `config_location`, `home`)
 plus invariants over the Store, deliveries, Muse's own tool results (`muse_manage`, `muse_job`; other tools' output
-belongs to the host and the user's tools), jobs and the plugin load (`plugin_load`). Each health item has an id, level
+belongs to the host and the user's tools), jobs, the main session (`main_session`) and the plugin load (`plugin_load`). Each health item has an id, level
 (`ok/low/medium/high`), detail, evidence and fix. Alerts never use the Notifier; they reach the user through the
 main-session injection, the Dashboard and Desktop page, cron stdout when the alert set changes, and an optional
 `health_deliver` route added as a second target of the health job, so Hermes delivers the same stdout to both.
 Health itself writes only that file. So that a problem does not end there, a medium or high item still open after a day is
 turned by a kernel tick step (`notifier.health_followup`, reading `health.json`) into one notice for the main session,
 once per incident and withdrawn if it clears before delivery; the weekly digest lists every open item.
-`deliver_stalled` reports notices left unclaimed for three `muse-deliver` periods (its `next_run_at − last_run_at`). Probes judge capability and semantics, not version ranges; a missing capability degrades
+`deliver_stalled` reports notices left unclaimed for three `muse-deliver` periods (its `next_run_at − last_run_at`).
+`main_session` reports a Bot Chat with recent user turns whose caller is not `user` or that yielded no signal, reading those
+turns past the authorization predicate. Probes judge capability and semantics, not version ranges; a missing capability degrades
 only its feature and raises a high item.
 
 ## Install, upgrade and rollback
