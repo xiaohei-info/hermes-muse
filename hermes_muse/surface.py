@@ -1,7 +1,7 @@
 """Model surface (design 2.6): one action table from which the tool schemas, argument validation, dispatch
 and the skill's interface reference are all generated; there is no second, hand-written field list.
 
-muse_manage: the main session's 14 user-semantic actions (11 writes, 3 reads). A cron run may use only
+muse_manage: the main session's 16 user-semantic actions (13 writes, 3 reads). A cron run may use only
 read, calendar_view and content_write of notes/dreams/alignment; a delegated child only reads.
 muse_job: a Muse job run's read / observe / submit against the packet in its Script Output; the submit
 result shapes are kernel.packets.SCHEMAS. Code fills every ID, key, next_check and managed revision;
@@ -17,10 +17,11 @@ from pathlib import Path
 from . import health, install
 from .content_io import DomainError, Files, revision
 from .host.sessions import READ_MAX, clean
-from .kernel import goals, packets, records
+from .kernel import assignments, goals, packets, records
 from .kernel.common import header, one, render
 from .kernel.packets import enum, obj
 from .locks import file_lock
+from . import rules
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = ROOT / "skills/companion/references/interface.md"
@@ -43,7 +44,7 @@ def count(low, high):
     return {"type": "integer", "minimum": low, "maximum": high}
 
 
-ENTITY_KINDS = ("goal", "notice", "finding", "feed", "interest", "idea", "watch", "source", "signal")
+ENTITY_KINDS = ("goal", "assignment", "notice", "finding", "feed", "interest", "idea", "watch", "source", "signal")
 CONTENT = {  # kind -> id description; paths under <home>/muse
     "note": "daily:YYYY-MM-DD, person:<name> or group:<name>",
     "dream": "YYYY-MM-DD",
@@ -52,6 +53,8 @@ CONTENT = {  # kind -> id description; paths under <home>/muse
     "working_lessons": "current (AGENTS.md)",
     "preferences": "current (read only; change it with preferences)",
     "goal_file": "<goal id>/<name>.md",
+    "rules": "current (RULES.md: first-line JSON with executors and rules; a broken one is refused)",
+    "decisions": "current (DECISIONS.md: what the user decided, in their words; read it before asking again)",
 }
 CRON_CONTENT = ("note", "dream", "alignment")
 WRITABLE = tuple(k for k in CONTENT if k != "preferences")
@@ -61,11 +64,18 @@ MAIN = {  # action: (kind, summary, data schema)
     "goal_create": ("write", "Create a goal the user accepted in this conversation; same title twice returns the existing goal.",
                     obj(["title", "criteria"], title=text(200), criteria=text(4000, "what done looks like"),
                         deadline=TIME, parent_id=ID, no_fade={**BOOL, "description": "only on the user's explicit request"})),
-    "goal_update": ("write", "Change a goal for the user: status, waiting, deadline, owner or a progress note. Any update moves the next check to tomorrow unless next_check_at is given.",
+    "goal_update": ("write", "Change a goal for the user: status, waiting, deadline, owner or a progress note. status=done needs evidence. Any update moves the next check to tomorrow unless next_check_at is given.",
                     obj(["goal_id"], goal_id=ID, title=text(200), status=enum("active", "done", "cancelled"),
+                        evidence=text(1000, "a link, commit, file path or one checkable observation that shows it is done"),
                         waiting_user=BOOL, deadline=nullable(TIME), no_fade=BOOL,
                         owner=nullable(text(200, "native delegation handle now working on it")),
                         next_check_at=TIME, progress_note=text(1000))),
+    "assignment_record": ("write", "Record an executor you started for an open goal, so it is followed up; native is Hermes' own delegation, others come from RULES.md.",
+                          obj(["goal_id", "executor", "handle"], goal_id=ID, executor=text(100), handle=text(200, "what starting the executor returned"),
+                              expected_end=TIME, note=text(1000))),
+    "assignment_update": ("write", "Change an assignment for the user: their answer resumes it (running), or it is stopped, done (conclusion and evidence) or failed (conclusion).",
+                          obj(["assignment_id", "state"], assignment_id=ID, state=enum("running", "waiting", "done", "failed", "stalled", "stopped"),
+                              conclusion=text(2000), evidence=text(1000), expected_end=TIME)),
     "interest_record": ("write", "Remember a temporary interest (Feed and patrol use it); 14 days unless expires.",
                         obj(["title"], title=text(200), rationale=text(2000), expires=TIME)),
     "idea_add": ("write", "Keep an idea for later; 14 days unless expires.",
@@ -94,7 +104,7 @@ MAIN = {  # action: (kind, summary, data schema)
     "watch_stop": ("write", "Stop a watch.", obj(["watch_id"], watch_id=ID)),
     "feed_update": ("write", "Feedback on, pin, unpin or delete a Feed article.",
                     obj(["id", "change"], id=ID, change=enum("feedback", "pin", "unpin", "delete"), feedback=text(1000))),
-    "content_write": ("write", "Write a note, person/group page, dream, alignment, TOOLS.md, AGENTS.md or goal file; read it first for its revision ('absent' when new).",
+    "content_write": ("write", "Write a note, person/group page, dream, alignment, TOOLS.md, AGENTS.md, RULES.md, DECISIONS.md or goal file; read it first for its revision ('absent' when new).",
                       obj(["kind", "id", "body", "expected_revision"], kind=enum(*WRITABLE), id=text(200),
                           body=text(60000), expected_revision=text(80))),
     "read": ("read", "Read Muse state: one entity or file by id, or a list (query filters, newest first). Text pages at 12k characters: pass next_offset as offset. kind=status gives health and counts.",
@@ -211,7 +221,8 @@ def content_path(kind, key):
             raise ValueError("goal_file id must be <goal id>/<name>.md")
         return f"{goals.ROOT}/{goal}/files/{name}"
     return {"alignment": "dreams/alignment/derived/ALIGNMENT_SYNTHESIS.md", "tools_note": "TOOLS.md",
-            "working_lessons": "AGENTS.md", "preferences": "PROACTIVE_PREFERENCES.md"}[kind]
+            "working_lessons": "AGENTS.md", "preferences": "PROACTIVE_PREFERENCES.md", "rules": rules.REL,
+            "decisions": "DECISIONS.md"}[kind]
 
 
 def page(field, text, offset):
@@ -222,7 +233,7 @@ def page(field, text, offset):
 
 def row(e):
     p = e["payload"]
-    label = p.get("title") or p.get("text") or p.get("message") or p.get("reason") or p.get("excerpt") or ""
+    label = p.get("title") or p.get("text") or p.get("message") or p.get("reason") or p.get("excerpt") or p.get("handle") or ""
     return {"id": e["id"], "state": e["state"], "title": str(label)[:200], "updated": e["updated"],
             **({"deadline": e["deadline"]} if e["deadline"] else {})}
 
@@ -304,6 +315,15 @@ class Surface:
         record = goals.update(self.k, slug, d, by="user", now=self.now())
         return {"result": "updated", "goal_id": slug, "status": record.get("status"), "next_check_at": record.get("next_check_at")}
 
+    def muse_manage_assignment_record(self, d, call):
+        e = assignments.record(self.k, d["goal_id"], executor=d["executor"], handle=d["handle"], expected_end=d.get("expected_end"),
+                               note=d.get("note"), now=self.now())
+        return {"result": "existing" if e["existing"] else "recorded", "assignment_id": e["id"], "next_check": e["deadline"]}
+
+    def muse_manage_assignment_update(self, d, call):
+        return assignments.report(self.k, self.entity("assignment", d["assignment_id"])["id"], d["state"], conclusion=d.get("conclusion"),
+                                  evidence=d.get("evidence"), expected_end=d.get("expected_end"), by="user", now=self.now())
+
     def remember(self, kind, d, extra):
         return records.remember(self.k, kind, d["title"], rationale=d.get("rationale"), expires=self.time(d.get("expires")),
                                 extra=extra, now=self.now())
@@ -377,6 +397,8 @@ class Surface:
         rel = content_path(d["kind"], d["id"])
         if d["kind"] == "goal_file" and not goals.read(self.k.home, d["id"].partition("/")[0]):
             raise KeyError(f"unknown goal {d['id'].partition('/')[0]!r}")
+        if d["kind"] == "rules":
+            rules.parse(d["body"])
         raw = d["body"].encode("utf-8")
         with self.lock():
             changed = self.files.replace(rel, raw, d["expected_revision"])
@@ -398,6 +420,8 @@ class Surface:
                 out.update(record=found[0], **page("body", found[1], offset))
             if kind == "feed":
                 out["path"] = records.feed_path(e)
+            if kind in ("goal", "assignment"):
+                out["links"] = assignments.links(self.k, e)
             return out
         rows = [row(e) for e in reversed(store.query(kind))
                 if not query or query in json.dumps(e["payload"], ensure_ascii=False).casefold()]
