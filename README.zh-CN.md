@@ -9,7 +9,8 @@
 - 你说月底前要选好一辆自行车。Muse 把它记成目标，定期跟进，只有你说定了才关闭。
 - 你在等的回复到了，或者会议改了时间。下一轮 patrol 用你的工具读原始邮件或日程，告诉你发生了什么、为什么重要，而且只说一次。
 - “做完了”“晚点再说”“别再提这个”各有不同处理。没有值得说的就保持安静，遵守静默时段，同一条通知不会重复。
-- 你不再提起的目标，会先被问一次再关闭，而不是一直被追。
+- 你不再提起的目标，安静 3 天后问你一次，问题送到后再过 3 天才关闭，而不是一直被追；之后随时可以恢复。
+- 写一次规则，事件就能自己找到执行者：PR 的 CI 失败交给你的代理，这个 PR 的后续动态跟着转过去；只有要拍板、有结果或出错时才告诉你。每件事都有账：谁在做、预计何时完、结论和证据。
 
 它基于 Hermes 已有的会话、cron、投递、委派和原生 memory，沿用你现有的模型和 memory provider。本项目独立开发，与 Meta/Muse 无关，代码和提示词均为独立编写。
 
@@ -45,6 +46,7 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 - Hermes Agent 0.21.5 及以上（`plugin.yaml` 中 `requires_hermes: ">=0.21.5"`）。Hermes 本身需要 Python 3.14。
 - 仅在 Hermes 0.22.5 上测试过：CI 固定该版本并跑完整验收。
+- 支持 Linux 和 macOS。本地 NTFS profile 上的 Windows 属实验性：CI 在其上跑验收，但回滚到 0.3.x 只支持 POSIX（[详情](docs/CATALOG-COMPATIBILITY.md)）。
 - 其他版本不按版本号判断。三项核心能力（prompt section、插件 skill、卸载钩子）是硬性要求，缺失时 Muse 拒绝加载并给出明确错误；其他能力由宿主探测检查，缺失只降级对应功能，并在 Health 显示一条 high 项。升级 Hermes 后请运行 `tests/native_host_contract.py`（[详情](docs/ACCEPTANCE.md)）。
 
 **从 0.3.x 升级**（目录里的 0.3.1 或之后任一 0.3 版本）：首次加载把 `muse/state.db` 迁移到 `muse/state-v2.db`，并原地刷新 job，保留 job ID、调度、路由和暂停状态。先改写调用了已删除动作的个人 cron prompt 或脚本（[调用方迁移](docs/CALLER-MIGRATION.md)），按[切换与回滚](docs/CUTOVER.md)逐步切换或回到 0.3.x。
@@ -58,7 +60,7 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 | job（cron key） | 默认调度 | 模型做什么 | 投递 |
 |---|---|---|---|
 | intake（`memory-upkeep`） | 每小时，分批处理完为止 | 判断每条新私聊消息的含义和相关目标 | local |
-| patrol（`proactive-watch`） | 每 30 分钟 | 用你的工具读来源，判断什么值得通知并写出通知 | 你的路由 |
+| patrol（`proactive-watch`） | 每 30 分钟 | 用你的工具读来源，按你的规则办事（启动执行者、转发后续事件、查进行中的工作），判断什么值得通知并写出通知 | 你的路由 |
 | nightly（`nightly-review`） | 03:20 | 评估全部到期目标、判断全部复盘候选、写 dream 和 alignment | local |
 | feed（`feed-pulse`） | 08:00 | 每个 active interest 每天研究一次，写 Feed 文章，有真正的新进展时可发一条通知 | 静默；通知走通知门控 |
 | weekly（`weekly-governance-review`） | 周日 21:15 | 根据 Health 摘要和 7 天计数写一条周报 | 你的路由 |
@@ -74,7 +76,7 @@ Muse 不带连接器。patrol 只通过你的 Hermes 已有的工具读邮件、
 
 ## 偏好
 
-在对话里说，或编辑 `muse/PROACTIVE_PREFERENCES.md`。字段：`start_hour`/`end_hour`（之外为静默时段，默认 9–22）、`ordinary_per_day`（默认不限）、`time_sensitive_per_day`（默认 3）、`urgent_per_day`（可越过静默时段的 urgent 通知数，默认 2，超出按 time_sensitive 处理）、`blocked_topics`、`deliver`（发送通知的 `muse-deliver` job 的路由，默认本 profile 的 Bot Chat；修改从它的下一轮起生效，`null` 保留 job 现有路由）、`goal_dormant_days` 与 `goal_fade_days`（默认各 7，`null` 关闭）、`fade_question`、`weather_context`（默认关闭，会用到你给过的地点）。偏好无效时停止投递并报错，不猜默认值。
+在对话里说，或编辑 `muse/PROACTIVE_PREFERENCES.md`。字段：`start_hour`/`end_hour`（之外为静默时段，默认 9–22）、`ordinary_per_day`（默认不限）、`time_sensitive_per_day`（默认 3）、`urgent_per_day`（可越过静默时段的 urgent 通知数，默认 2，超出按 time_sensitive 处理）、`blocked_topics`、`deliver`（发送通知的 `muse-deliver` job 的路由，默认本 profile 的 Bot Chat；修改从它的下一轮起生效，`null` 保留 job 现有路由）、`goal_dormant_days` 与 `goal_fade_days`（默认各 3，`null` 关闭）、`fade_question`、`weather_context`（默认关闭，会用到你给过的地点）。偏好无效时停止投递并报错，不猜默认值。
 
 ## Hermes 配置
 
@@ -97,7 +99,7 @@ Muse 不带连接器。patrol 只通过你的 Hermes 已有的工具读邮件、
 
 ## 健康检查
 
-`muse-health` 每 30 分钟运行一次，不调用模型，写出 `muse/health.json`：宿主 probe 加上对信号、packet、通知、投递、run、目标和来源的不变量检查，每项带级别和修复方法。high 项会出现在你下一次私聊和 Muse 页面上；告警集合变化时 cron 会输出；插件设置 `health_deliver`（在 `plugins.entries.hermes-muse.settings` 下）会作为该 job 的第二条路由。Health 不经过通知管道，也不修复任何东西。可以问“Muse 健康吗？”，或用 `muse_manage read(kind=status)`。
+`muse-health` 每 30 分钟运行一次，不调用模型，写出 `muse/health.json`：宿主 probe 加上对信号、packet、通知、投递、run、目标和来源的不变量检查，每项带级别和修复方法。high 项会出现在你下一次私聊和 Muse 页面上；告警集合变化时 cron 会输出；插件设置 `health_deliver`（在 `plugins.entries.hermes-muse.settings` 下）会作为该 job 的第二条路由。Health 不经过通知管道，也不修复任何东西；medium 或 high 项开放超过一天，会以一条通知交给主对话，周报也会列出仍未解决的项。可以问“Muse 健康吗？”，或用 `muse_manage read(kind=status)`。
 
 ## 使用
 
@@ -115,9 +117,15 @@ Muse 不带连接器。patrol 只通过你的 Hermes 已有的工具读邮件、
 
 目标需要你明确的计划或承诺；随口提到的兴趣 14 天后过期，除非你再提起。可以问查过什么、哪里失败、还有什么没完成；助手会读 Muse 状态，而不是猜。
 
+## 规则与执行者
+
+`muse/RULES.md` 归你所有，初始为空；不加规则，就不会有任何工作自动启动。文件首行是 `executors`（做事的工具的命令模板）和 `rules`（什么事件交给谁），每个字段的含义文件里都有。Muse 负责匹配事件和记账，从不执行命令：patrol 用你授权的工具启动和查询执行者，真正的权限留在执行者自己的配置里。执行者拿到的是规则里那句 ask 和一个链接，不含事件正文。没有规则命中的事件最多变成一条通知。目标标完成必须有证据（链接、提交、文件或一句可核对的观测）：告诉助手你看到了什么，一句话仍然能关。`muse/DECISIONS.md` 记你定过的事，定过的不再问。
+
+事件靠 patrol 每 30 分钟轮询进来。要更快，可以把 Hermes 的 webhook 路由指向 patrol job（`cron_job: muse-proactive-watch`），事件会作为证据出现在它的 Run Context 里。
+
 ## 文件
 
-`<profile home>/muse/` 下：`state-v2.db`（Store v2，只有内核写）、`health.json`、`workspace/goals/<slug>/GOAL.md`（目标事实源）、`memory/`、`dreams/`、`memory/people|groups/`、`workspace/your_files/feed/*.md`、`AGENTS.md`、`TOOLS.md`、`PROACTIVE_PREFERENCES.md`；升级后还有只读的 `state.db` 和 `backup/cron-prompts-0.3.json`。launcher 是 `<profile home>/scripts/hermes-muse-*.py`。Muse 从不修改 SOUL、`memories/`、`cron/jobs.json` 和 Hermes 的数据库。留存说明见[兼容与留存](docs/CATALOG-COMPATIBILITY.md#retention)和 [SECURITY.md](SECURITY.md)。
+`<profile home>/muse/` 下：`state-v2.db`（Store v2，只有内核写）、`health.json`、`workspace/goals/<slug>/GOAL.md`（目标事实源）、`memory/`、`dreams/`、`memory/people|groups/`、`workspace/your_files/feed/*.md`、`AGENTS.md`、`TOOLS.md`、`PROACTIVE_PREFERENCES.md`、`RULES.md`、`DECISIONS.md`；升级后还有只读的 `state.db` 和 `backup/cron-prompts-0.3.json`。launcher 是 `<profile home>/scripts/hermes-muse-*.py`。Muse 从不修改 SOUL、`memories/`、`cron/jobs.json` 和 Hermes 的数据库。留存说明见[兼容与留存](docs/CATALOG-COMPATIBILITY.md#retention)和 [SECURITY.md](SECURITY.md)。
 
 ## 卸载
 

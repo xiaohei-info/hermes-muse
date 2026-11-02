@@ -10,7 +10,8 @@
 | 判断消息含义、归属哪个目标 | 模型 | intake packet 的 disposition 和 goal hint |
 | Goal 的创建、更新、等待、完成、取消、重开 | 代码 | GOAL.md 是事实源；状态只能在私聊主会话修改 |
 | 目标进展与完成建议 | 模型 | nightly assessment；`done_suggested` 不关闭目标 |
-| next_check、休眠询问、淡出取消 | 代码 | `goals.fade`：每个休眠期一次询问，最多 3 次；送达后满 `goal_fade_days` 取消 |
+| next_check、休眠询问、淡出取消 | 代码 | `goals.fade`：活动指用户或执行者的进展；每个休眠期一次询问，最多 3 次；送达后满 `goal_fade_days` 取消 |
+| 规则匹配、分派账本 | 代码 | `rules.match`、`kernel/assignments.py`；启动和查询执行者由模型用用户的工具完成 |
 | 开放目标的 Watch | 代码 | 每个 watch 一个 owned job；30 天到期，目标开放时续期，目标关闭时停止 |
 | 读外部来源（邮件、日历、提醒、网页） | 模型 | 用用户自己的工具；Muse 按 `source_id` 记录每次检查的间隔、limitation 和失败状态 |
 | 是否值得通知、措辞 | 模型 | patrol 的 verdict、text、priority、topic |

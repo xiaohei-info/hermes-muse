@@ -9,7 +9,8 @@ In practice it looks like this:
 - You say you want to pick a bicycle by month-end. Muse keeps it as a goal, checks on it, and closes it only when you say you have decided.
 - A reply you were waiting for arrives, or a meeting moves. The next patrol reads the original mail or event with your tools and tells you what happened and why it matters, once.
 - "Done", "later" and "stop bringing this up" each do something different. When there is nothing worth saying, it stays quiet, keeps your quiet hours and never repeats the same notice.
-- A goal you stopped talking about gets one question before it is closed, instead of being chased forever.
+- A goal you stopped talking about gets one question after 3 quiet days, and closes 3 days after that question reaches you, instead of being chased forever. It can always come back.
+- Write a rule once and events find their executor: a failed CI run on a PR goes to your agent, later events of that PR follow it, and you hear only when there is a decision, a result worth knowing or a failure. Each piece of work has a record: who took it, when it should end, what came back, with what evidence.
 
 It is built on what Hermes already has: sessions, cron, delivery, delegation and native memory, with your existing model and memory provider. This is an independent project, unaffiliated with Meta/Muse; its code and prompts are independently written.
 
@@ -45,6 +46,7 @@ Requires Hermes 0.21.5 or later with the plugin APIs for tools, Skills, prompt s
 
 - Hermes Agent 0.21.5 or later (`requires_hermes: ">=0.21.5"` in `plugin.yaml`). Hermes itself needs Python 3.14.
 - Tested on Hermes 0.22.5 only: CI pins that release and runs the full acceptance set against it.
+- Linux and macOS. Windows on a local NTFS profile is experimental: CI runs the acceptance set there, but rollback to 0.3.x is POSIX-only ([details](docs/CATALOG-COMPATIBILITY.md)).
 - On another version Muse does not check the version number. Three core capabilities (prompt sections, plugin skills, unload hooks) are hard requirements: without them Muse refuses to load with a clear error. Other capabilities are checked by host probes; a missing one only degrades that feature and shows a high item in Health. After upgrading Hermes, run `tests/native_host_contract.py` ([details](docs/ACCEPTANCE.md)).
 
 **Upgrading from 0.3.x** (0.3.1 from the catalog or any later 0.3 release): the first load migrates `muse/state.db` into `muse/state-v2.db` and refreshes the jobs in place, keeping their ids, schedules, routes and pauses. Rewrite personal cron prompts or scripts that call removed actions first ([caller migration](docs/CALLER-MIGRATION.md)), and follow [cutover and rollback](docs/CUTOVER.md) to go step by step or back to 0.3.x.
@@ -58,7 +60,7 @@ Workers write what they find into Muse's ledger (`state-v2.db`); a few readers h
 | Job (cron key) | Default schedule | What the model does | Delivery |
 |---|---|---|---|
 | intake (`memory-upkeep`) | hourly, in batches until done | decides what each new private message means and which goal it touches | local |
-| patrol (`proactive-watch`) | every 30 min | reads your sources with your tools, judges what is worth a notice and writes it | your route |
+| patrol (`proactive-watch`) | every 30 min | reads your sources with your tools, follows your rules (starts an executor, passes on later events, checks running work), judges what is worth a notice and writes it | your route |
 | nightly (`nightly-review`) | 03:20 | assesses every due goal, judges every review candidate, writes dream and alignment | local |
 | feed (`feed-pulse`) | 08:00 | researches each active interest once a day, writes Feed articles, may raise one notice for real news | silent; a notice goes through the notice gates |
 | weekly (`weekly-governance-review`) | Sunday 21:15 | one digest from the Health summary and 7-day counts | your route |
@@ -74,7 +76,7 @@ Muse has no connectors. The patrol reads mail, calendars, reminders and the web 
 
 ## Preferences
 
-Ask in chat, or edit `muse/PROACTIVE_PREFERENCES.md`. Fields: `start_hour`/`end_hour` (quiet hours outside them, default 9–22), `ordinary_per_day` (default unlimited), `time_sensitive_per_day` (default 3), `urgent_per_day` (urgent notices that may skip quiet hours, default 2; more are gated as time-sensitive), `blocked_topics`, `deliver` (route of the `muse-deliver` job that sends notices, default this profile's Bot Chat; a change applies from its next run, `null` keeps the job's route), `goal_dormant_days` and `goal_fade_days` (default 7 each; `null` turns them off), `fade_question` and `weather_context` (off by default; it uses a location you gave). Invalid preferences stop delivery with an error instead of guessing.
+Ask in chat, or edit `muse/PROACTIVE_PREFERENCES.md`. Fields: `start_hour`/`end_hour` (quiet hours outside them, default 9–22), `ordinary_per_day` (default unlimited), `time_sensitive_per_day` (default 3), `urgent_per_day` (urgent notices that may skip quiet hours, default 2; more are gated as time-sensitive), `blocked_topics`, `deliver` (route of the `muse-deliver` job that sends notices, default this profile's Bot Chat; a change applies from its next run, `null` keeps the job's route), `goal_dormant_days` and `goal_fade_days` (default 3 each; `null` turns them off), `fade_question` and `weather_context` (off by default; it uses a location you gave). Invalid preferences stop delivery with an error instead of guessing.
 
 ## Hermes configuration
 
@@ -97,7 +99,7 @@ Settings in the profile's Hermes `config.yaml` that Muse reads or depends on. Qu
 
 ## Health
 
-`muse-health` runs every 30 minutes without a model and writes `muse/health.json`: host probes plus invariants over signals, packets, notices, deliveries, runs, goals and sources, each with a level and a fix. A high item appears in your next private conversation and on the Muse page; the cron prints when the alert set changes; the plugin setting `health_deliver` (under `plugins.entries.hermes-muse.settings`) is added as a second route of that job. Health never goes through the notice pipeline and never repairs anything. Ask "what is Muse's health?" or `muse_manage read(kind=status)`.
+`muse-health` runs every 30 minutes without a model and writes `muse/health.json`: host probes plus invariants over signals, packets, notices, deliveries, runs, goals and sources, each with a level and a fix. A high item appears in your next private conversation and on the Muse page; the cron prints when the alert set changes; the plugin setting `health_deliver` (under `plugins.entries.hermes-muse.settings`) is added as a second route of that job. Health never goes through the notice pipeline and never repairs anything; a medium or high item still open after a day is passed to the main session as one notice, and the weekly digest lists what stays open. Ask "what is Muse's health?" or `muse_manage read(kind=status)`.
 
 ## Use
 
@@ -115,9 +117,15 @@ Forget what I told you about the move.
 
 Goals need a clear plan or commitment from you; passing interests expire after 14 days unless you bring them up again. Ask what was checked, what failed or what is still open; the assistant reads Muse state instead of guessing.
 
+## Rules and executors
+
+`muse/RULES.md` is yours and empty at first; nothing starts on its own until you add a rule. Its first line holds `executors` (the command templates of whatever does the work) and `rules` (which events go where); the file explains every field. Muse matches events and keeps the record, and never runs a command: the patrol starts and checks executors with the tools you authorized, and real permissions stay in the executor's own configuration. An executor gets the rule's one-sentence ask and a link, never the event's text. An event no rule matches can at most become a notice. Marking a goal done needs evidence (a link, commit, file or one checkable observation): tell the assistant what you saw and one reply still closes it. `muse/DECISIONS.md` holds what you decided, so you are not asked twice.
+
+Events reach Muse when the patrol polls, every 30 minutes. For faster ones, point a Hermes webhook route at the patrol job (`cron_job: muse-proactive-watch`); the event arrives in its Run Context as evidence.
+
 ## Files
 
-Under `<profile home>/muse/`: `state-v2.db` (Store v2, written only by the kernel), `health.json`, `workspace/goals/<slug>/GOAL.md` (goal source of truth), `memory/`, `dreams/`, `memory/people|groups/`, `workspace/your_files/feed/*.md`, `AGENTS.md`, `TOOLS.md`, `PROACTIVE_PREFERENCES.md`, and after an upgrade the read-only `state.db` and `backup/cron-prompts-0.3.json`. Launchers are `<profile home>/scripts/hermes-muse-*.py`. Muse never edits SOUL, `memories/`, `cron/jobs.json` or Hermes's databases. Retention: [compatibility and retention](docs/CATALOG-COMPATIBILITY.md#retention), [SECURITY.md](SECURITY.md).
+Under `<profile home>/muse/`: `state-v2.db` (Store v2, written only by the kernel), `health.json`, `workspace/goals/<slug>/GOAL.md` (goal source of truth), `memory/`, `dreams/`, `memory/people|groups/`, `workspace/your_files/feed/*.md`, `AGENTS.md`, `TOOLS.md`, `PROACTIVE_PREFERENCES.md`, `RULES.md`, `DECISIONS.md`, and after an upgrade the read-only `state.db` and `backup/cron-prompts-0.3.json`. Launchers are `<profile home>/scripts/hermes-muse-*.py`. Muse never edits SOUL, `memories/`, `cron/jobs.json` or Hermes's databases. Retention: [compatibility and retention](docs/CATALOG-COMPATIBILITY.md#retention), [SECURITY.md](SECURITY.md).
 
 ## Remove
 

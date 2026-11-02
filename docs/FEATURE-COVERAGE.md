@@ -12,7 +12,8 @@ What code guarantees and what is left to the model. **Code**: deterministic, cov
 | Deciding what a message means, which goal it belongs to | Model | intake packet disposition and goal hint |
 | Goals: create, update, wait, done, cancel, reopen | Code | GOAL.md is the source of truth; status changes only from the private main session |
 | Goal progress and done suggestion | Model | nightly assessment; `done_suggested` never closes a goal |
-| Next check, dormancy question, fade cancel | Code | `goals.fade`: one question per episode, up to 3 attempts, cancel after delivery + `goal_fade_days` |
+| Next check, dormancy question, fade cancel | Code | `goals.fade`: activity is a move by the user or an executor; one question per episode, up to 3 attempts, cancel after delivery + `goal_fade_days` |
+| Rule matching, assignment ledger | Code | `rules.match`, `kernel/assignments.py`; starting and checking an executor is the model with the user's tools |
 | Watches for open goals | Code | one owned job each, 30-day expiry renewed while the goal is open, stopped when it closes |
 | Reading external sources (mail, calendar, reminders, web) | Model | with the user's own tools; Muse records each check per `source_id` with interval, limitation and failure state |
 | Whether something is worth a notice, and its wording | Model | patrol verdict, text, priority, topic |
