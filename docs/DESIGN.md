@@ -184,8 +184,12 @@ counts and state names come from code.
    `executor`, `ask`, `authority`, `tell`, `expect`, `goal`) in its first line. Code matches each observed item
    (`rules.match`) and answers `observe` with what the rule requires; the model does not weigh it. For `dispatch` the
    patrol's model starts the executor with the user's tools and a brief of the ask, the authority and a link, never the
-   event's text, then reports the handle; code makes the goal and the `assignment`. A later event of the thread goes to that
-   executor and is only recorded. Only the patrol dispatches: intake only records progress on a goal it recognises.
+   event's text, then reports the handle; code makes the goal and the `assignment`. An executor cannot be called back, so
+   code decides before `observe` hands out a template (`assignments.blocker`): an item with no clean link (`https?://`, no
+   whitespace or shell metacharacters), a goal that is not open, or a thread whose last assignment failed, stalled or was
+   stopped by the user gets no template and `do: tell` with the reason. A later event of the thread, even in the same packet,
+   goes to that executor and is only recorded. A thread the user cancelled starts nothing under any rule, so a
+   thread key must be globally unique. Only the patrol dispatches: intake only records progress on a goal it recognises.
    Muse runs no command, so the kernel has no shell and no host call was added. A rule's `thread` regex is the one place
    thread identity is computed, because its author knows what the URL means; without a rule it stays `about` (flow 2).
    Due assignments reach the patrol, which reads their status: running, waiting with a question (a `kind=ask` notice),
@@ -208,7 +212,8 @@ counts and state names come from code.
    and code withdraws it when the interest stops or expires.
 6. **Weekly.** Health summary, 7-day counts and assignment counts per rule and executor; one digest to the user route,
    suggestions only.
-7. **Fade.** Activity is a move by the user or an executor; Muse's own writes, such as a nightly assessment, are not
+7. **Fade.** Activity is a move by the user or an executor, or the main session working on the goal for them (any
+   `goal_update`, its goal files; intake's `goal_hint` from `context.open_goals` for a message about it); Muse's own writes, such as a nightly assessment, are not
    (a goal assessed every night used to look alive forever). A goal without activity for `goal_dormant_days` (default 3)
    gets one question (`goal:<id>:fade:<episode>:<attempt>`), at most 3 new ones a day;
    a withdrawn, expired, failed or unknown question is asked again up to 3 times, then `fade_blocked` is reported.

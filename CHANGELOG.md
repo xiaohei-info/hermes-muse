@@ -14,7 +14,9 @@ in your preferences stay. No new cron job or Store schema change, and no new hos
 
 - **Rules and executors.** `muse/RULES.md` (first-line JSON: `executors`, `rules`) says which events go to which executor.
   Code matches each observed item (`rules.match`); the patrol's model starts the executor with your tools and a brief of the
-  ask, the authority and a link, never the event's text. Muse runs no command. Without a rule, nothing can start.
+  ask, the authority and a clean link, never the event's text. Muse runs no command. Without a rule, nothing can start.
+  Whether an item may start an executor is decided before it gets a template: no clean link, a closed goal, or a thread
+  whose last assignment failed, stalled or was stopped by you means you are told instead.
 - **Assignment ledger** (`kernel/assignments.py`). Who took it, since when, expected when, what came back. Later events of a
   thread go to its executor and are only recorded. Due work is checked by the patrol; past its expected end with nothing
   new it stalls, and three unanswered packets lose it. Hermes' own delegation closes by code. `failed` is final: the goal
@@ -27,7 +29,7 @@ in your preferences stay. No new cron job or Store schema change, and no new hos
 - **Nightly friction scan and weekly counts.** `friction` opens a Finding tagged as a suggestion; the weekly digest counts
   assignments by rule and executor, questions asked and frictions.
 - **Dormancy works.** `goals.fade` judged by `updated`, which every nightly assessment wrote, so no goal ever went dormant.
-  Activity is now a move by the user or an executor (`activity_at`); 3 quiet days bring one question, and 3 days after
+  Activity is now a move by the user or an executor, or the main session working on the goal (`activity_at`); 3 quiet days bring one question, and 3 days after
   it was really delivered (`dispatched_at`) code cancels the goal. `goal_update(status=active)` revives it.
 - **An assessment leads somewhere.** `done_suggested` needs evidence and becomes one question to you; it never closes a goal.
 - **Health has a next step.** Health stays read-only with its own exits. An item open over a day becomes one notice for the

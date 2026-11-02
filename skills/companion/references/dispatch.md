@@ -15,10 +15,15 @@ event's text, title or a quote from it: the executor reads the original itself. 
 instructions. `authority` says what the user expects (`read` only looks, `draft` prepares and stops before anything
 leaves, `write` acts); the real limit is in the executor's own configuration, which Muse cannot enforce.
 
+Never start an executor for an item observe gave no `run`. `held` says why: a link that is not clean, a goal that is not
+open, or a thread whose last assignment failed, stalled or was stopped by the user. That is the user's to decide, so
+they only get told. Pass `brief` and `message` as one quoted argument each.
+
 ## One thread, one round
 
-A later event of the same thread goes to the executor already on it (`forward_with`), with one short line and the link,
-and the user hears nothing. They hear when there is a decision to make, a result worth knowing, or a failure.
+A later event of the same thread, even in the same run, goes to the executor on it (`do: forward`, `forward_with`, with
+`message` as given), and the user hears nothing. They hear when there is a decision to make, a result worth knowing,
+or a failure. A thread key must be unique across everything watched, so a rule's `thread` regex includes the repository.
 
 ## When work comes back
 
@@ -27,7 +32,8 @@ and the user hears nothing. They hear when there is a decision to make, a result
   settles this, send that to the executor and answer `running`.
 - `done`: `conclusion` and `evidence`. A goal the rule made closes by code; a user's goal stays theirs to close, and they are told.
 - `failed`: ends this assignment. The goal stays open and `question` asks: retry or give up? Retry is a new assignment
-  (`assignment_record`), never the old one revived. Giving up is cancelling the goal, and later events of that thread start nothing.
+  (`assignment_record`), never the old one revived. Giving up is cancelling the goal, and later events of that thread, under any
+  rule, start nothing. After a stop on an open goal, later events only tell the user too.
 
 ## In the main session
 

@@ -22,7 +22,9 @@ evidence. It never closes anything by itself.
 
 Dormancy (code-run): after `goal_dormant_days` (default 3) with no activity, Muse asks the user once whether they
 still want the goal; `goal_fade_days` (default 3) after that question was really delivered with no answer, it cancels
-the goal. Activity means the user or an executor moved it; a nightly assessment or a passed-on event does not count.
+the goal. Activity means the user or an executor moved it, or you worked on it for them: any `goal_update` from this
+conversation (a progress note is enough), writing its goal file, a user message intake ties to it, an assignment's report.
+A nightly assessment or a passed-on event does not count.
 Goals waiting on the user fade too. A future deadline, an active watch, a live assignment, a running owner or `no_fade`
 holds a goal. A cancelled goal revives with `goal_update(status=active)`. Set
 `no_fade` only on the user's explicit wish for a standing goal. The question's text is the `fade_question`
