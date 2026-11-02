@@ -84,6 +84,7 @@ def check(adapter, now=None):
     items += inv.tools(adapter.sessions.tool_results(now - inv.D))
     items += inv.jobs(owned, now)
     items.append(inv.deliver_stalled(store, adapter.cron.job("deliver"), now, readable=bool(owned)))  # Health's own job is owned
+    items.append(inv.main_session(store, adapter.sessions.main_sessions(now - inv.MAIN_WINDOW), now))
     items.append(inv.rules_file(adapter.home))
     items.append(inv.memory(adapter.memory.stores()))
     items.append(inv.plugin_load(adapter.load_failed()))

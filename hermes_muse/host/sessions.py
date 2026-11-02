@@ -396,6 +396,25 @@ class Sessions(Part):
             return [dict(r) for r in db.execute(
                 "SELECT id, cwd FROM sessions WHERE title = ? AND COALESCE(archived, 0) = 0", (BOT_CHAT,))]
 
+    @tolerant(list)
+    def main_sessions(self, since):
+        """Bot Chats with user turns after `since`, as {id, source (`other` when excluded), turns: [timestamp]}.
+
+        Read past `private_user`, so Health can see that predicate lose the main session. A title held by a
+        machine conversation (Hermes moves those aside) is not the main session.
+        """
+        if not self.path.exists():
+            return []
+        chats = {}
+        with reader(self.path) as db:
+            for row in db.execute(
+                    "SELECT s.id, s.source, m.content, m.timestamp FROM sessions s JOIN messages m ON m.session_id = s.id "
+                    f"WHERE s.title = ? AND COALESCE(s.archived, 0) = 0 AND m.role = 'user' AND m.timestamp > ? AND {LIVE_TURN}",
+                    (BOT_CHAT, since, *HIDDEN_KINDS)):
+                if classify(row["source"]) != "machine" and not str(row["content"]).lstrip().startswith(BACKGROUND):
+                    chats.setdefault(row["id"], []).append(row["timestamp"])
+        return [{"id": sid, "source": self.user_source_of(sid), "turns": turns} for sid, turns in chats.items()]
+
     def schema_gaps(self):
         """Columns this adapter reads that the native state.db lacks (none before the first session)."""
         if not self.path.exists():
