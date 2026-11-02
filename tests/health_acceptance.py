@@ -125,7 +125,7 @@ def main():
             "packet_expiry": "medium", "packets_idle": "high", "notice_duplicates": "high", "notice_hanging": "medium",
             "notice_unknown": "ok", "runs_ok": "medium", "runs_unclosed": "low", "goals_missed": "high",
             "goal_fade": "medium", "sources_failing": "medium", "review_findings": "low", "drain_stopped": "ok",
-            "interests_unchecked": "ok", "memory_capacity": "ok", "assignments": "ok", "rules": "ok",
+            "interests_unchecked": "ok", "memory_capacity": "ok", "assignments": "ok", "main_session": "ok", "rules": "ok",
             "probe.symbols": "ok", "probe.cron_sessions": "ok", "probe.delivery_semantics": "medium",
             "probe.delivery_target": "high", "probe.signal_purity": "high", "probe.config_location": "ok",
             "probe.home": "ok", "delivery": "high", "executions": "ok", "tool_errors": "medium",
@@ -230,6 +230,39 @@ def main():
         none.mkdir()
         check("missing Store v2 is high, never a crash", invariants.worst(
             *(f["level"] for f in health.check(HostAdapter(none)) if f["id"] == "store")) == "high", {})
+
+        # -- the main session: its turns against the intake signals, read past private_user ------------
+        from hermes_muse.kernel import Kernel, intake
+        from hermes_state import SessionDB
+        chat = base / "chat"
+        (chat / "muse").mkdir(parents=True)
+        (chat / "config.yaml").write_text("plugins:\n  enabled: [hermes-muse]\n")
+        SessionDB(db_path=chat / "state.db").close()
+        adapter, at = HostAdapter(chat), time.time()
+        Store.for_home(chat).set_meta("intake_since", at - D)
+
+        def turn(text, age):
+            with closing(sqlite3.connect(chat / "state.db")) as db, db:
+                db.execute("INSERT OR IGNORE INTO sessions (id, source, created_source, chat_type, title, hidden, started_at) "
+                           "VALUES ('main','desktop','desktop','dm','Bot Chat',1,0)")
+                db.execute("INSERT INTO messages (session_id, role, content, timestamp) VALUES ('main','user',?,?)", (text, at - age))
+
+        def main_item():
+            return next(f for f in health.check(adapter, at) if f["id"] == "main_session")
+        turn('[Cronjob "muse-deliver" output — scheduled job, not the user.] hi', 2 * H)  # a delivery is not the user
+        turn("Just now", 600)                                                               # waits for the next tick
+        quiet = main_item()
+        turn("Earlier", 2 * H)
+        lost = main_item()
+        intake.capture(Kernel(chat, adapter=adapter), at)
+        found = main_item()
+        with closing(sqlite3.connect(chat / "state.db")) as db, db:
+            db.execute("UPDATE sessions SET chat_type='group'")
+        refused = main_item()
+        check("main_session: turns with no signal or a refused caller are high; deliveries and fresh turns are not",
+              [f["level"] for f in (quiet, lost, found, refused)] == ["ok", "high", "ok", "high"]
+              and lost["evidence"] == ["main"] and "1 main sessions not recognized" in refused["detail"],
+              {"lost": lost["detail"], "refused": refused["detail"]})
 
         # -- an old 0.3.16 store, migrated, reproduces its stuck watermark and duplicate sends -----
         from store_v2_acceptance import NOW, sample
