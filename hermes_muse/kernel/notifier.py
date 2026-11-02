@@ -10,9 +10,13 @@ One real event reaches Muse through several sources (a mail, a PR comment, a new
 upstream ID, so the key alone cannot tell they are one event. Patrol sees the notified events of 7 days
 (`recent`) and answers an item about one of them with `about` (a ref): `skip` or `supersede` of that event.
 Code then records the item's key as an alias (`keys`) of the event, and an aliased key never drafts a new
-notice for 7 days (`draft`, `known`).
+notice for 7 days (`draft`, `known`). Updates of one event are at least COOLDOWN apart, except a question for the user
+(kind `ask`) or an urgent one; an update that waits absorbs the next, since a supersede replaces what is still unsent.
+
+kind `tell` tells the user something; `ask` needs their decision (assignments, dormancy, a suggested completion).
 """
 import hashlib
+import json
 from datetime import datetime, timedelta
 
 from .common import D, H, clip, local_midnight, patch, preferences
@@ -25,7 +29,12 @@ LIVE = frozenset({"drafted", "scheduled", "sending", "sent"})
 SPENT = ("sending", "sent", "unknown")
 VERIFY_EVERY = D      # evidence older than this goes back to patrol before it is sent
 STUCK_AFTER = 6 * H   # eligible this long and still unsent: forced into the next patrol packet
+COOLDOWN = 6 * H      # between updates of one event
 FADE_TOPIC = "goal-fade"
+HEALTH_TOPIC = "muse-health"
+CODE_TOPICS = (FADE_TOPIC, HEALTH_TOPIC)  # written and withdrawn by code; the patrol neither re-checks nor reuses them
+HEALTH_AFTER = D      # a health item still open after this becomes a notice for the main session
+KINDS = ("tell", "ask")
 TEXT_MAX = 2000
 DELIVER = "deliver"   # cron key of the owned no-agent job that prints claimed notices
 PER_MESSAGE = 5       # notices in one delivered message; the rest go in the next run
@@ -72,6 +81,14 @@ def effective(store, priority, prefs, now, tz):
     return priority
 
 
+def cooled(store, p, key, priority, at):
+    """`at`, or later when this is an update of an event the user heard about less than COOLDOWN ago."""
+    if at is None or not p.get("supersedes") or p.get("kind") == "ask" or priority == "urgent":
+        return at
+    told = (e["payload"].get("dispatched_at") or 0 for e in store.query("notice", natural_key=key, state=SPENT))
+    return max(at, max(told, default=0) + COOLDOWN)
+
+
 def spent_today(store, priority, now, tz):
     return sum(1 for e in store.query("notice", state=SPENT, since=local_midnight(now, tz))
                if e["payload"].get("priority", "ordinary") == priority)
@@ -87,7 +104,7 @@ def render(p):
 
 
 def stale(p, now):
-    return p.get("topic") != FADE_TOPIC and (p.get("verified_at") or 0) < now - VERIFY_EVERY
+    return p.get("topic") not in CODE_TOPICS and (p.get("verified_at") or 0) < now - VERIFY_EVERY
 
 
 def events(store, now):
@@ -104,20 +121,26 @@ def recent(store, now):
     """Patrol's `context.notified`: refs to the notified events, so an item about one of them can name it."""
     return [{"ref": e["id"], "state": e["state"], "title": e["payload"].get("title"), "topic": e["payload"].get("topic"),
              "text": clip(text_of(e["payload"]), 200)}
-            for e in events(store, now) if e["payload"].get("topic") != FADE_TOPIC][:NOTIFIED]
+            for e in events(store, now) if e["payload"].get("topic") not in CODE_TOPICS][:NOTIFIED]
 
 
 def alias(k, notice_id, key, now):
-    """Record `key` as one more upstream identity of the event `notice_id`."""
-    return patch(k.store, notice_id, reason="alias", now=now,
-                 payload=lambda e: {"keys": sorted({*e["payload"].get("keys", ()), key} - {e["natural_key"]})})
+    """Record `key` as one more upstream identity of the event `notice_id`; a key it already has changes nothing."""
+    with k.store.atomic():
+        e = k.store.get(notice_id)
+        if e is None or key == e["natural_key"] or key in e["payload"].get("keys", ()):
+            return e
+        return patch(k.store, notice_id, reason="alias", now=now, payload={"keys": sorted({*e["payload"].get("keys", ()), key})})
 
 
 def draft(k, *, text, priority="ordinary", title="", upstream_id=None, sources=(), source_id=None, topic="",
-          goal_id=None, interest_id=None, evidence=(), expires=None, observed_at=None, notice_key=None, now):
+          goal_id=None, interest_id=None, evidence=(), expires=None, observed_at=None, notice_key=None, kind="tell",
+          assignment_id=None, now):
     """Create (or return the live) notice for this notice key and schedule it."""
     if priority not in PRIORITIES:
         raise ValueError(f"priority must be one of {', '.join(PRIORITIES)}")
+    if kind not in KINDS:
+        raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if notice_key:
         key, strong = notice_key, True
     else:
@@ -127,7 +150,8 @@ def draft(k, *, text, priority="ordinary", title="", upstream_id=None, sources=(
         return {**event, "existing": True}
     payload = {"text": check_text(text), "priority": priority, "title": str(title or "")[:200], "upstream_id": upstream_id,
                "sources": [str(s)[:500] for s in sources or ()][:20], "source_id": source_id, "topic": topic or "",
-               "goal_id": goal_id, "interest_id": interest_id, "evidence": list(evidence)[:20], "strong_key": strong, "generation": 0, "verified_at": now}
+               "goal_id": goal_id, "interest_id": interest_id, "evidence": list(evidence)[:20], "strong_key": strong, "generation": 0, "verified_at": now,
+               "kind": kind, "assignment_id": assignment_id}
     e = k.store.create("notice", key, payload, deadline=expires or now + 3 * D, now=now,
                        dedupe=(LIVE, 7 * D) if strong else (UNSENT, None))
     return e if e["existing"] else {**schedule(k, e, now), "existing": False}
@@ -147,7 +171,7 @@ def schedule(k, e, now, prefs=None):
         return patch(k.store, e["id"], "withdrawn", expect=UNSENT, reason="interest_closed", now=now) or k.store.get(e["id"])
     requested = p.get("priority", "ordinary")
     priority = effective(k.store, requested, prefs, now, tz)
-    eligible = gate(priority, prefs, now, tz, spent_today(k.store, priority, now, tz))
+    eligible = cooled(k.store, p, e["natural_key"], priority, gate(priority, prefs, now, tz, spent_today(k.store, priority, now, tz)))
     if p.get("topic") and p["topic"] in prefs["blocked_topics"] or eligible is None:
         why = "topic_blocked" if eligible is not None else "priority_off"
         return patch(k.store, e["id"], "withdrawn", expect=UNSENT, reason=why, now=now) or k.store.get(e["id"])
@@ -176,8 +200,8 @@ def supersede(k, old_id, *, text, evidence, now):
         raise ValueError("supersede needs new evidence (an observed item)")
     with k.store.atomic():
         old = k.store.get(old_id)
-        if old["payload"].get("topic") == FADE_TOPIC:
-            raise PermissionError("a dormancy question cannot be superseded")
+        if old["payload"].get("topic") in CODE_TOPICS:
+            raise PermissionError("a dormancy question or health follow-up cannot be superseded")
         if old["state"] in ("sending", "unknown"):
             raise ValueError("the previous notice is still being delivered; decide after its receipt")
         if old["state"] in UNSENT:
@@ -191,7 +215,7 @@ def supersede(k, old_id, *, text, evidence, now):
     return schedule(k, new, now)
 
 
-def decide(k, item, verdict, *, text=None, priority=None, topic=None, about=None, now):
+def decide(k, item, verdict, *, text=None, priority=None, topic=None, about=None, kind="tell", assignment_id=None, now):
     """One patrol verdict on an observed item (send/skip/supersede, `about` a notified event) or a due notice
     (send/skip/withdraw)."""
     if verdict not in VERDICTS:
@@ -214,10 +238,10 @@ def decide(k, item, verdict, *, text=None, priority=None, topic=None, about=None
             e = supersede(k, live["id"], text=text, evidence=[item["ref"]], now=now)
             alias(k, e["id"], key, now)
             return {"result": "superseded", "notice": e["id"], "state": e["state"]}
-        if topic == FADE_TOPIC:
-            raise ValueError(f"topic {FADE_TOPIC!r} is reserved for Muse's dormancy questions")
+        if topic in CODE_TOPICS:
+            raise ValueError(f"topic {topic!r} is reserved for Muse's own questions and follow-ups")
         e = draft(k, text=text, priority=priority or "ordinary", title=item["title"], upstream_id=item.get("upstream_id"),
-                  topic=str(topic or "").strip()[:100],
+                  topic=str(topic or "").strip()[:100], kind=kind, assignment_id=assignment_id,
                   sources=sources, source_id=item.get("source_id"), observed_at=item.get("ts"), evidence=[item["ref"]], now=now)
         return {"result": "existing" if e["existing"] else "drafted", "notice": e["id"], "state": e["state"]}
     if verdict == "supersede":
@@ -235,7 +259,7 @@ def decide(k, item, verdict, *, text=None, priority=None, topic=None, about=None
 def due_items(k, now):
     """Scheduled notices that need the model again: stale evidence, or eligible for 6h and still unsent."""
     rows = [e for e in reversed(k.store.query("notice", state="scheduled"))
-            if e["payload"].get("topic") != FADE_TOPIC and (e["payload"].get("next_eligible") or 0) <= now
+            if e["payload"].get("topic") not in CODE_TOPICS and (e["payload"].get("next_eligible") or 0) <= now
             and (stale(e["payload"], now) or (e["payload"].get("next_eligible") or 0) <= now - STUCK_AFTER)]
     return [{"kind": "notice", "ref": e["id"], "text": text_of(e["payload"])[:TEXT_MAX], "title": e["payload"].get("title"),
              "priority": e["payload"].get("priority", "ordinary"), "verified_at": e["payload"].get("verified_at"),
@@ -244,7 +268,7 @@ def due_items(k, now):
 
 def claim(k, job, execution_id, now):
     """Claim for one muse-deliver run (`job`, its host `execution_id`) the scheduled notices whose gate is open
-    now, most urgent first, at most PER_MESSAGE. Budgets are checked and notices claimed in one write
+    now, most urgent first and within a priority the longest waiting first, at most PER_MESSAGE. Budgets are checked and notices claimed in one write
     transaction, so two runs cannot both spend a budget or claim a notice."""
     store = k.store
     for e in reversed(store.query("notice", state="drafted")):
@@ -254,7 +278,7 @@ def claim(k, job, execution_id, now):
     claimed = []
     with store.atomic():
         queue = sorted(store.query("notice", state="scheduled"),
-                       key=lambda e: (rank.get(e["payload"].get("priority"), 2), e["payload"].get("next_eligible") or 0))
+                       key=lambda e: (rank.get(e["payload"].get("priority"), 2), e["state_since"], e["id"]))
         for e in queue:
             p = e["payload"]
             if len(claimed) == PER_MESSAGE:
@@ -274,6 +298,37 @@ def claim(k, job, execution_id, now):
                 "delivery_key": delivery_key(e["natural_key"], p.get("generation", 0)), "target": job.get("deliver"),
                 "job_id": job["id"], "execution_id": execution_id, "dispatched_at": now}))
     return claimed
+
+
+def health_followup(k, now):
+    """Tick step: a medium or high health item still open after HEALTH_AFTER becomes one notice for the main session, the
+    only place that can act on it; once per incident (`first_seen`), withdrawn if it clears before delivery. Health
+    stays read-only and keeps its own exits, so a broken Notifier cannot hide itself: this only reads health.json."""
+    try:
+        report = json.loads((k.home / "muse" / "health.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    items = {(f["id"], f["first_seen"]): f for f in report.get("invariants", ())
+             if f.get("level") in ("medium", "high") and f.get("first_seen")}
+    for e in k.store.query("notice", state=UNSENT):
+        p = e["payload"]
+        if p.get("topic") == HEALTH_TOPIC and not all(tuple(pair) in items for pair in p.get("health_items", ())):
+            withdraw(k, e["id"], reason="health_cleared", now=now, by_code=True)
+    told = {tuple(pair) for pair in k.store.meta("health_followed", [])} & set(items)
+    fresh = [(key, f) for key, f in sorted(items.items()) if key not in told
+             and datetime.fromisoformat(key[1]).timestamp() <= now - HEALTH_AFTER]
+    if not fresh:
+        k.store.set_meta("health_followed", sorted(told))
+        return 0
+    pairs = [list(key) for key, _ in fresh]
+    text = "\n".join(f"- {clip(f['detail'], 300)}" + (f" Next step: {clip(f['fix'], 200)}" if f.get("fix") else "") for _, f in fresh)
+    high = any(f["level"] == "high" for _, f in fresh)
+    with k.store.atomic():
+        k.store.set_meta("health_followed", sorted(told | {key for key, _ in fresh}))
+        e = draft(k, text=clip("Not working for over a day:\n" + text, TEXT_MAX), priority="time_sensitive" if high else "ordinary",
+                  title="Open health problems", topic=HEALTH_TOPIC, notice_key=keys.health_notice_key(pairs), now=now)
+        patch(k.store, e["id"], reason="health_items", payload={"health_items": pairs}, now=now)
+    return len(fresh)
 
 
 def message(notices):
