@@ -119,7 +119,7 @@ def memory_result(text: str, tool: str = "memory") -> dict | None:
     if not failed_result(text):
         return None
     error = str(value.get("error") or "").casefold()
-    if "usage" in value and ("limit" in error or "exceed" in error):
+    if "usage" in value and any(word in error for word in ("limit", "exceed", "would put")):
         reason = "capacity"
     elif "disabled" in error:
         reason = "disabled"
