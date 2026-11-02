@@ -102,6 +102,34 @@ def failed_result(text: str) -> bool:
         or bool(value.get("error")) or value.get("status") in ("error", "failed"))
 
 
+def memory_result(text: str, tool: str = "memory") -> dict | None:
+    """A native memory or skill write that did not save, as {state, reason[, pending_id, command, usage]}; None for
+    anything else. state staged: Hermes' write approval holds it, `command` is the slash command that reviews it.
+    state failed: reason is capacity (the store's char limit), invalid (the call's own arguments or a text that
+    matched nothing), disabled (config) or other. Hermes' failure class is not in the result, so this reads its shape."""
+    try:
+        value = json.loads(text or "null")
+    except (ValueError, TypeError, RecursionError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    if value.get("staged") or value.get("proposal_staged"):
+        command = {"memory": "/memory", "skill_manage": "/skills"}.get(tool)
+        return {"state": "staged", "reason": "approval", "pending_id": value.get("pending_id"), "command": command}
+    if not failed_result(text):
+        return None
+    error = str(value.get("error") or "").casefold()
+    if "usage" in value and ("limit" in error or "exceed" in error):
+        reason = "capacity"
+    elif "disabled" in error:
+        reason = "disabled"
+    elif any(word in error for word in ("required", "needs ", "invalid", "no entry matched", "cannot be empty", "target")):
+        reason = "invalid"
+    else:
+        reason = "other"
+    return {"state": "failed", "reason": reason, **({"usage": value["usage"]} if isinstance(value.get("usage"), str) else {})}
+
+
 def redact(text: str) -> str:
     for pattern, replacement in SECRETS:
         text = pattern.sub(replacement, text)
