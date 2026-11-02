@@ -53,7 +53,12 @@ def seed_store(home, now, host):
     s.create("notice", "src:oldq", {"v1_id": "oldq"}, state="unknown", now=now - 3 * H)  # migrated 0.3.x: not counted
     s.create("goal", "stale-goal", {}, deadline=now - 12 * D, now=now - 20 * D)  # next_check 12 days old
     goals.create(k, title="Learn piano", criteria="Play one piece", by="user", session_id="chat", now=now - 20 * D)
-    goals.fade(k, now)                                                             # dormant: fade_at 6 days ago
+    goals.fade(k, now - 8 * D)                                                     # dormant: asked 8 days ago
+    ask = next(n for n in s.query("notice") if n["payload"].get("topic") == notifier.FADE_TOPIC)
+    at = ask["payload"]["next_eligible"]
+    delivered = notifier.claim(k, {"id": "job-deliver", "deliver": "bot-chat"}, "exec-fade", at)
+    notifier.apply(k, next(n for n in delivered if n["id"] == ask["id"]), {"status": "sent"}, at)
+    goals.fade(k, at + 1)                                                          # delivered: fade_at 5 days ago
     s.create("run", "exec-stuck", {}, now=now - 3 * H)
     s.create("run", "exec-ok", {}, state="ok", now=now - 2 * H)
     s.create("run", "exec-bad", {}, state="degraded", now=now - H)
@@ -120,7 +125,7 @@ def main():
             "packet_expiry": "medium", "packets_idle": "high", "notice_duplicates": "high", "notice_hanging": "medium",
             "notice_unknown": "ok", "runs_ok": "medium", "runs_unclosed": "low", "goals_missed": "high",
             "goal_fade": "medium", "sources_failing": "medium", "review_findings": "low", "drain_stopped": "ok",
-            "interests_unchecked": "ok", "memory_capacity": "ok",
+            "interests_unchecked": "ok", "memory_capacity": "ok", "assignments": "ok", "rules": "ok",
             "probe.symbols": "ok", "probe.cron_sessions": "ok", "probe.delivery_semantics": "medium",
             "probe.delivery_target": "high", "probe.signal_purity": "high", "probe.config_location": "ok",
             "probe.home": "ok", "delivery": "high", "executions": "ok", "tool_errors": "medium",

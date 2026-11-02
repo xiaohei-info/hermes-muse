@@ -235,6 +235,15 @@ def main():
             assert host.cron.remove(deliver["id"]) is False and host.cron.job("deliver") is None
             assert host.cron.ensure("patrol", schedule="every 30m", entry=entry) is None
             assert host.probe()[1]["status"] != "ok"
+        # memory_result reads Hermes' real write results: a full store and bad arguments are told apart.
+        from tools.memory_tool import MemoryStore
+        with profile_scope(home):
+            small = MemoryStore(memory_char_limit=20, user_char_limit=20)
+            small.load_from_disk()
+            full = host_sessions.memory_result(json.dumps(small.add("memory", "x" * 50)))
+            missing = host_sessions.memory_result(json.dumps(small.remove("memory", "no such entry")))
+        assert full["reason"] == "capacity" and full["usage"] and missing["reason"] == "invalid", (full, missing)
+
         with mock.patch.object(host_sessions, "reader", side_effect=sqlite3.OperationalError("locked")):
             assert host.sessions.user_turns(0) == [] and host.sessions.job_of("local-run") is None
         assert host.fault_count > faults

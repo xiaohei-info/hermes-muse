@@ -36,8 +36,8 @@ def check(name, ok, detail=""):
 
 def static():
     kinds = [kind for kind, _, _ in s.MAIN.values()]
-    check("S1 counts: muse_manage 14 (11 write + 3 read), muse_job read/observe/submit",
-          len(s.MAIN) == 14 and kinds.count("write") == 11 and kinds.count("read") == 3 and list(s.JOB_ACTIONS) == ["read", "observe", "submit"],
+    check("S1 counts: muse_manage 16 (13 write + 3 read), muse_job read/observe/submit",
+          len(s.MAIN) == 16 and kinds.count("write") == 13 and kinds.count("read") == 3 and list(s.JOB_ACTIONS) == ["read", "observe", "submit"],
           {"main": len(s.MAIN), "writes": kinds.count("write"), "reads": kinds.count("read"), "job": list(s.JOB_ACTIONS)})
     schemas = {t: s.tool_schema(t) for t in s.TOOLS}
     branches = {t: [b["title"] for b in schemas[t]["parameters"]["properties"]["data"]["anyOf"]] for t in s.TOOLS}
@@ -221,6 +221,34 @@ def dynamic(base):
           and "next_offset" in rest and len(json.dumps(listed)) < 2 * s.READ_MAX and listed["next_offset"] == len(listed["items"])
           and busy["code"] == "host_unavailable",
           {"page": len(first["body"]), "listed": len(listed["items"]), "busy": busy})
+
+    # S13 the two assignment actions and the two new content kinds, and who may use them
+    table = {"executors": {"agent": {"run": "agent start", "status": "agent inspect", "send": "agent send"}}, "rules": []}
+    broken = call("muse_manage", "content_write", {"kind": "rules", "id": "current", "body": "<!-- hermes-muse {\"rules\": 1} -->\n", "expected_revision": "absent"})
+    written = call("muse_manage", "content_write", {"kind": "rules", "id": "current", "expected_revision": "absent",
+                                                    "body": "<!-- hermes-muse " + json.dumps(table) + " -->\n# Rules\n"})
+    decision = call("muse_manage", "content_write", {"kind": "decisions", "id": "current", "body": "# Decisions\n", "expected_revision": "absent"})
+    g = call("muse_manage", "goal_create", {"title": "Ship the fix", "criteria": "Merged"})["result"]["goal_id"]
+    recorded = call("muse_manage", "assignment_record", {"goal_id": g, "executor": "agent", "handle": "h1"})
+    unknown = call("muse_manage", "assignment_record", {"goal_id": g, "executor": "stranger", "handle": "h2"})
+    aid = recorded["result"]["assignment_id"]
+    bare = call("muse_manage", "assignment_update", {"assignment_id": aid, "state": "done", "conclusion": "Merged"})
+    stopped = call("muse_manage", "assignment_update", {"assignment_id": aid, "state": "stopped"})
+    page = call("muse_manage", "read", {"kind": "goal", "id": g})["result"]["links"]
+    back = call("muse_manage", "read", {"kind": "assignment", "id": aid})["result"]["links"]
+    no_proof = call("muse_manage", "goal_update", {"goal_id": g, "status": "done"})
+    proof = call("muse_manage", "goal_update", {"goal_id": g, "status": "done", "evidence": "commit abc123"})
+    cron_read = call("muse_manage", "read", {"kind": "decisions"}, CRON_CALL)
+    cron_write = call("muse_manage", "content_write", {"kind": "decisions", "id": "current", "body": "x", "expected_revision": "absent"}, CRON_CALL)
+    cron_assign = call("muse_manage", "assignment_record", {"goal_id": g, "executor": "agent", "handle": "h3"}, CRON_CALL)
+    child = call("muse_manage", "assignment_update", {"assignment_id": aid, "state": "running"}, {"kind": "child", "session_id": "c"})
+    week = entry.weekly(k, clock[0])
+    check("S13 assignments and rules from the main session: a broken RULES.md is refused, an unknown executor named, done needs evidence, pages link onward; cron reads decisions and writes neither; a child only reads",
+          broken["code"] == "invalid_argument" and written["ok"] and decision["ok"] and recorded["ok"] and "agent" in unknown["error"]
+          and "evidence" in bare["error"] and stopped["result"]["state"] == "stopped" and page["assignments"][0]["id"] == aid and back["goal"] == f"goal:{g}"
+          and "evidence" in no_proof["error"] and proof["result"]["status"] == "done" and cron_read["ok"] and cron_write["code"] == "permission_denied"
+          and cron_assign["code"] == "permission_denied" and child["code"] == "permission_denied" and week["assignments"]["by_executor"]["agent"]["stopped"] == 1,
+          {"broken": broken, "recorded": recorded, "no_proof": no_proof, "week": week["assignments"]})
 
 
 def native(base):
