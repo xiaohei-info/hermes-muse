@@ -106,9 +106,15 @@ def blocker(k, rule, item, thread, goal):
         (e for e in k.store.query("assignment") if e["payload"].get("thread_key") == thread),
         key=lambda e: e["payload"].get("opened_at") or 0, reverse=True)
     latest = next(iter(rows), None)
+    if latest and goal_state(k, latest) == "done":  # the user closed the work: a new event starts afresh
+        return None
     if latest and (latest["state"] in HOLDS or (goal and latest["state"] == "stopped" and latest["payload"].get("stopped_by"))):
         return f"{latest['id']} {latest['state']}: the user decides what happens next"
     return None
+
+
+def goal_state(k, e):
+    return (k.store.get(f"goal:{e['payload']['goal_id']}") or {}).get("state")
 
 
 def dispatch(k, item, r, now):
@@ -125,7 +131,7 @@ def dispatch(k, item, r, now):
     thread = item.get("thread")
     goal, live = current(k, rule, thread)
     if live and live["payload"].get("handle") != handle:
-        raise ValueError(f"{live['id']} is already working on this; answer `forwarded` instead")
+        raise ValueError(f"{live['id']} is already working on this; skip this item")
     why = None if live else blocker(k, rule, item, thread, goal)
     if why:
         raise ValueError(f"{why}; skip this item")
@@ -144,6 +150,8 @@ def dispatch(k, item, r, now):
 def forward(k, item, now):
     """Patrol verdict `forwarded`: a new item of a thread went to the executor with its `send` template. Looked up now,
     since the executor may have been started by an earlier item of this very packet."""
+    if (item.get("rule") or {}).get("do") != "forward":
+        raise ValueError(f"{item.get('held') or 'observe did not mark this item do=forward'}; judge it with send or skip")
     _, e = current(k, item.get("rule") or {}, item.get("thread"))
     if not e:
         raise ValueError("forwarded needs a live assignment on this item's thread; dispatch the thread's first item, or skip")
@@ -224,7 +232,7 @@ def report(k, assignment_id, state, *, conclusion=None, evidence=None, question=
         notice = {
             "waiting": lambda: tell(k, moved, "ask", question, kind="ask", now=now),
             "failed": lambda: tell(k, moved, "failed", question or conclusion, kind="ask", priority="time_sensitive", now=now),
-            "stalled": lambda: tell(k, moved, "stalled", conclusion or told_text(k, moved, STALLED), priority="time_sensitive", now=now),
+            "stalled": lambda: tell(k, moved, "stalled", conclusion or told_text(k, moved, STALLED), kind="ask", priority="time_sensitive", now=now),
             "done": lambda: (p.get("tell") == "always" or (p.get("tell") != "never" and not closed)) and tell(
                 k, moved, "done", conclusion, sources=[evidence], now=now),
         }.get(state, lambda: None)()
@@ -257,7 +265,7 @@ def sweep(k, now):
             moved = patch(store, e["id"], expect=("stalled",), reason="stalled_told", payload={"stalled_told": True}, now=now)
             if moved:
                 counts["told"] += 1
-                tell(k, moved, "stalled", told_text(k, moved, STALLED), priority="time_sensitive", now=now)
+                tell(k, moved, "stalled", told_text(k, moved, STALLED), kind="ask", priority="time_sensitive", now=now)
     for e in store.query("notice", state=notifier.UNSENT):  # goals.fade withdraws its own
         p = e["payload"]
         if p.get("kind") == "ask" and p.get("goal_id") and p.get("topic") != notifier.FADE_TOPIC:
@@ -305,8 +313,8 @@ def offered(k, items, now):
 def annotate(k, item, table, earlier=()):
     """What the rules say about one observed item, stored on it and answered by observe; {} when no rule matches. `earlier`
     are this packet's previous items: one of them may be about to start the executor this item's thread needs.
-    `do` is final: dispatch (run and brief given), forward (an executor has the thread), ask, tell, ignore. A dispatch rule
-    that may not start anything now is `tell` with `held` saying why."""
+    `do` is final: dispatch (run and brief given), forward (an executor has the thread; forward_with and message given),
+    ask, tell, ignore. A dispatch or forward that cannot happen now is `tell` with `held` saying why."""
     rule = rules.match(table["rules"], item)
     if not rule:
         return {}
@@ -323,17 +331,16 @@ def annotate(k, item, table, earlier=()):
     elif do == "dispatch":
         held = blocker(k, rule, item, thread, goal)
         do = "tell" if held else do
+    executor = (live and live["payload"].get("executor")) or (opener and opener["rule"].get("executor")) or rule.get("executor")
+    templates = table["executors"].get(executor or "", {})
+    note = do == "forward" and rules.forward_note(item)
+    if do == "forward" and not (note and templates.get("send")):
+        do, held = "tell", "nothing can be passed on to the executor on this thread: no clean link, or it has no send template"
     kept = {f: rule.get(f) for f in ("name", "executor", "ask", "tell", "authority", "expect", "goal")}
     item.update(rule={**kept, "do": do}, thread=thread, goal=goal and goal["natural_key"], assignment=live and live["id"], held=held)
     out = {"rule": rule["name"], "do": do, "thread": thread, "goal": item["goal"], "assignment": item["assignment"]}
-    executor = (live and live["payload"].get("executor")) or (opener and opener["rule"].get("executor")) or rule.get("executor")
-    templates = table["executors"].get(executor or "", {})
     if do == "forward":
-        note = rules.forward_note(item)
-        if note and templates.get("send"):
-            out.update(forward_with=templates["send"], message=note, **({"handle": live["payload"].get("handle")} if live else {"handle_from": opener["ref"]}))
-        else:
-            held = "nothing can be passed on: no clean link, or the executor has no send template; skip it"
+        out.update(forward_with=templates["send"], message=note, **({"handle": live["payload"].get("handle")} if live else {"handle_from": opener["ref"]}))
     elif do == "dispatch":
         out.update(run=templates.get("run"), brief=rules.brief(rule, item))
     elif do == "ask" and rule.get("ask"):

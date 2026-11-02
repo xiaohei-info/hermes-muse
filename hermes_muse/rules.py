@@ -9,6 +9,7 @@ import json
 import re
 
 from .content_io import Files
+from .host.sessions import redact
 
 REL = "RULES.md"
 PREFIX = "<!-- hermes-muse "
@@ -21,7 +22,9 @@ WHEN = ("source_id", "title", "url")
 EXPECT = "2h"
 DURATION = re.compile(r"([1-9][0-9]*)([mhd])")
 UNIT = {"m": 60, "h": 3600, "d": 86400}
-LINK = re.compile(r"https?://[A-Za-z0-9._~:/?#=%+,@-]+")  # no whitespace or shell metacharacters: it goes into a command
+# A host with no userinfo, then no whitespace or shell metacharacters: it goes into a command.
+LINK = re.compile(r"https?://[A-Za-z0-9._~:-]+(?:[/?#][A-Za-z0-9._~:/?#=%+,@-]*)?")
+LINK_MAX = 300
 EMPTY = {"executors": {}, "rules": []}
 
 
@@ -132,9 +135,11 @@ def thread(rule, item):
 
 
 def link(item):
-    """The item's URL if it is safe to hand to an executor, else None. An outsider writes this text too, so it must fully
-    match LINK; a free-text upstream id never stands in for it."""
-    return next((str(v) for v in (item.get("url"), item.get("upstream_id")) if v and LINK.fullmatch(str(v))), None)
+    """The item's URL (its upstream id without one) if it is safe to hand to an executor, else None. Only that one value:
+    the rule's `when.url` checked it, so a dirty URL never falls back to another field. An outsider writes it too, so it
+    must fully match LINK and carry nothing redaction would change (the exit gate would break it)."""
+    value = str(item.get("url") or item.get("upstream_id") or "")
+    return value if len(value) <= LINK_MAX and LINK.fullmatch(value) and redact(value) == value else None
 
 
 def brief(rule, item):
