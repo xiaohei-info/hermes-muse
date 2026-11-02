@@ -242,7 +242,9 @@ def main():
             small.load_from_disk()
             full = host_sessions.memory_result(json.dumps(small.add("memory", "x" * 50)))
             missing = host_sessions.memory_result(json.dumps(small.remove("memory", "no such entry")))
+            batch = host_sessions.memory_result(json.dumps(small.apply_batch("memory", [{"action": "add", "content": "x" * 50}])))
         assert full["reason"] == "capacity" and full["usage"] and missing["reason"] == "invalid", (full, missing)
+        assert batch["reason"] == "capacity", batch
 
         with mock.patch.object(host_sessions, "reader", side_effect=sqlite3.OperationalError("locked")):
             assert host.sessions.user_turns(0) == [] and host.sessions.job_of("local-run") is None
