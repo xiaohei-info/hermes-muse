@@ -13,7 +13,8 @@ read/observe/submit accept only refs that belong to the packet (trust boundary).
 import hashlib
 import json
 
-from . import goals, intake, notifier, records, review, sources, upkeep
+from .. import rules
+from . import assignments, goals, intake, notifier, records, review, sources, upkeep
 from .common import D, H, clip, one, patch, preferences
 from .store import keys, notice_key
 
@@ -41,16 +42,22 @@ def enum(*values):
 
 
 S, REF = {"type": "string"}, {"type": "string", "description": "a ref from this packet"}
+ASSIGNED = ("dispatch", "forwarded")  # patrol verdicts on an observed item that a rule sends to an executor
 SCHEMAS = {  # design 2.6: one result shape per item kind group
     "intake": obj(["ref", "disposition"], ref=REF, disposition=enum(*intake.DISPOSITIONS),
                   facts={"type": "array", "items": S, "maxItems": 20},
                   goal_hint={"type": "string", "description": "an open goal id, or 'new' to propose a goal"}),
-    "patrol": obj(["candidate_ref", "verdict"], candidate_ref=REF, verdict=enum(*notifier.VERDICTS),
+    "patrol": obj(["candidate_ref", "verdict"], candidate_ref=REF, verdict=enum(*notifier.VERDICTS, *ASSIGNED),
                   text={"type": "string", "maxLength": notifier.TEXT_MAX}, priority=enum(*notifier.PRIORITIES),
                   topic={"type": "string", "maxLength": 100,
                          "description": "short topic label; the exact context.blocked_topics entry when the item is about one"},
-                  about={"type": "string", "description": "a context.notified ref: the notified event this item is about"}),
+                  about={"type": "string", "description": "a context.notified ref: the notified event this item is about"},
+                  handle={"type": "string", "maxLength": 200, "description": "dispatch: what the executor's run template returned"},
+                  executor={"type": "string", "maxLength": 100, "description": "dispatch: the rule's executor"},
+                  expected_end={"type": "string", "maxLength": 40, "description": "dispatch: ISO 8601, only when the executor gave an estimate; otherwise the rule's expect applies"}),
     "goals": obj([], goal_id=REF, assessment=enum(*goals.ASSESSMENTS), progress_note=S,
+                 evidence={"type": "string", "maxLength": 1000, "description": "done_suggested: a link, commit, file path or checkable observation"},
+                 text={"type": "string", "maxLength": notifier.TEXT_MAX, "description": "done_suggested: your question to the user"},
                  create=obj(["signal_ref", "title", "criteria"], signal_ref=REF, title=S, criteria=S),
                  decline=obj(["signal_ref", "reason"], signal_ref=REF, reason={"type": "string", "maxLength": 500})),
     "review": obj(["candidate_ref", "verdict", "reason"], candidate_ref=REF, verdict=enum(*review.VERDICTS),
@@ -60,10 +67,15 @@ SCHEMAS = {  # design 2.6: one result shape per item kind group
                 notice=obj(["text", "source_ref"], text={"type": "string", "maxLength": notifier.TEXT_MAX},
                            source_ref={"type": "string", "description": "one of this result's article.source_refs"},
                            priority=enum(*FEED_PRIORITIES), topic={"type": "string", "maxLength": 100})),
+    "assignment": obj(["assignment_ref", "state"], assignment_ref=REF, state=enum(*assignments.REPORTS),
+                      conclusion={"type": "string", "maxLength": notifier.TEXT_MAX, "description": "what it found or did, in your own words to the user; required for done and failed, and for running past its expected end"},
+                      evidence={"type": "string", "maxLength": 1000, "description": "done: a link, commit, file path or checkable observation"},
+                      question={"type": "string", "maxLength": notifier.TEXT_MAX, "description": "waiting or failed: the decision for the user, your recommendation, why, and the options"},
+                      expected_end={"type": "string", "maxLength": 40, "description": "ISO 8601, only when the executor gave a new estimate"}),
 }
 KIND_SCHEMA = {"intake": "intake", "observed": "patrol", "notice": "patrol", "goal": "goals", "signal": "goals",
-               "review": "review", "interest": "feed"}
-TYPE_SCHEMAS = {"intake": ("intake",), "patrol": ("patrol",), "nightly": ("goals", "review"), "feed": ("feed",)}
+               "review": "review", "interest": "feed", "assignment": "assignment"}
+TYPE_SCHEMAS = {"intake": ("intake",), "patrol": ("patrol", "assignment"), "nightly": ("goals", "review"), "feed": ("feed",)}
 
 
 # -- builders: (items, context) ----------------------------------------------------------------------
@@ -76,7 +88,9 @@ def intake_items(k, n, now, offered):
 
 def patrol_items(k, n, now, offered):
     recent = [{"at": t["at"], "text": clip(t["text"], 500)} for t in k.adapter.sessions.user_turns(now - 6 * H)][-5:]
-    return notifier.due_items(k, now), {
+    due = assignments.due(k, now, n)
+    return notifier.due_items(k, now) + due, {
+        "rules": assignments.rule_context(k, due),
         "sources_due": sources.due(k.store, now, k.settings().get("source_intervals"))[:SOURCES_DUE],
         "notified": notifier.recent(k.store, now),
         "recent_user_messages": recent, "send_limit": n, "blocked_topics": blocked_topics(k)}
@@ -219,6 +233,7 @@ def build(k, job, now):
                          deadline=now + spec["lease"], now=now, dedupe=(frozenset({"issued"}), None))
         if not e["existing"]:
             store.attempt([store.query("signal", natural_key=i["ref"], limit=1)[0]["id"] for i in items if i["kind"] == "intake"], now)
+            assignments.offered(k, items, now)
     return view(e, spec)
 
 
@@ -266,6 +281,10 @@ def observe(k, packet_id, source_id, items, limitation_code=None, error=None, no
                       "url": str(raw["url"])[:1000] if raw.get("url") else None,
                       "ts": float(ts) if type(ts) in (int, float) else None})
     state = sources.record(k.store, source_id, limitation_code=limitation_code, error=error, now=now)
+    try:
+        table, broken = rules.load(k.home), None
+    except ValueError as exc:  # Health reports it too; items are judged as if there were no rules
+        table, broken = rules.EMPTY, str(exc)
     out = []
     with k.store.atomic():
         observed = list(k.store.get(packet["id"])["payload"]["observed"])
@@ -274,9 +293,11 @@ def observe(k, packet_id, source_id, items, limitation_code=None, error=None, no
             key, _ = notice_key(item["upstream_id"], [item["url"]] if item["url"] else [], item["title"], item["ts"] or now)
             known = notifier.known(k.store, key, now)
             observed.append(item)
-            out.append({"ref": item["ref"], "notified": known and {"ref": known["id"], "state": known["state"]}})
+            out.append({"ref": item["ref"], "notified": known and {"ref": known["id"], "state": known["state"]},
+                        **assignments.annotate(k, item, table)})
         patch(k.store, packet["id"], reason="observe", payload={"observed": observed}, now=now)
-    return {"source": {"id": source_id, "state": state["state"], "gap": state["payload"].get("gap")}, "items": out}
+    return {"source": {"id": source_id, "state": state["state"], "gap": state["payload"].get("gap")}, "items": out,
+            **({"rules_error": broken} if broken else {})}
 
 
 # -- submit ------------------------------------------------------------------------------------------
@@ -297,8 +318,8 @@ def feed_result(k, item, r, now):
         raise ValueError("notice.source_ref must be one of article.source_refs")
     if notice and (notice.get("priority") or "ordinary") not in FEED_PRIORITIES:
         raise ValueError(f"notice.priority must be one of {', '.join(FEED_PRIORITIES)}")
-    if notice and notice.get("topic") == notifier.FADE_TOPIC:
-        raise ValueError(f"topic {notifier.FADE_TOPIC!r} is reserved for Muse's dormancy questions")
+    if notice and notice.get("topic") in notifier.CODE_TOPICS:
+        raise ValueError(f"topic {notice['topic']!r} is reserved for Muse's own questions and follow-ups")
     patch(k.store, item["ref"], reason="feed:checked", payload={"checked_at": now}, now=now)
     key = hashlib.sha256(json.dumps(refs, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:24]
     e = k.store.create("feed", key, {"title": title, "interest_id": item["ref"], "sources": refs, "created": now}, now=now)
@@ -315,18 +336,36 @@ def feed_result(k, item, r, now):
     return out
 
 
+def observed_result(k, item, r, now):
+    """A rule routes the item: code holds the patrol to it, and a thread with a live assignment goes to its executor
+    instead of the user. Everything else is the Notifier's."""
+    verdict, rule = r.get("verdict"), item.get("rule") or {}
+    if verdict == "dispatch":
+        return assignments.dispatch(k, item, r, now)
+    if verdict == "forwarded":
+        return assignments.forward(k, item, now)
+    if verdict in ("send", "supersede"):
+        if rule.get("do") == "ignore":
+            raise ValueError(f"rule {rule.get('name')!r} ignores this item; skip it")
+        if item.get("assignment"):
+            raise ValueError(f"{item['assignment']} is working on this thread; pass it on and answer `forwarded`, or skip")
+    return notifier.decide(k, item, verdict, text=r.get("text"), priority=r.get("priority"), topic=r.get("topic"), about=r.get("about"),
+                           kind="ask" if rule.get("do") == "ask" else "tell", now=now)
+
+
 HANDLERS = {
     "intake": lambda k, i, r, now: {"state": intake.dispose(k, i["ref"], r.get("disposition"), r.get("facts"), r.get("goal_hint"), now)["state"]},
-    "observed": lambda k, i, r, now: notifier.decide(k, i, r.get("verdict"), text=r.get("text"), priority=r.get("priority"),
-                                                     topic=r.get("topic"), about=r.get("about"), now=now),
+    "observed": observed_result,
     "notice": lambda k, i, r, now: notifier.decide(k, i, r.get("verdict"), text=r.get("text"), priority=r.get("priority"), now=now),
-    "goal": lambda k, i, r, now: goals.assess(k, i["ref"], r.get("assessment"), r.get("progress_note"), now),
+    "goal": lambda k, i, r, now: goals.assess(k, i["ref"], r.get("assessment"), r.get("progress_note"), r.get("evidence"), r.get("text"), now),
+    "assignment": lambda k, i, r, now: assignments.report(k, i["ref"], r.get("state"), conclusion=r.get("conclusion"), evidence=r.get("evidence"),
+                                                          question=r.get("question"), expected_end=r.get("expected_end"), now=now),
     "signal": lambda k, i, r, now: {"result": "declined"} if r.get("decline") and not r.get("create") else goals.create(k, title=(r.get("create") or {}).get("title"),
                                                 criteria=(r.get("create") or {}).get("criteria"), signal_ref=i["ref"], now=now),
     "review": lambda k, i, r, now: review.record(k, i["ref"], r.get("verdict"), r.get("reason"), now, i.get("rules", ())),
     "interest": feed_result,
 }
-REF_FIELDS = ("ref", "candidate_ref", "goal_id", "interest_ref")
+REF_FIELDS = ("ref", "candidate_ref", "goal_id", "interest_ref", "assignment_ref")
 
 
 def submit(k, packet_id, results, now):

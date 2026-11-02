@@ -1,5 +1,5 @@
 """Conversation review: code picks every turn of the last 72h of private user sessions that fixed rules flag,
-oldest first; the model only judges each (agent_gap / latent_need / fine). One entity per turn, ever.
+oldest first; the model only judges each (agent_gap / latent_need / friction / fine). One entity per turn, ever.
 
 Rules: a completion claim with no successful write-type tool result in the same turn; a failed tool not
 retried successfully; a user correction or near-repeat of the previous request; a stated need that matches
@@ -12,7 +12,7 @@ from .common import D, clip, one
 
 PAGE = 2000  # host rows per read; the window is read page by page
 WINDOW = 3 * D
-VERDICTS = ("agent_gap", "latent_need", "fine")
+VERDICTS = ("agent_gap", "latent_need", "friction", "fine")
 CLAIM = re.compile(r"已完成|已发送|已修复|已部署|已提交|搞定|\b(?:done|fixed|completed|sent|deployed|resolved)\b", re.I)
 CORRECTION = re.compile(r"不是|还是没|又|我说的是|不对|\b(?:not what I|still (?:not|doesn'?t|broken)|again|I said|that'?s wrong)\b", re.I)
 NEED = re.compile(r"帮我|记得|提醒我|以后|我想|打算|计划|\b(?:remind me|I want to|I'd like to|plan to|don'?t forget|todo)\b", re.I)
@@ -88,7 +88,8 @@ def candidates(k, now, skip=()):
 
 
 def record(k, ref, verdict, reason, now, rules=()):
-    """agent_gap -> open Finding (14 days); latent_need -> Idea candidate; fine -> dismissed Finding.
+    """agent_gap -> open Finding (14 days); friction (the user corrected or redid something a skill or rule could have
+    settled) -> open Finding tagged friction, a suggestion only; latent_need -> Idea candidate; fine -> dismissed Finding.
     `evidence` is the reviewed turn (a pointer for read) plus the pick rules that matched it."""
     if verdict not in VERDICTS:
         raise ValueError(f"verdict must be one of {', '.join(VERDICTS)}")
@@ -104,5 +105,6 @@ def record(k, ref, verdict, reason, now, rules=()):
         if verdict == "latent_need":
             e = k.store.create("idea", ref, {"title": reason[:200], "origin": "review", **payload}, now=now)
         else:
-            e = k.store.create("finding", ref, payload, state="open" if verdict == "agent_gap" else "dismissed", now=now)
+            tag = {"tag": "friction"} if verdict == "friction" else {}
+            e = k.store.create("finding", ref, {**payload, **tag}, state="dismissed" if verdict == "fine" else "open", now=now)
     return {"result": "recorded", "entity": e["id"], "state": e["state"]}
