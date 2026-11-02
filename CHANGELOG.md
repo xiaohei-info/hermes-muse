@@ -1,3 +1,45 @@
+# 0.5.0 — Agent automation: events find their executor; every waiting state has a clock and an exit (2026-11-02)
+
+**Contract changes.** `muse_manage` goes from 14 to 16 actions (`assignment_record`, `assignment_update`); `goal_update`
+takes `evidence`; `read` and `content_write` take `rules` and `decisions`; `read` takes `assignment` and a goal or
+assignment page lists its next-hop ids. `muse_job submit` gains patrol verdicts `dispatch` and `forwarded` and a sixth
+result schema, `assignment`; nightly's `goals` result gains `evidence` and `text`, its review a `friction` verdict. New
+entity `assignment`. Regenerated [interface.md](skills/companion/references/interface.md).
+
+**Upgrade notes.** `status=done` now needs `evidence`, from the main session as well: one call still closes a goal, it just
+says what was seen. `goal_dormant_days` and `goal_fade_days` default to 3 instead of 7, and activity no longer counts
+nightly assessments, so goals that looked alive for weeks go dormant on upgrade: Muse asks about them at most 3 a day and
+cancels none until 3 days after a question was delivered. A goal waiting on the user now fades too. Explicit values
+in your preferences stay. No new cron job or Store schema change, and no new host capability is used.
+
+- **Rules and executors.** `muse/RULES.md` (first-line JSON: `executors`, `rules`) says which events go to which executor.
+  Code matches each observed item (`rules.match`); the patrol's model starts the executor with your tools and a brief of the
+  ask, the authority and a link, never the event's text. Muse runs no command. Without a rule, nothing can start.
+- **Assignment ledger** (`kernel/assignments.py`). Who took it, since when, expected when, what came back. Later events of a
+  thread go to its executor and are only recorded. Due work is checked by the patrol; past its expected end with nothing
+  new it stalls, and three unanswered packets lose it. Hermes' own delegation closes by code. `failed` is final: the goal
+  stays open and you are asked to retry (a new assignment) or give up.
+- **Decisions.** Notices have a kind: `ask` carries the decision, a recommendation and the options, and `tell` a result.
+  The main session records your answer in `muse/DECISIONS.md`, reads it before asking, and continues the executor.
+- **Done needs evidence.** Checked by code for goals and assignments. A goal a rule made closes by code when its assignment
+  brings evidence; yours stays yours to close.
+- **Faster events.** A Hermes webhook route can wake the patrol at once; the event is evidence in its Run Context.
+- **Nightly friction scan and weekly counts.** `friction` opens a Finding tagged as a suggestion; the weekly digest counts
+  assignments by rule and executor, questions asked and frictions.
+- **Dormancy works.** `goals.fade` judged by `updated`, which every nightly assessment wrote, so no goal ever went dormant.
+  Activity is now a move by the user or an executor (`activity_at`); 3 quiet days bring one question, and 3 days after
+  it was really delivered (`dispatched_at`) code cancels the goal. `goal_update(status=active)` revives it.
+- **An assessment leads somewhere.** `done_suggested` needs evidence and becomes one question to you; it never closes a goal.
+- **Health has a next step.** Health stays read-only with its own exits. An item open over a day becomes one notice for the
+  main session, withdrawn if it clears first; the weekly digest lists everything still open.
+- **Memory receipts say why.** Waiting for approval, store full, wrong arguments or turned off; a staged write says how to
+  approve it and whether a cleanup invalidates it (an add applies if it still fits; a patch or remove is pinned to its entry).
+- **Delivery voice.** The main session never mentions duplicates, repeats, re-checking or not looking at data, and the
+  default dormancy question is in the assistant's voice.
+- **Notifier fixes.** Within a priority the longest waiting goes first; repeating an alias changes nothing; a supersede is
+  no longer reported as a duplicate send; updates of one event are 6 hours apart, except urgent ones and questions.
+- README: Windows scope.
+
 # 0.4.7 — A Muse delivery is the assistant telling the user (2026-11-01)
 
 - Main session: a `muse-*` delivery is something the assistant just found out, and its reply is how the user hears
