@@ -53,3 +53,18 @@ def signal_key(session_id, turn_id):
 def title_key(title):
     """Interest/idea natural key: the casefolded, whitespace-normalized title."""
     return hashlib.sha256(" ".join(str(title).casefold().split()).encode()).hexdigest()[:16]
+
+
+def assignment_key(slug, n):
+    """The n-th assignment of a goal; a retry is a new n, never the old one revived."""
+    return f"goal:{slug}:a:{n}"
+
+
+def assignment_notice_key(key, event, version):
+    """A notice about one state change of an assignment: `version` is the entity's version after that change."""
+    return f"{key}:{event}:{version}"
+
+
+def health_notice_key(items):
+    """The follow-up notice of a set of open health items (`[id, first_seen]` pairs): one per incident set."""
+    return "health:" + hashlib.sha256(repr(sorted(map(tuple, items))).encode()).hexdigest()[:24]
