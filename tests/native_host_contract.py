@@ -146,6 +146,36 @@ def main():
         assert host.sessions.job_of(f"cron_{job['id']}_20261029_120000") == job["id"]
         assert host.sessions.job_of("other-run") is None and host.sessions.job_of("chat") is None
 
+        # Scheduler ownership remains authoritative when untitled cron windows overlap.
+        from hermes_muse.host import sessions as host_sessions
+        with profile_scope(home):
+            intake_run = finish(intake["id"], None)
+        with closing(sqlite3.connect(home / "state.db")) as db, db:
+            for sid, principal, request in (
+                    ("local-owned", "cron-owner", f"cron:{job['id']}:{run_id}"),
+                    ("local-intake", "cron-owner", f"cron:{intake['id']}:{intake_run}"),
+                    ("local-foreign", "cron-owner", "cron:unowned:other-execution"),
+                    ("local-spoof", "not-scheduler", f"cron:{job['id']}:{run_id}")):
+                db.execute("INSERT INTO sessions (id, source, title, started_at) VALUES (?, 'cron', ?, ?)",
+                           (sid, "muse-patrol" if sid == "local-foreign" else None, time.time()))
+                db.execute("INSERT INTO session_admissions (target_session_id, principal_id, request_id, "
+                           "admission_id, lineage_json, payload_json, payload_digest, intent, status) "
+                           "VALUES (?,?,?,?,?,'{}','synthetic','queue','terminal')",
+                           (sid, principal, request, sid, json.dumps([sid])))
+        assert host.sessions.job_of("local-owned") == job["id"]
+        assert host.sessions.job_of("local-intake") == intake["id"]
+        assert host.sessions.job_of("local-foreign") is None
+        assert host.sessions.job_of("local-spoof") is None
+        with closing(sqlite3.connect(":memory:")) as legacy:
+            assert host_sessions.cron_admissions(legacy, [{"id": "legacy", "source": "cron"}]) == [
+                {"id": "legacy", "source": "cron"}]
+        for requests in ([f"cron:{job['id']}:{run_id}", f"cron:{intake['id']}:{intake_run}"],
+                         [f"cron:{job['id']}:"], [], ["invalid"]):
+            assert host_sessions.match_job({"id": "x", "source": "cron", "cron_requests": requests},
+                                           host.cron.jobs(), []) is None
+        mapped = {s["id"]: s["job_id"] for s in host.sessions.cron_sessions(0)}
+        assert mapped["local-owned"] == job["id"] and mapped["local-foreign"] is None
+
         # The canonical Bot Chat is born hidden and is the main session; any other hidden row stays excluded. The query
         # must reach messages through sessions(source), not by scanning them.
         from hermes_muse.host.sessions import BOT_CHAT, turns_query
