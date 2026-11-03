@@ -56,6 +56,12 @@ MACHINES = {
                        edges({"pending_notice": "noticed", "noticed": "pending_notice"})),
     "packet": Machine("issued", {"issued": (None, "expired")}, edges({"issued": "submitted expired"})),
     "run": Machine("running", {"running": (2 * H, None)}, edges({"running": "ok degraded failed abandoned"})),
+    # One piece of work handed to an executor. `running` is due at min(expected end, last check + 2h) and the patrol or
+    # kernel.assignments decides; `stalled` and `lost` wait for the user, whose goal keeps its own fade clock.
+    "assignment": Machine("running", {"running": (None, None), "waiting": (3 * D, "stalled")},
+                          edges({"running": "waiting done failed stalled stopped lost",
+                                 "waiting": "running done failed stalled stopped lost",
+                                 "stalled": "running done failed stopped", "lost": "running done failed stopped"})),
     # Forgotten keys: old evidence must not recreate what the user deleted.
     "tombstone": Machine("forgotten", {}, frozenset()),
 }

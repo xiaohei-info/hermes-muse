@@ -7,6 +7,8 @@ through the Muse Notifier:
   2. Dashboard: `load(home)` behind the plugin's `/health` route;
   3. cron stdout: `run()` returns a message only when the alert set changes (empty stdout is silent);
   4. optional `health_deliver` setting: a second route on the health job, so Hermes delivers that stdout to both.
+Who takes over: an item still open a day later is picked up from health.json by the kernel as one notice for the main
+session (`notifier.health_followup`), and the weekly digest lists every open item. Health itself still writes only this file.
 """
 from __future__ import annotations
 
@@ -82,6 +84,8 @@ def check(adapter, now=None):
     items += inv.tools(adapter.sessions.tool_results(now - inv.D))
     items += inv.jobs(owned, now)
     items.append(inv.deliver_stalled(store, adapter.cron.job("deliver"), now, readable=bool(owned)))  # Health's own job is owned
+    items.append(inv.main_session(store, adapter.sessions.main_sessions(now - inv.MAIN_WINDOW), now))
+    items.append(inv.rules_file(adapter.home))
     items.append(inv.memory(adapter.memory.stores()))
     items.append(inv.plugin_load(adapter.load_failed()))
     items.append(inv.host_faults(list(adapter.faults)))

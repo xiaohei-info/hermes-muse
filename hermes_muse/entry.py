@@ -12,11 +12,11 @@ from . import health
 from .host import HostAdapter
 from .host.sessions import clean
 from .install import JOBS, migrating, owned
-from .kernel import Kernel, goals, notifier
+from .kernel import Kernel, assignments, goals, notifier
 from .kernel.common import D, preferences
 
 WEEK = 7 * D
-WEEKLY_KINDS = ("signal", "notice", "goal", "feed", "finding", "interest", "idea", "run")
+WEEKLY_KINDS = ("signal", "notice", "goal", "assignment", "feed", "finding", "interest", "idea", "run")
 
 
 def silent(reason):
@@ -24,13 +24,13 @@ def silent(reason):
 
 
 def weekly(k, now):
-    """Inputs of the weekly digest: the failing Health checks and 7-day counts by kind and state."""
+    """Inputs of the weekly digest: the failing Health checks, 7-day counts by kind and state, and how assignments went."""
     week = {}
     for kind in WEEKLY_KINDS:
         for e in k.store.query(kind, since=now - WEEK):
             week.setdefault(kind, {}).setdefault(e["state"], 0)
             week[kind][e["state"]] += 1
-    return {"health": health.summary(k.home), "last_7_days": week}
+    return {"health": health.summary(k.home), "last_7_days": week, "assignments": assignments.week(k.store, now - WEEK)}
 
 
 def watch(k, key):

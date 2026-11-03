@@ -3,7 +3,7 @@ import logging
 import time
 
 from ..host import resolve_home
-from . import goals, intake, notifier, packets, runs, sources
+from . import assignments, goals, intake, notifier, packets, runs
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -72,7 +72,6 @@ class Kernel:
                 log.warning("Muse kernel tick step %s failed: %s", name, exc)
                 errors[name] = f"{type(exc).__name__}: {exc}"
 
-        step("sources_registered", lambda: sources.bootstrap(self.store, now))
         step("goals_synced", lambda: goals.sync(self, now))
         step("signals_captured", lambda: intake.capture(self, now))
         step("receipts", lambda: notifier.reconcile(self, now))
@@ -80,7 +79,9 @@ class Kernel:
         step("expired", lambda: moved.extend(self.store.tick(now)) or len(moved))
         step("watch_jobs_paused", lambda: sum(self._pause(self.store.get(m["id"]), "watch expired")
                                               for m in moved if m["kind"] == "watch"))
+        step("assignments", lambda: assignments.sweep(self, now))
         step("fade", lambda: goals.fade(self, now))
+        step("health_followup", lambda: notifier.health_followup(self, now))
         step("runs_closed", lambda: runs.check(self, now))
         return {**report, **({"errors": errors} if errors else {})}
 

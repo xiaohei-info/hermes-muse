@@ -1,4 +1,4 @@
-# Hermes Muse design — 0.4.0 (v2)
+# Hermes Muse design — 0.5 (v2)
 
 This is the public design of Muse v2. The engineering contract for contributors (layer rules, change checklist,
 review list) is [AGENTS.md](../AGENTS.md); where the two differ, AGENTS.md and the code's single tables win.
@@ -9,7 +9,8 @@ The model interface is generated from code: [interface.md](../skills/companion/r
 Muse is a standalone Hermes plugin that turns Hermes's own sessions, cron, delivery, delegation and native memory
 into a long-running companion inside one profile. It keeps the work the user accepted (Goal) and short-lived
 interests (Interest, Idea), sends evidence-based reminders (Notice) without repeats and within quiet hours and daily
-budgets, reviews goals and conversations at night, and writes a silent personal Feed.
+budgets, reviews goals and conversations at night, and writes a silent personal Feed. Events can find their executor
+through rules the user writes; routine work runs to the end, and only decisions and results worth knowing reach them.
 
 v2 replaces 0.3.x's model-driven bookkeeping with a **deterministic kernel and a thin judgment layer**:
 
@@ -31,10 +32,10 @@ inbound entries     __init__.py → runtime.register · cron_entry.py → entry.
                     · dashboard/plugin_api.py
 application         surface.py (model tools) · hooks.py (main session) · entry.py (job output)
                     · install.py · views.py (Dashboard, read-only) · health/ (independent, read-only)
-kernel/             intake · notifier · goals · review · sources · packets · runs · records · receipts · Kernel.tick
+kernel/             intake · notifier · goals · assignments · review · sources · packets · runs · records · receipts · Kernel.tick
                     ← the only place that writes entity state
 kernel/store/       Store v2, keys, machines, migrate, bridge (stdlib only)
-shared              content_io (Files, revision) · locks · calendar normalization
+shared              content_io (Files, revision) · locks · rules (RULES.md, pure) · calendar normalization
 host/               HostAdapter: sessions · cron · deliver · owners · config · probe   ← the only outbound path
   ▼ Hermes imports, read-only state.db, cron/deliver/delegation APIs
 Hermes host
@@ -61,6 +62,7 @@ transaction; transitions are CAS on `state + version`. Each kind has one machine
 |---|---|---|
 | signal | new → disposed / parked | new: 72h or 3 packets → parked |
 | goal | active ↔ waiting → done / cancelled (and back) | deadline is the next check (a nightly assessment sets 1 day − 6h); handled by nightly and fade |
+| assignment | running ↔ waiting → done / failed / stalled / stopped / lost (stalled, lost → running, done, failed, stopped) | running: min(expected end, last check + 2h), checked by patrol; waiting: 3 days → stalled |
 | notice | drafted ↔ scheduled → sending → sent / failed / unknown → … | expiry (3 days) → expired; sending 2h → unknown; unknown 48h → closed_unknown |
 | watch | active → stopped / expired | 30 days, renewed while the goal is open |
 | interest / idea | active → expired / stopped | 14 days or expiry |
@@ -79,8 +81,8 @@ key returns the existing entity. `Kernel.tick()` runs every due step in dependen
 to enter from several processes; a failing step is recorded and the others continue.
 
 Goals keep `muse/workspace/goals/<slug>/GOAL.md` as their source of truth; the Store holds a mirror. Content files
-(memory, dreams, people/group pages, Feed articles, TOOLS.md, AGENTS.md, preferences) keep their 0.3.x formats and
-are written only through `content_io.Files` with a revision CAS under `muse/mutations.lock`.
+(memory, dreams, people/group pages, Feed articles, TOOLS.md, AGENTS.md, preferences, RULES.md, DECISIONS.md) are
+written only through `content_io.Files` with a revision CAS under `muse/mutations.lock`.
 
 ## Authorization
 
@@ -95,11 +97,14 @@ Native `local` is a transport, not user authority. The adapter resolves its priv
 session, principal, route, LOCAL origin and interactive launch policy; it can also prove a reservation row
 whose later placeholder writer stamped `created_source=unknown`. A present malformed or machine receipt
 fails closed. Bare LOCAL/unknown, machine/import creation labels, hidden sessions and group chats are
-excluded from authorization, intake and reads. Schemas without provenance retain their legacy source rules.
+excluded from authorization, intake and reads; the canonical Bot Chat, born hidden and identified by its exact title,
+is the main session and is not excluded. Schemas without provenance retain their legacy source rules.
 Stored `parent_session_id` is not delegation: compression on every surface and `/branch` retain user
 authority. Delegated sessions use machine source `subagent`; explicit delegated caller context remains `child`.
 
-- `user` (the private main session) may use all 14 `muse_manage` actions; only it changes goal status or settings.
+- `user` (the private main session) may use all 16 `muse_manage` actions; only it changes goal status or settings. A
+  rule in `muse/RULES.md` is the user's own authority: a matching event may make a goal, and that goal closes by code when
+  its assignment comes back done with evidence. Done always needs evidence, checked by code.
 - `cron` may use `muse_job` read/observe/submit against its own packet, and from `muse_manage` only `read`,
   `calendar_view` and `content_write` for notes, dreams and alignment. Goals created from a job must cite a user
   Signal in the packet (at most 5 a day); jobs only append progress and assessments.
@@ -138,7 +143,7 @@ period in batches keyed `<job>:<period>[:<batch>]`: a batch's refs are consumed 
 the refs of an expired batch and the unanswered refs of a failed run come back, and when a run closes with work left
 the kernel wakes the job again, however many batches that takes; only three batches in a row that handle nothing (a run
 that keeps failing) stop the relay until the next period, and Health reports it (`drain_stopped`). The model reads more of an item (12k per call, 24k per
-item), reports source checks with `observe` (patrol) and answers each item with `submit` in one of five result
+item), reports source checks with `observe` (patrol) and answers each item with `submit` in one of six result
 schemas. Job prompts are `prompts/jobs/<job>.md`, at most 15 lines of behavior each; fields live only in the
 action tables and `packets.SCHEMAS`. The model outputs only refs, enum values and free text; ids, keys, times,
 counts and state names come from code.
@@ -166,13 +171,7 @@ counts and state names come from code.
    rejected because topics are free text that drifts. The gates are quiet hours and per-priority daily budgets; urgent may pass
    quiet hours only within `urgent_per_day` (default 2) and is gated as time-sensitive past it; blocked topics are
    withdrawn. Sources are `<kind>:<account>`; migrated 0.3.x per-resource check ids (`source-<hex>`) stay as history,
-   never due and never counted directly. Kernel source bootstrap creates separate registry entries from complete
-   recorded connection/account/resource identities for known source kinds, preserving watermarks and opaque cursors;
-   the resource participates in the stable key, so inbox and all-mail scopes do not collapse. Original rows and
-   notice history are untouched. Existing registry entries always win, and bootstrap never represents a new read.
-   Incomplete or unknown identities require explicit registration; independent Health reports historical scopes
-   without registry coverage. Due entries carry the recorded identity and last successful watermark so patrol can
-   use the authorized route without guessing. A packet lists at most 20 due sources, least recently checked first.
+   never due and never counted. A packet lists at most 20 due sources, least recently checked first.
    Only the owned no-agent `muse-deliver` job sends (the tick, other jobs and hooks never do): each run
    re-checks the gates and claims the due notices as `sending` in one transaction, tied to its own host execution,
    and prints them as one message (at most 5, separated by a rule; no signature, and a closing rule only when the
@@ -182,24 +181,52 @@ counts and state names come from code.
    reads that execution's delivery receipt; an outcome that is unknown is never resent. Notices that 0.4.1 left
    `sending` keep being read from their one-shot job by delivery key until they settle; finished one-shot jobs
    that no notice waits for are removed by install and by each deliver run.
-3. **Nightly.** Every due goal gets an assessment and progress note (`done_suggested` never closes a goal); the
+3. **Assignments.** `muse/RULES.md` holds `executors` (command templates) and `rules` (`when` regexes, `thread`, `do`,
+   `executor`, `ask`, `authority`, `tell`, `expect`, `goal`) in its first line. Code matches each observed item
+   (`rules.match`) and answers `observe` with what the rule requires; the model does not weigh it. For `dispatch` the
+   patrol's model starts the executor with the user's tools and a brief of the ask, the authority and a link, never the
+   event's text, then reports the handle; code makes the goal and the `assignment`. An executor cannot be called back, so
+   code decides before `observe` hands out a template (`assignments.blocker`): an item with no clean link (`https?://`,
+   no userinfo, whitespace or shell metacharacters, at most 300 characters, unchanged by redaction; only the url, never
+   a fallback to another field), a goal that is not open, or a thread whose last assignment failed, stalled or was
+   stopped by the user (until the user closes that goal as done) gets no template and `do: tell` with the reason; so
+   does a later event that cannot be passed on. A later event of the thread, even in the same packet,
+   goes to that executor and is only recorded. A thread the user cancelled starts nothing under any rule, so a
+   thread key must be globally unique. Only the patrol dispatches: intake only records progress on a goal it recognises.
+   Muse runs no command, so the kernel has no shell and no host call was added. A rule's `thread` regex is the one place
+   thread identity is computed, because its author knows what the URL means; without a rule it stays `about` (flow 2).
+   Due assignments reach the patrol, which reads their status: running, waiting with a question (a `kind=ask` notice),
+   done with conclusion and evidence (a rule's goal closes by code, a user's goal is told), failed (final; the goal stays
+   open and the user is asked to retry, a new assignment n + 1, or give up), past its expected end with nothing new is
+   stalled, three unanswered packets is lost. Hermes' own delegation closes by code through `Owners.status`. The main
+   session records what the user decides in `muse/DECISIONS.md`, reading it before it asks, and continues the executor.
+   Updates of one event wait 6 hours after the last send, except urgent ones and questions; the newest replaces what waits.
+4. **Nightly.** Every due goal gets an assessment and progress note. `done_suggested` needs evidence and becomes one
+   question to the user per stretch of activity; it never closes a goal. The
    next check moves to 1 day − 6h so the goal is due again the next night. Code picks review candidates from the last
    72h by rules, oldest first, all of them the same night (no per-night cap). The model's `agent_gap`
-   becomes a Finding with evidence and `latent_need` an Idea. Goal proposals (disposed in the last 7 days) are
+   becomes a Finding with evidence, `friction` a Finding tagged as a suggestion, and `latent_need` an Idea. Goal proposals (disposed in the last 7 days) are
    offered until the model creates or declines them, no more per day than cron may still create (5); the rest wait for
    the next period. Batches hold a fixed 10 items. In the last batch, dream and alignment are written when the day changed
    something, listing every native memory change.
-4. **Feed.** Each active interest is researched at most once in 20h, longest unchecked first; the model writes
+5. **Feed.** Each active interest is researched at most once in 20h, longest unchecked first; the model writes
    articles with source refs and they are published silently. One article per packet may carry a notice: its
    source becomes the `src:` notice key (shared with patrol's 7-day history), it passes the same gates (no urgent),
    and code withdraws it when the interest stops or expires.
-5. **Weekly.** Health summary and 7-day counts only; one digest to the user route, suggestions only.
-6. **Fade.** A goal without activity for `goal_dormant_days` gets one question (`goal:<id>:fade:<episode>:<attempt>`);
+6. **Weekly.** Health summary, 7-day counts and assignment counts per rule and executor; one digest to the user route,
+   suggestions only.
+7. **Fade.** Activity is a move by the user or an executor, or the main session working on the goal for them (any
+   `goal_update`, its goal files; intake's `goal_hint` from `context.open_goals` for a message about it); Muse's own writes, such as a nightly assessment, are not
+   (a goal assessed every night used to look alive forever). A goal without activity for `goal_dormant_days` (default 3)
+   gets one question (`goal:<id>:fade:<episode>:<attempt>`), at most 3 new ones a day;
    a withdrawn, expired, failed or unknown question is asked again up to 3 times, then `fade_blocked` is reported.
-   Code cancels the goal once `fade_at` has passed and the question was delivered at least a day earlier. Waiting
-   goals do not fade.
-7. **Hooks** (user callers only, except the intake guard of flow 1 in `pre_tool_call`/`post_tool_call`). `pre_llm_call` injects at most three things: a high Health line, a
-   one-line summary when it changed, and memory_receipts for failed or staged native memory writes (once each).
+   Code cancels the goal `goal_fade_days` (default 3) after the question's `dispatched_at`, only once it is really
+   sent, and `goal_update(status=active)` revives it. Waiting goals fade too; a future deadline, an active watch, a live
+   assignment, a running owner or `no_fade` hold a goal, and a waiting assignment stalls in 3 days and stops holding it.
+8. **Hooks** (user callers only, except the intake guard of flow 1 in `pre_tool_call`/`post_tool_call`). `pre_llm_call` injects at most three things: a high Health line, a
+   one-line summary when it changed, and memory_receipts for failed or staged native memory writes (once each). A receipt names its cause (waiting for
+   approval, store full, wrong arguments, turned off) and for a staged write how to approve it and whether a memory
+   cleanup invalidates it: an add applies if it still fits; a patch or remove is pinned to the entry it matched.
    `post_tool_call` records those receipts. `post_llm_call` runs a background tick and, after 5 quiet minutes, may
    wake intake (at most 3 times a day).
 
@@ -224,7 +251,7 @@ weekly digest it tells the user in one or two first-person sentences tied to the
 action; for a Health problem it says what is affected and who does what next; it answers exactly `[SILENT]`
 (Hermes drops a bare silence marker on internal turns) only when nothing is new to the user, such as a recovery they
 never heard about, a patrol run's own output, or something already said in the conversation. It never reviews the
-delivery, mentions checking it, or names a job, a sender or Muse. Notices themselves are written in the assistant's
+delivery, mentions checking it or looking at data, calls it a duplicate or a repeat, or names a job, a sender or Muse. Notices themselves are written in the assistant's
 voice and carry no Muse signature, so the delivered text also reads as the assistant's.
 
 ## Health
@@ -232,11 +259,16 @@ voice and carry no Muse signature, so the delivered text also reads as the assis
 `health_entry.py` runs `health.run()` every 30 minutes and atomically writes `muse/health.json`: the 7 host probes
 (`symbols`, `cron_sessions`, `delivery_semantics`, `delivery_target`, `signal_purity`, `config_location`, `home`)
 plus invariants over the Store, deliveries, Muse's own tool results (`muse_manage`, `muse_job`; other tools' output
-belongs to the host and the user's tools), jobs and the plugin load (`plugin_load`). Each health item has an id, level
+belongs to the host and the user's tools), jobs, the main session (`main_session`) and the plugin load (`plugin_load`). Each health item has an id, level
 (`ok/low/medium/high`), detail, evidence and fix. Alerts never use the Notifier; they reach the user through the
 main-session injection, the Dashboard and Desktop page, cron stdout when the alert set changes, and an optional
 `health_deliver` route added as a second target of the health job, so Hermes delivers the same stdout to both.
-`deliver_stalled` reports notices left unclaimed for three `muse-deliver` periods (its `next_run_at − last_run_at`). Probes judge capability and semantics, not version ranges; a missing capability degrades
+Health itself writes only that file. So that a problem does not end there, a medium or high item still open after a day is
+turned by a kernel tick step (`notifier.health_followup`, reading `health.json`) into one notice for the main session,
+once per incident and withdrawn if it clears before delivery; the weekly digest lists every open item.
+`deliver_stalled` reports notices left unclaimed for three `muse-deliver` periods (its `next_run_at − last_run_at`).
+`main_session` reports a Bot Chat with recent user turns whose caller is not `user` or that yielded no signal, reading those
+turns past the authorization predicate. Probes judge capability and semantics, not version ranges; a missing capability degrades
 only its feature and raises a high item.
 
 ## Install, upgrade and rollback

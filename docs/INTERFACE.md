@@ -3,11 +3,12 @@
 The field-level interface is generated from code and is not repeated here:
 [skills/companion/references/interface.md](../skills/companion/references/interface.md). It is produced by
 `python -m hermes_muse.surface` from the action tables `surface.MAIN` (`muse_manage`) and `surface.JOB_ACTIONS`
-(`muse_job`) and the five result schemas in `kernel/packets.SCHEMAS`; CI fails when it is out of date.
+(`muse_job`) and the six result schemas in `kernel/packets.SCHEMAS`; CI fails when it is out of date.
 
 Two tools, both in the `muse` toolset:
 
-- `muse_manage(action, data)`: 14 actions for the private main session, 11 writes (`goal_create`, `goal_update`,
+- `muse_manage(action, data)`: 16 actions for the private main session, 13 writes (`goal_create`, `goal_update`,
+  `assignment_record`, `assignment_update`,
   `interest_record`, `idea_add`, `preferences`, `feedback`, `forget`, `watch_create`, `watch_stop`, `feed_update`,
   `content_write`) and 3 reads (`read`, `calendar_view`, `installation_prepare`).
 - `muse_job(action, data)`: `read`, `observe` and `submit`, only for Muse's own job runs and only against the packet

@@ -34,6 +34,11 @@ one CI failure per push. `context.notified` lists what the user was told, or is 
 item about one of those events answers with `about` set to its ref: `skip` when it adds nothing, `supersede` only for
 a real development. Muse then remembers the item's ID as part of that event and will not notify it again.
 
+A rule the user wrote in RULES.md decides before any of this: `observe` says what it requires for each item, and an
+item whose thread has an executor goes to that executor, not to the user ([dispatch](dispatch.md)). Updates of one
+event are at least 6 hours apart, unless urgent or a question for the user; Muse holds them back and the newest
+replaces what is still waiting.
+
 ## What earns an interruption
 
 - **Prepare before interrupting.** Give a checked answer, a short comparison, a ready draft or the exact deadline. A

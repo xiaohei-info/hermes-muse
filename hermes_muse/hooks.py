@@ -15,7 +15,7 @@ import threading
 import time
 
 from . import health
-from .host.sessions import failed_result, run_of
+from .host.sessions import memory_result, run_of
 from .install import migrating, owned
 from .kernel import intake, receipts, upkeep
 from .kernel.common import clip
@@ -26,16 +26,12 @@ READ_ACTIONS = frozenset({"list", "view", "read", "search", "get"})
 SHOWN_TITLES = 3
 
 
-def receipt_state(result):
-    """'staged' | 'failed' | None for a native memory write result; anything else stays silent."""
+def receipt_of(tool, args, result):
+    """What a native memory write that did not save needs the user to know, or None (saved, unconfirmed)."""
     text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
-    try:
-        value = json.loads(text)
-    except (ValueError, TypeError):
-        return None
-    if isinstance(value, dict) and (value.get("staged") or value.get("proposal_staged")):
-        return "staged"
-    return "failed" if failed_result(text) else None
+    found = memory_result(text, tool)
+    ops = (args or {}).get("operations") or [args or {}]
+    return found and {**found, "destructive": any(isinstance(op, dict) and op.get("action") in ("patch", "replace", "remove") for op in ops)}
 
 
 def titles(goals):
@@ -92,12 +88,7 @@ class Hooks:
         hits = receipts.due(self.k, session_id, now)
         if not hits:
             return None
-        failed = sorted({str(p.get("tool")) for p in hits if receipts.state_of(p) == "failed"})
-        staged = sorted({str(p.get("tool")) for p in hits if receipts.state_of(p) == "staged"})
-        return ("[Muse memory receipts] " + "; ".join(filter(None, (
-            failed and "write failed, nothing was saved: " + ", ".join(failed),
-            staged and "write staged, it waits for the user's approval: " + ", ".join(staged))))
-            + ". Tell the user once if it matters; never repeat the write.")
+        return receipts.explain(hits)
 
     # -- pre_tool_call / post_tool_call ---------------------------------------------------------------
     def intake_run(self, task_id):
@@ -124,9 +115,9 @@ class Hooks:
         if (self.closed or tool_name not in MEMORY_TOOLS or not session_id or not tool_call_id
                 or (args or {}).get("action") in READ_ACTIONS or self.k.adapter.caller(session_id=session_id, **kwargs) != "user"):
             return None
-        state = receipt_state(result)
-        if state:
-            receipts.record(self.k, tool_call_id, session_id=session_id, tool=tool_name, state=state, now=self.clock())
+        found = receipt_of(tool_name, args, result)
+        if found:
+            receipts.record(self.k, tool_call_id, session_id=session_id, tool=tool_name, now=self.clock(), **found)
         return None
 
     # -- post_llm_call --------------------------------------------------------------------------------

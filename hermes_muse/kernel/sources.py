@@ -8,31 +8,7 @@ an error is `failing` and flagged for Health after 3 in a row, a clean check is 
 """
 from ..host.sessions import classify  # noqa: F401 - one classification for intake, goals and the probe
 from .common import H, patch
-from .store.keys import SOURCE_ID, source_key
-
-
-def bootstrap(store, now):
-    """Register complete historical identities once; retain original rows and every successful watermark.
-
-    This is bookkeeping, not a read or a successful check. Existing registry rows always win.
-    """
-    created = 0
-    with store.atomic():
-        rows = store.query("source")
-        registered = {e["natural_key"] for e in rows if SOURCE_ID.fullmatch(e["natural_key"])}
-        for old in sorted(rows, key=lambda e: e["updated"], reverse=True):
-            if SOURCE_ID.fullmatch(old["natural_key"]):
-                continue
-            data = old["payload"]
-            key = source_key(data.get("source"))
-            if not key or key in registered:
-                continue
-            store.create("source", key, {**data, "legacy_id": old["id"],
-                         "last_checked": data.get("last_checked") or data.get("finished_at")},
-                         state=old["state"], now=now, reason="source:bootstrap")
-            registered.add(key)
-            created += 1
-    return created
+from .store.keys import SOURCE_ID
 
 # Seconds between checks per kind; plugin setting `source_intervals` ({id or kind: minutes}) overrides.
 INTERVALS = {"calendar": 2 * H, "mail": 30 * 60, "reminders": H, "web": 6 * H, "rss": 6 * H}
@@ -67,9 +43,7 @@ def due(store, now, overrides=None):
         every = interval(source_id, overrides)
         if last + every <= now:
             out.append({"source_id": source_id, "state": e["state"] if e else "new",
-                        "last_checked": last or None, "every_minutes": int(every // 60),
-                        **({key: e["payload"].get(key) for key in ("source", "last_success", "cursor")}
-                           if e and e["payload"].get("source") else {})})
+                        "last_checked": last or None, "every_minutes": int(every // 60)})
     return sorted(out, key=lambda s: (s["last_checked"] or 0, s["source_id"]))
 
 

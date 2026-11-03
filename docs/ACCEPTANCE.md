@@ -61,8 +61,8 @@ Use a separate profile with synthetic data; never a profile in daily use.
    interest; it expires after 14 days unless renewed by you.
 3. Give the patrol two reports of the same upstream item; one notice is delivered. Check quiet hours, the daily
    budget, `urgent_per_day`, a blocked topic and "stop" feedback.
-4. Let a goal go dormant (or lower `goal_dormant_days`): one question arrives; without activity, code cancels the goal
-   after the question was delivered and `goal_fade_days` passed.
+4. Let a goal go dormant (`goal_dormant_days`, default 3): one question arrives, even if nightly assessed it every night;
+   without activity, code cancels the goal `goal_fade_days` (default 3) after the question was delivered.
 5. Break the delivery route: a high health item appears in the main session and on the Muse page, not through a notice.
 6. Ask Muse to forget an interest; it is gone from `read`, and a tombstone stops later evidence from rebuilding it.
 7. Run `installation_prepare(operation=remove)`, confirm, pause the jobs and remove the plugin; data stays in `muse/`.

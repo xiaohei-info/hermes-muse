@@ -21,19 +21,44 @@ Create a goal the user accepted in this conversation; same title twice returns t
 
 ### `goal_update` (write)
 
-Change a goal for the user: status, waiting, deadline, owner or a progress note. Any update moves the next check to tomorrow unless next_check_at is given.
+Change a goal for the user: status, waiting, deadline, owner or a progress note. status=done needs evidence. Any update moves the next check to tomorrow unless next_check_at is given.
 
 | field | | type |
 |---|---|---|
 | `goal_id` | required | string; ≤200 chars — an id returned by Muse |
 | `title` |  | string; ≤200 chars |
 | `status` |  | active / done / cancelled |
+| `evidence` |  | string; ≤1000 chars — a link, commit, file path or one checkable observation that shows it is done |
 | `waiting_user` |  | boolean |
 | `deadline` |  | string/null; ≤40 chars — ISO 8601, e.g. 2026-11-02T18:00:00+08:00 (no offset: profile time) |
 | `no_fade` |  | boolean |
 | `owner` |  | string/null; ≤200 chars — native delegation handle now working on it |
 | `next_check_at` |  | string; ≤40 chars — ISO 8601, e.g. 2026-11-02T18:00:00+08:00 (no offset: profile time) |
 | `progress_note` |  | string; ≤1000 chars |
+
+### `assignment_record` (write)
+
+Record an executor you started for an open goal, so it is followed up; native is Hermes' own delegation, others come from RULES.md.
+
+| field | | type |
+|---|---|---|
+| `goal_id` | required | string; ≤200 chars — an id returned by Muse |
+| `executor` | required | string; ≤100 chars |
+| `handle` | required | string; ≤200 chars — what starting the executor returned |
+| `expected_end` |  | string; ≤40 chars — ISO 8601, e.g. 2026-11-02T18:00:00+08:00 (no offset: profile time) |
+| `note` |  | string; ≤1000 chars |
+
+### `assignment_update` (write)
+
+Change an assignment for the user: their answer resumes it (running), or it is stopped, done (conclusion and evidence) or failed (conclusion).
+
+| field | | type |
+|---|---|---|
+| `assignment_id` | required | string; ≤200 chars — an id returned by Muse |
+| `state` | required | running / waiting / done / failed / stalled / stopped |
+| `conclusion` |  | string; ≤2000 chars |
+| `evidence` |  | string; ≤1000 chars |
+| `expected_end` |  | string; ≤40 chars — ISO 8601, e.g. 2026-11-02T18:00:00+08:00 (no offset: profile time) |
 
 ### `interest_record` (write)
 
@@ -130,11 +155,11 @@ Feedback on, pin, unpin or delete a Feed article.
 
 ### `content_write` (write)
 
-Write a note, person/group page, dream, alignment, TOOLS.md, AGENTS.md or goal file; read it first for its revision ('absent' when new).
+Write a note, person/group page, dream, alignment, TOOLS.md, AGENTS.md, RULES.md, DECISIONS.md or goal file; read it first for its revision ('absent' when new).
 
 | field | | type |
 |---|---|---|
-| `kind` | required | note / dream / alignment / tools_note / working_lessons / goal_file |
+| `kind` | required | note / dream / alignment / tools_note / working_lessons / goal_file / rules / decisions |
 | `id` | required | string; ≤200 chars |
 | `body` | required | string; ≤60000 chars |
 | `expected_revision` | required | string; ≤80 chars |
@@ -145,7 +170,7 @@ Read Muse state: one entity or file by id, or a list (query filters, newest firs
 
 | field | | type |
 |---|---|---|
-| `kind` | required | status / goal / notice / finding / feed / interest / idea / watch / source / signal / note / dream / alignment / tools_note / working_lessons / preferences / goal_file |
+| `kind` | required | status / goal / assignment / notice / finding / feed / interest / idea / watch / source / signal / note / dream / alignment / tools_note / working_lessons / preferences / goal_file / rules / decisions |
 | `id` |  | string; ≤200 chars |
 | `query` |  | string; ≤200 chars |
 | `limit` |  | integer; 1–100 |
@@ -216,18 +241,21 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | `ref` | required | string — a ref from this packet |
 | `disposition` | required | saved / ignored / context |
 | `facts` |  | array |
-| `goal_hint` |  | string — an open goal id, or 'new' to propose a goal |
+| `goal_hint` |  | string — the id of the context.open_goals entry this message is about, or 'new' to propose a goal |
 
 ### patrol
 
 | field | | type |
 |---|---|---|
 | `candidate_ref` | required | string — a ref from this packet |
-| `verdict` | required | send / skip / withdraw / supersede |
+| `verdict` | required | send / skip / withdraw / supersede / dispatch / forwarded |
 | `text` |  | string; ≤2000 chars |
 | `priority` |  | urgent / time_sensitive / ordinary |
 | `topic` |  | string; ≤100 chars — short topic label; the exact context.blocked_topics entry when the item is about one |
 | `about` |  | string — a context.notified ref: the notified event this item is about |
+| `handle` |  | string; ≤200 chars — dispatch: what the executor's run template returned |
+| `executor` |  | string; ≤100 chars — dispatch: the rule's executor |
+| `expected_end` |  | string; ≤40 chars — dispatch: ISO 8601, only when the executor gave an estimate; otherwise the rule's expect applies |
 
 ### goals
 
@@ -236,6 +264,8 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | `goal_id` |  | string — a ref from this packet |
 | `assessment` |  | on_track / stalled / blocked / done_suggested |
 | `progress_note` |  | string |
+| `evidence` |  | string; ≤1000 chars — done_suggested: a link, commit, file path or checkable observation |
+| `text` |  | string; ≤2000 chars — done_suggested: your question to the user |
 | `create` |  | object |
 | `decline` |  | object |
 
@@ -244,7 +274,7 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | field | | type |
 |---|---|---|
 | `candidate_ref` | required | string — a ref from this packet |
-| `verdict` | required | agent_gap / latent_need / fine |
+| `verdict` | required | agent_gap / latent_need / friction / fine |
 | `reason` | required | string; ≤500 chars |
 
 ### feed
@@ -254,6 +284,17 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | `interest_ref` | required | string — a ref from this packet |
 | `article` |  | object |
 | `notice` |  | object |
+
+### assignment
+
+| field | | type |
+|---|---|---|
+| `assignment_ref` | required | string — a ref from this packet |
+| `state` | required | running / waiting / done / failed / stalled |
+| `conclusion` |  | string; ≤2000 chars — what it found or did, in your own words to the user; required for done and failed, and for running past its expected end |
+| `evidence` |  | string; ≤1000 chars — done: a link, commit, file path or checkable observation |
+| `question` |  | string; ≤2000 chars — waiting or failed: the decision for the user, your recommendation, why, and the options |
+| `expected_end` |  | string; ≤40 chars — ISO 8601, only when the executor gave a new estimate |
 
 ## Content kinds
 
@@ -266,3 +307,5 @@ One result per packet item. The packet's `schema` names the shapes its items tak
 | `working_lessons` | current (AGENTS.md) |
 | `preferences` | current (read only; change it with preferences) |
 | `goal_file` | <goal id>/<name>.md |
+| `rules` | current (RULES.md: first-line JSON with executors and rules; a broken one is refused) |
+| `decisions` | current (DECISIONS.md: what the user decided, in their words; read it before asking again) |

@@ -13,8 +13,14 @@ entries, keeping what the user still holds true. Never delete an entry outright;
 every change in the day's note and the nightly dream, so the user can restore it. A fact that still does not fit
 waits for the next hour.
 
-Memory receipts: when a native memory write fails or waits for approval, Muse shows it once in the next turn.
-Tell the user only when it matters to them. A write the provider accepted without confirmation is not reported.
+Memory receipts: when a native memory write fails or waits for approval, Muse shows it once in the next turn, with its
+cause. Tell the user only when it matters to them. A write the provider accepted without confirmation is not reported.
+- Staged: nothing is saved yet, and writing it again only stages another. The user approves with `/memory approve <id>`,
+  drops it with `/memory reject <id>`, and `/memory pending` lists them. An added fact still applies after a cleanup if
+  the store has room then. A patch or remove is pinned to the exact entry it matched: once a cleanup changed that entry,
+  approval is refused, so reject it and make the change again.
+- Store full: merge or shorten entries in one batch together with the new fact.
+- Wrong arguments: correct them and write once more. Turned off in the config: only the user can change that.
 
 Forgetting: on the user's request, `forget` removes what Muse holds:
 - a captured message (`signal`, also never captured again), an interest, an idea or a Feed article;

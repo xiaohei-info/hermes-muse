@@ -24,9 +24,13 @@ MACHINE_SOURCES = frozenset({
     "webhook", "msgraph_webhook", "wecom_callback", "relay", "bot_room", "bot_peer_dm",
 })
 GROUP_CHATS = ("group", "supergroup", "channel", "guild", "room")
+# Hermes' canonical main conversation: this exact title is its identity, and it is born hidden from the sidebar.
+BOT_CHAT = "Bot Chat"
 HIDDEN_KINDS = ("hidden", "process_complete", "async_delegation_complete")
 # Cron/Muse/delegation results arrive as user-role turns in a user session; they are not the user.
 BACKGROUND = ('[Cronjob "', "[ASYNC DELEGATION ", "[IMPORTANT:", "[Hermes Muse ")
+LIVE_TURN = (f"COALESCE(m.display_kind,'') NOT IN ({','.join('?' * len(HIDDEN_KINDS))}) "
+             "AND (m.active = 1 OR m.compacted = 1) AND m.content IS NOT NULL AND m.content != ''")
 COLUMNS = {
     "sessions": {"id", "source", "chat_type", "title", "cwd", "started_at", "last_activity_at", "archived"},
     "messages": {"id", "session_id", "role", "content", "timestamp", "tool_name",
@@ -100,6 +104,34 @@ def failed_result(text: str) -> bool:
     return isinstance(value, dict) and (
         value.get("ok") is False or value.get("success") is False or value.get("isError") is True
         or bool(value.get("error")) or value.get("status") in ("error", "failed"))
+
+
+def memory_result(text: str, tool: str = "memory") -> dict | None:
+    """A native memory or skill write that did not save, as {state, reason[, pending_id, command, usage]}; None for
+    anything else. state staged: Hermes' write approval holds it, `command` is the slash command that reviews it.
+    state failed: reason is capacity (the store's char limit), invalid (the call's own arguments or a text that
+    matched nothing), disabled (config) or other. Hermes' failure class is not in the result, so this reads its shape."""
+    try:
+        value = json.loads(text or "null")
+    except (ValueError, TypeError, RecursionError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    if value.get("staged") or value.get("proposal_staged"):
+        command = {"memory": "/memory", "skill_manage": "/skills"}.get(tool)
+        return {"state": "staged", "reason": "approval", "pending_id": value.get("pending_id"), "command": command}
+    if not failed_result(text):
+        return None
+    error = str(value.get("error") or "").casefold()
+    if "usage" in value and any(word in error for word in ("limit", "exceed", "would put")):
+        reason = "capacity"
+    elif "disabled" in error:
+        reason = "disabled"
+    elif any(word in error for word in ("required", "needs ", "invalid", "no entry matched", "cannot be empty", "target")):
+        reason = "invalid"
+    else:
+        reason = "other"
+    return {"state": "failed", "reason": reason, **({"usage": value["usage"]} if isinstance(value.get("usage"), str) else {})}
 
 
 def redact(text: str) -> str:
@@ -180,6 +212,8 @@ def private_user(db):
 
     Older schemas have no LOCAL provenance and retain their legacy source rules.
     Machine creation labels cannot gain authority through a later surface flip.
+    Hidden rows are room plumbing or sessions put out of use; the canonical Bot Chat is hidden and is the user's.
+    The leading s.source IN is what lets the query use sessions(source): the resolved source sits inside a CASE.
     """
     columns = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
     source, guards, native = "s.source", [], "''"
@@ -198,14 +232,24 @@ def private_user(db):
     source = (f"CASE WHEN s.source IN ('local',{labels}) THEN "
               f"COALESCE(NULLIF({native},''),({source})) ELSE s.source END")
     if "hidden" in columns:
-        guards.append("COALESCE(s.hidden,0) = 0")
-    predicate = PRIVATE_USER.replace("s.source", f"({source})")
-    args = PRIVATE_USER_ARGS
+        guards.append(f"(COALESCE(s.hidden,0) = 0 OR s.title = '{BOT_CHAT}')")
+    predicate = f"s.source IN ('local',{','.join('?' * len(USER_SOURCES))}) AND " + PRIVATE_USER.replace("s.source", f"({source})")
+    args = (*sorted(USER_SOURCES), *PRIVATE_USER_ARGS)
     if guards:
         predicate += " AND " + " AND ".join(guards)
     if "created_source" in columns:
         args += tuple(sorted(USER_SOURCES))
     return source, predicate, args
+
+
+def turns_query(db, since, roles, limit):
+    """(sql, args) of `user_turns`; the native contract asserts its query plan."""
+    source, private, args = private_user(db)
+    return (f"SELECT m.id, m.session_id, m.role, m.content, m.timestamp, m.tool_name, m.message_uid, ({source}) AS source "
+            "FROM messages m JOIN sessions s ON s.id = m.session_id "
+            f"WHERE m.timestamp > ? AND m.role IN ({','.join('?' * len(roles))}) AND {private} AND {LIVE_TURN} "
+            "ORDER BY m.timestamp, m.id LIMIT ?",
+            (since, *roles, *args, *HIDDEN_KINDS, limit))
 
 
 class Sessions(Part):
@@ -222,15 +266,7 @@ class Sessions(Part):
         if not self.path.exists():
             return []
         with reader(self.path) as db:
-            source, private, args = private_user(db)
-            rows = db.execute(
-                f"SELECT m.id, m.session_id, m.role, m.content, m.timestamp, m.tool_name, m.message_uid, ({source}) AS source "
-                "FROM messages m JOIN sessions s ON s.id = m.session_id "
-                f"WHERE m.timestamp > ? AND m.role IN ({','.join('?' * len(roles))}) AND {private} "
-                f"AND COALESCE(m.display_kind,'') NOT IN ({','.join('?' * len(HIDDEN_KINDS))}) "
-                "AND (m.active = 1 OR m.compacted = 1) AND m.content IS NOT NULL AND m.content != '' "
-                "ORDER BY m.timestamp, m.id LIMIT ?",
-                (since, *roles, *args, *HIDDEN_KINDS, limit)).fetchall()
+            rows = db.execute(*turns_query(db, since, roles, limit)).fetchall()
         turns, seen = [], set()
         for row in rows:
             try:
@@ -358,7 +394,26 @@ class Sessions(Part):
             return []
         with reader(self.path) as db:
             return [dict(r) for r in db.execute(
-                "SELECT id, cwd FROM sessions WHERE title = 'Bot Chat' AND COALESCE(archived, 0) = 0")]
+                "SELECT id, cwd FROM sessions WHERE title = ? AND COALESCE(archived, 0) = 0", (BOT_CHAT,))]
+
+    @tolerant(list)
+    def main_sessions(self, since):
+        """Bot Chats with user turns after `since`, as {id, source (`other` when excluded), turns: [timestamp]}.
+
+        Read past `private_user`, so Health can see that predicate lose the main session. A title held by a
+        machine conversation (Hermes moves those aside) is not the main session.
+        """
+        if not self.path.exists():
+            return []
+        chats = {}
+        with reader(self.path) as db:
+            for row in db.execute(
+                    "SELECT s.id, s.source, m.content, m.timestamp FROM sessions s JOIN messages m ON m.session_id = s.id "
+                    f"WHERE s.title = ? AND COALESCE(s.archived, 0) = 0 AND m.role = 'user' AND m.timestamp > ? AND {LIVE_TURN}",
+                    (BOT_CHAT, since, *HIDDEN_KINDS)):
+                if classify(row["source"]) != "machine" and not str(row["content"]).lstrip().startswith(BACKGROUND):
+                    chats.setdefault(row["id"], []).append(row["timestamp"])
+        return [{"id": sid, "source": self.user_source_of(sid), "turns": turns} for sid, turns in chats.items()]
 
     def schema_gaps(self):
         """Columns this adapter reads that the native state.db lacks (none before the first session)."""

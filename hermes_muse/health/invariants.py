@@ -5,15 +5,16 @@ ok | low | medium | high. Checks only read; they never repair, so a kernel bug s
 Payload fields read here are the kernel's contract: signal.source, notice.next_eligible/priority/strong_key,
 goal.fade_at/fade_blocked (goals.fade), finding.evidence (review.record), source.health (sources.record),
 packet.job/issued_at/context.remaining/handled (packets.build/submit), run.job (runs.start), interest.checked_at
-(packets.feed_result), notice.verified_at/topic (notifier.draft).
+(packets.feed_result), notice.verified_at/topic (notifier.draft), assignment.opened_at/expected_end (assignments.open).
 Tests seed these through the kernel writers, never with hand-written payloads.
 """
 from __future__ import annotations
 
 from collections import Counter, defaultdict
 
+from .. import rules
 from ..kernel.store import MACHINES
-from ..kernel.store.keys import SOURCE_ID, source_key
+from ..kernel.store.keys import SOURCE_ID
 
 H, D = 3600, 86400
 LEVELS = ("ok", "low", "medium", "high")
@@ -23,6 +24,7 @@ EVIDENCE = 10
 DRAINS = ("intake", "nightly", "feed")  # kernel.packets drain jobs (kernel_acceptance N4 asserts they match)
 DRAIN_GRACE = 3 * H  # a drain between two batches is still in progress
 MEMORY_NEAR_FULL = 0.98
+MAIN_WINDOW = 6 * H
 
 
 def item(id, level, value, threshold, detail="", evidence=(), fix=""):
@@ -114,11 +116,11 @@ def packets(store, now):
 
 
 def notices(store, now):
-    """7-day duplicate sends per strong notice key; hanging drafted/scheduled notices; closed unknowns."""
+    """7-day duplicate sends per strong notice key and generation (a supersede is a new generation, not a repeat); hanging drafted/scheduled notices; closed unknowns."""
     groups = defaultdict(list)
     for n in store.query("notice", state="sent", since=now - 7 * D):
         if n["payload"].get("strong_key", n["natural_key"].startswith("src:")):
-            groups[n["natural_key"]].append(n)
+            groups[n["natural_key"], n["payload"].get("generation", 0)].append(n)
     # only v2 deliveries (delivery_key) make a duplicate: migrated 0.3.x sends alone are history, not a dedupe failure
     dups = {k: g for k, g in groups.items() if len(g) > 1 and any(n["payload"].get("delivery_key") for n in g)}
     urgent = any(n["payload"].get("priority") == "urgent" and n["payload"].get("delivery_key") for g in dups.values() for n in g)
@@ -192,8 +194,8 @@ def goals(store, now):
     start, _ = last_night(store, now)
     missed = [] if start is None else [g for g in active if g["deadline"] is not None and g["deadline"] < start]
     twice = [g for g in missed if g["deadline"] < start - D]
-    faded = [g for g in active if (g["payload"].get("fade_at") or now) < now - 2 * D]
-    stuck = [g for g in active if g["payload"].get("fade_blocked")]
+    faded = [g for g in live if (g["payload"].get("fade_at") or now) < now - 2 * D]
+    stuck = [g for g in live if g["payload"].get("fade_blocked")]
     return [item("goals_missed", "high" if twice else "medium" if missed else "ok", len(missed), 0,
                     f"{len(missed)} active goals due before the last nightly run and still unchecked; {len(twice)} missed two nights",
                     ids(twice + [g for g in missed if g not in twice]),
@@ -210,18 +212,6 @@ def sources(store, now):
     return item("sources_failing", "medium" if failing else "ok", len(failing), 0,
                    f"{len(failing)} sources failing 3+ times in a row", ids(failing),
                    "Check the source's tool or credentials")
-
-
-def source_coverage(store, now):
-    """A readable historical source is not proof that patrol still checks its resource."""
-    rows = store.query("source")
-    registered = {e["natural_key"] for e in rows if SOURCE_ID.fullmatch(e["natural_key"])}
-    missing = [e for e in rows if not SOURCE_ID.fullmatch(e["natural_key"])
-               and source_key(e["payload"].get("source")) not in registered]
-    return item("source_coverage", "medium" if missing else "ok", len(missing), 0,
-                f"{len(missing)} historical source scopes have no active registry entry", ids(missing),
-                "Run the kernel source bootstrap; incomplete or unknown legacy identities need an explicit "
-                "authorized source recipe and a patrol observe (history alone is not coverage)")
 
 
 def findings(store, now):
@@ -257,7 +247,27 @@ def interests(store, now):
                 "Check the feed-pulse job and its runs")
 
 
-STORE_CHECKS = (deadlines, signals, packets, notices, runs, goals, sources, source_coverage, findings, drains, interests)
+def assignments(store, now):
+    """Running over twice its expected time (the patrol keeps being told it is fine), and work nobody can see any more."""
+    def late(a):
+        p = a["payload"]
+        return now > p["expected_end"] + max(0, p["expected_end"] - p["opened_at"])
+    over = [a for a in store.query("assignment", state="running") if late(a)]
+    lost = store.query("assignment", state="lost", since=now - 7 * D)
+    return item("assignments", "medium" if over or lost else "ok", len(over) + len(lost), 0,
+                f"{len(over)} running over twice their expected time; {len(lost)} lost in 7 days", ids(over + lost),
+                "Read the assignment and its goal; the main session checks the executor and stops or resumes it")
+
+
+def rules_file(home):
+    try:
+        table = rules.load(home)
+    except ValueError as exc:
+        return item("rules", "high", "unusable", "parses", str(exc)[:300], fix="Repair muse/RULES.md; until then no rule dispatches anything")
+    return item("rules", "ok", len(table["rules"]), "parses", f"{len(table['rules'])} rules, {len(table['executors'])} executors")
+
+
+STORE_CHECKS = (deadlines, signals, packets, notices, runs, goals, sources, findings, drains, interests, assignments)
 
 
 # -- Host --------------------------------------------------------------------------------------------
@@ -276,6 +286,24 @@ def tools(results):
                     f"oversized (>20k) {sum(s['oversized'] for s in results)}, credential patterns "
                     f"{sum(s['secrets'] for s in results)} in Muse cron tool results", exposed,
                     "A Muse read path skipped redaction or its page limit")]
+
+
+def main_session(store, chats, now):
+    """The main session (Bot Chat) has recent user turns, yet its caller is not `user` or intake captured none of them.
+    Nothing else sees what never became a signal. A turn under an hour old may just be waiting for a tick; turns before a
+    migration are never captured. shortcut: forgetting every signal of the window also raises this until the window
+    passes, acceptable for a rare user action."""
+    since = max(now - MAIN_WINDOW, (store.meta("migration") or {}).get("at", 0)) if store else now
+    captured = {s["payload"].get("session_id") for s in store.query("signal", since=since)
+                if (s["payload"].get("created") or 0) >= since} if store else set()
+    refused = [c["id"] for c in chats if c["source"] == "other"]
+    missed = [c["id"] for c in chats if c["id"] not in captured and any(since <= t < now - H for t in c["turns"])]
+    lost = sorted({*refused, *missed})
+    return item("main_session", "high" if lost else "ok", len(lost), 0,
+                f"{len(refused)} main sessions not recognized as the user, {len(missed)} with user turns and no signal in "
+                f"{MAIN_WINDOW / H:.0f}h" if lost else f"{len(chats)} main sessions with recent user turns, all captured",
+                lost, "Muse tools, injections and intake do not reach the main session: check host.sessions.private_user "
+                "against its row and the tick's errors, then run tests/native_host_contract.py")
 
 
 def memory(stores):
@@ -312,7 +340,7 @@ def deliver_stalled(store, job, now, readable=True):
         _epoch(job["next_run_at"]) - _epoch(job["last_run_at"])
     grace = 3 * period if period and period > 0 else None
     due = [n for n in store.query("notice", state="scheduled") if (n["payload"].get("next_eligible") or now) < now - (grace or 0)
-           and (n["payload"].get("topic") == "goal-fade" or (n["payload"].get("verified_at") or 0) >= now - D)] if store else []
+           and (n["payload"].get("topic") in ("goal-fade", "muse-health") or (n["payload"].get("verified_at") or 0) >= now - D)] if store else []
     state = "unreadable" if not readable else "missing" if not job else "enabled" if job.get("enabled") else "paused"
     quiet = not due or state == "unreadable" or state == "enabled" and not grace
     level = "ok" if quiet else "low" if state == "paused" else "high"

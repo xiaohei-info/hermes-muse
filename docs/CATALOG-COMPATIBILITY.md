@@ -26,6 +26,8 @@ Muse stores, under `<profile home>/muse/`:
 | Signals (`state-v2.db`) | redacted excerpt of a private user message (head and tail past 8k), its session/message pointer, disposition and extracted facts | until forgotten; no automatic expiry |
 | Notices, Findings | notice text, title, upstream ID, source links and delivery state; review evidence refs | no automatic expiry |
 | Goals | GOAL.md (body, progress, assessments) and its mirror | until the user deletes them |
+| Assignments | executor name, handle, rule, conclusion, evidence and question; never an event's text | no automatic expiry |
+| RULES.md, DECISIONS.md | the user's rules and executor command templates; their decisions in their words | until the user edits them |
 | Interests, Ideas, Feed records | title, rationale, source refs | until forgotten (state expiry does not delete) |
 | Packets | the items handed to one job run (redacted excerpts) | no automatic expiry |
 | Events | state transitions with short reason codes | 30 days |
