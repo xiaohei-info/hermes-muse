@@ -171,7 +171,11 @@ counts and state names come from code.
    rejected because topics are free text that drifts. The gates are quiet hours and per-priority daily budgets; urgent may pass
    quiet hours only within `urgent_per_day` (default 2) and is gated as time-sensitive past it; blocked topics are
    withdrawn. Sources are `<kind>:<account>`; migrated 0.3.x per-resource check ids (`source-<hex>`) stay as history,
-   never due and never counted. A packet lists at most 20 due sources, least recently checked first.
+   never due and never counted. Only `sources.record` (through observe) writes source rows; legacy history is not
+   converted automatically. The packet carries the registered-source count so discovery runs only when it is zero,
+   not whenever no sources are due. Routes and account scopes live in TOOLS.md; due entries expose `last_success`
+   for overlapping incremental reads. Health warns when the registry is empty after a submitted patrol and clears
+   after the first observe. A packet lists at most 20 due sources, least recently checked first.
    Only the owned no-agent `muse-deliver` job sends (the tick, other jobs and hooks never do): each run
    re-checks the gates and claims the due notices as `sending` in one transaction, tied to its own host execution,
    and prints them as one message (at most 5, separated by a rule; no signature, and a closing rule only when the

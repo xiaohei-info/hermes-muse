@@ -91,6 +91,7 @@ def patrol_items(k, n, now, offered):
     due = assignments.due(k, now, n)
     return notifier.due_items(k, now) + due, {
         "rules": assignments.rule_context(k, due),
+        "sources_registered": sum(bool(keys.SOURCE_ID.fullmatch(e["natural_key"])) for e in k.store.query("source")),
         "sources_due": sources.due(k.store, now, k.settings().get("source_intervals"))[:SOURCES_DUE],
         "notified": notifier.recent(k.store, now),
         "recent_user_messages": recent, "send_limit": n, "blocked_topics": blocked_topics(k)}
