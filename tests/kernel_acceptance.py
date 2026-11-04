@@ -121,6 +121,37 @@ def deliver_all(k, host):
     k.tick()
 
 
+def part_source_coverage(base):
+    k = Kernel(make_home(base), adapter=FakeHost(lambda: T0), clock=lambda: T0)
+    check("SRC fresh install needs no coverage warning", invariants.source_coverage(k.store, T0)["level"] == "ok")
+    # Legacy rows are history, including incomplete model-authored identities.
+    old = k.store.create("source", "source-0123456789abcdef", {}, now=T0 - H)
+    before = k.store.get(old["id"])
+    first = k.build_packet("patrol")
+    check("SRC fresh packet reports zero registered", first["context"]["sources_registered"] == 0)
+    k.submit(first["id"], [])
+    check("SRC empty registry after submitted patrol warns", invariants.source_coverage(k.store, T0)["level"] == "medium")
+    # An actual observe is the only registry writer; this synthetic check models a real empty source read.
+    k.observe(first["id"], "mail:work", [])
+    check("SRC first observe clears coverage warning", invariants.source_coverage(k.store, T0)["level"] == "ok")
+    _, context = packets.patrol_items(k, 5, T0, frozenset())
+    check("SRC registered but not due is not discovery", context["sources_registered"] == 1 and not context["sources_due"])
+    # A failed attempt must not move the successful watermark.
+    sources.record(k.store, "mail:work", error="timeout", now=T0 + H)
+    due = sources.due(k.store, T0 + 2 * H)
+    check("SRC due exposes last success without source or cursor", len(due) == 1 and due[0]["last_success"] == T0
+          and due[0]["last_checked"] == T0 + H and "source" not in due[0] and "cursor" not in due[0], due)
+    sources.record(k.store, "calendar:work", error="timeout", now=T0)
+    due = sources.due(k.store, T0 + 3 * H, {"reminders:home": 5})
+    check("SRC every due entry includes last_success including failed and configured sources",
+          all("last_success" in row for row in due)
+          and all(row["last_success"] is None for row in due if row["source_id"] != "mail:work"))
+    _, context = packets.patrol_items(k, 5, T0 + 3 * H, frozenset())
+    check("SRC packet registered count ignores legacy history", context["sources_registered"] == 2
+          and k.store.get(old["id"]) == before)
+    return k
+
+
 def part_intake(base):
     clock = [T0]
     host = FakeHost(lambda: clock[0])
@@ -1449,7 +1480,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="muse-kernel-") as temporary:
         base = Path(temporary).resolve()
         kernels = []
-        for name, part in (("intake", part_intake), ("notifier", part_notifier), ("goals", part_goals), ("drain", part_drain),
+        for name, part in (("source_coverage", part_source_coverage), ("intake", part_intake), ("notifier", part_notifier), ("goals", part_goals), ("drain", part_drain),
                            ("intake_drain", part_intake_drain), ("reviews", part_reviews), ("proposals", part_proposals), ("feed", part_feed), ("upkeep", part_upkeep),
                            ("assignments", part_assignments), ("review", part_review), ("followups", part_followups)):
             (base / name).mkdir()

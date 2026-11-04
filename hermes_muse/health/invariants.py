@@ -214,6 +214,17 @@ def sources(store, now):
                    "Check the source's tool or credentials")
 
 
+def source_coverage(store, now):
+    """Discovery is missing only after patrol submitted without registering a source."""
+    registered = any(SOURCE_ID.fullmatch(e["natural_key"]) for e in store.query("source"))
+    patrols = [p for p in store.query("packet", state="submitted") if p["payload"].get("job") == "patrol"]
+    missing = not registered and bool(patrols)
+    return item("source_coverage", "medium" if missing else "ok", int(missing), 0,
+                "patrol submitted with no registered sources" if missing else "no source discovery gap",
+                ids(patrols) if missing else (),
+                "Verify authorized sources and record their routes in TOOLS.md; see the companion skill sources reference, then read and observe them on patrol")
+
+
 def findings(store, now):
     recent = store.query("finding", since=now - D)
     bare = [f for f in store.query("finding", state="open") if not f["payload"].get("evidence")]
@@ -267,7 +278,7 @@ def rules_file(home):
     return item("rules", "ok", len(table["rules"]), "parses", f"{len(table['rules'])} rules, {len(table['executors'])} executors")
 
 
-STORE_CHECKS = (deadlines, signals, packets, notices, runs, goals, sources, findings, drains, interests, assignments)
+STORE_CHECKS = (deadlines, signals, packets, notices, runs, goals, sources, source_coverage, findings, drains, interests, assignments)
 
 
 # -- Host --------------------------------------------------------------------------------------------

@@ -33,6 +33,7 @@ LIVE_TURN = (f"COALESCE(m.display_kind,'') NOT IN ({','.join('?' * len(HIDDEN_KI
              "AND (m.active = 1 OR m.compacted = 1) AND m.content IS NOT NULL AND m.content != ''")
 COLUMNS = {
     "sessions": {"id", "source", "chat_type", "title", "cwd", "started_at", "last_activity_at", "archived"},
+    "session_admissions": {"target_session_id", "principal_id", "request_id"},
     "messages": {"id", "session_id", "role", "content", "timestamp", "tool_name",
                  "display_kind", "active", "compacted", "message_uid"},
 }
@@ -335,10 +336,11 @@ class Sessions(Part):
         """Owned cron job id that ran this session, else None."""
         with reader(self.path) as db:
             row = db.execute("SELECT id, source, title, started_at FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            row = cron_admissions(db, [dict(row)])[0] if row else None
         if not row:
             return None
         cron = self.adapter.cron
-        return match_job(dict(row), cron.jobs(), cron.executions(row["started_at"] - 86400))
+        return match_job(row, cron.jobs(), cron.executions(row["started_at"] - 86400))
 
     @tolerant(list)
     def cron_sessions(self, since):
@@ -349,6 +351,7 @@ class Sessions(Part):
             rows = [dict(r) for r in db.execute(
                 "SELECT id, source, title, started_at FROM sessions "
                 "WHERE started_at > ? AND (source = 'cron' OR id LIKE 'cron\\_%' ESCAPE '\\')", (since,))]
+            rows = cron_admissions(db, rows)
         jobs, executions = self.adapter.cron.jobs(), self.adapter.cron.executions(since - 86400)
         return [{**row, "job_id": match_job(row, jobs, executions)} for row in rows]
 
@@ -421,11 +424,40 @@ class Sessions(Part):
             return []
         with reader(self.path) as db:
             return [f"state.db {table}.{column}" for table, columns in COLUMNS.items()
+                    if table != "session_admissions" or db.execute("SELECT 1 FROM sqlite_master WHERE name='session_admissions'").fetchone()
                     for column in sorted(columns - {c[1] for c in db.execute(f"PRAGMA table_info({table})")})]
 
 
+def cron_admissions(db, rows):
+    """Annotate scheduler-owned LOCAL runs from the host's durable admission ledger.
+
+    Older Hermes has no ledger: retain its id/title/window fallback. Never read
+    admission payloads or treat a non-scheduler principal as provenance.
+    """
+    if not rows or not db.execute("SELECT 1 FROM sqlite_master WHERE name='session_admissions'").fetchone():
+        return rows
+    for row in rows:
+        if row["source"] == "cron":
+            admissions = list(db.execute(
+                "SELECT principal_id, request_id FROM session_admissions WHERE target_session_id=?",
+                (row["id"],)))
+            if admissions:
+                row["cron_requests"] = [r[1] for r in admissions if r[0] == "cron-owner"]
+    return rows
+
+
 def match_job(session, jobs, executions):
-    """`cron_<jid>_` id, else a cron session titled `<job name> · …` (or untitled) inside exactly one run window."""
+    """Scheduler admission first; legacy id/title/window only without that provenance."""
+    if session["source"] == "cron" and "cron_requests" in session:
+        hits = set()
+        for request in session["cron_requests"]:
+            named = {jid for jid in jobs if isinstance(request, str) and request.startswith(f"cron:{jid}:")
+                     and request[len(f"cron:{jid}:"):]
+                     and ":" not in request[len(f"cron:{jid}:"):]}
+            if len(named) != 1:
+                return None  # authoritative but malformed/unowned; never guess from the title
+            hits.update(named)
+        return hits.pop() if len(hits) == 1 else None
     sid = session["id"]
     for jid in jobs:
         if sid.startswith(f"cron_{jid}_"):

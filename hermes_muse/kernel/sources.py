@@ -43,7 +43,8 @@ def due(store, now, overrides=None):
         every = interval(source_id, overrides)
         if last + every <= now:
             out.append({"source_id": source_id, "state": e["state"] if e else "new",
-                        "last_checked": last or None, "every_minutes": int(every // 60)})
+                        "last_checked": last or None, "every_minutes": int(every // 60),
+                        "last_success": e["payload"].get("last_success") if e else None})
     return sorted(out, key=lambda s: (s["last_checked"] or 0, s["source_id"]))
 
 
