@@ -183,7 +183,7 @@ def part_entry(home, ids):
           and claimed["payload"]["job_id"] == deliver_id and printed[2][1] and printed[2][2].strip() == "",
           {"out": [p[2][:200] for p in printed], "state": claimed["state"]})
     silent = {key: entry.run(home, key) for key in ("deliver-abc", "watch-gone", "watch-523b6d11996b")}
-    (home / MARKER).write_text(json.dumps({"at": now}))
+    (home / MARKER).write_text(json.dumps({"at": now, "error": "synthetic failure"}))
     silent["marker"] = entry.run(home, "proactive-watch")
     (home / MARKER).unlink()
     config = (home / "config.yaml").read_text()
@@ -201,6 +201,7 @@ def part_hooks(home, ids):
     from hermes_muse.hooks import Hooks
     from hermes_muse.kernel.store import Store
 
+    (home / "muse" / "installed.json").unlink()  # this load has an install to run in the background
     ctx = Ctx()
     started = time.monotonic()
     hooks = runtime.register(ctx, plugin_root=ROOT)
@@ -312,6 +313,105 @@ def part_hooks(home, ids):
     hooks.close()
 
 
+KILLED_INSTALL = """
+import os, sys
+sys.path.insert(0, sys.argv[2])
+import hermes_muse.install as i
+from hermes_muse.host import HostAdapter
+i.templates = lambda *a: os._exit(9)  # dies inside the install window: no except, no finally, as under SIGKILL
+i.install(HostAdapter(sys.argv[1]), sys.argv[2])
+"""
+LOAD = """
+import sys
+sys.path.insert(0, sys.argv[2])
+from hermes_muse.host import HostAdapter
+from hermes_muse.install import upgrade
+print("installed" if upgrade(HostAdapter(sys.argv[1]), sys.argv[2]) else "skipped")
+"""
+
+
+def part_marker(home, ids):
+    """The install marker: who stays silent for it and who clears it."""
+    import hermes_muse.install as installer
+    from cron.scheduler_script import _run_job_script
+    from hermes_muse import entry
+    from hermes_muse.hooks import Hooks
+    from hermes_muse.host import HostAdapter
+    from hermes_muse.kernel import Kernel
+    from hermes_muse.locks import file_lock
+    from unittest import mock
+    adapter, marker = HostAdapter(home), home / installer.MARKER
+
+    def killed():
+        return subprocess.run([sys.executable, "-c", KILLED_INSTALL, str(home), str(ROOT)]).returncode
+
+    def upgrade_ran():
+        return bool(installer.upgrade(adapter, ROOT))
+
+    installer.upgrade(adapter, ROOT)
+    with mock.patch.object(installer, "file_lock") as lock, mock.patch.object(installer, "install") as run:
+        skipped = installer.upgrade(adapter, ROOT)
+    check("load: this code already installed: no lock, no install, no marker",
+          skipped is None and not lock.called and not run.called and not marker.exists())
+
+    health_job = adapter.cron.job("health")["id"]
+    adapter.cron.remove(health_job)
+    job_gone = upgrade_ran() and adapter.cron.job("health")
+    adapter.cron.set_prompt(ids["proactive-watch"], "an older version's prompt")
+    prompt_old = upgrade_ran() and adapter.cron.job("proactive-watch")["prompt"] == prompt("proactive-watch")
+    (home / "muse" / "DECISIONS.md").unlink()
+    template_gone = upgrade_ran() and (home / "muse" / "DECISIONS.md").exists()
+    (home / installer.INSTALLED).write_text(json.dumps({"fingerprint": "another version"}))
+    other_code = upgrade_ran()
+    (home / installer.INSTALLED).unlink()
+    never = upgrade_ran()
+    check("load: installs again for another version, no record, a removed job or template and an older prompt",
+          job_gone and prompt_old and template_gone and other_code and never,
+          [bool(job_gone), prompt_old, template_gone, other_code, never])
+
+    code = killed()
+    left = json.loads(marker.read_text())
+    state = installer.migrating(home)
+    ok, out = _run_job_script("hermes-muse-deliver.py")  # the real launcher, as the scheduler runs it
+    check("killed install: marker without error reads stale; the next launcher installs, clears it and runs its job "
+          "(deliver: nothing due; its stdout would be delivered, so the install adds nothing to it)",
+          code == 9 and "error" not in left and state.get("stale") and ok and out.strip() == ""
+          and not marker.exists() and installer.current(adapter, ROOT), {"code": code, "state": state, "out": out[:300]})
+
+    killed()
+    loads = [subprocess.Popen([sys.executable, "-c", LOAD, str(home), str(ROOT)], stdout=subprocess.PIPE, text=True) for _ in range(4)]
+    said = sorted(p.communicate()[0].strip().splitlines()[-1] for p in loads)
+    check("concurrent loads after a kill: exactly one installs, the rest find it done, the marker is gone",
+          said == ["installed", "skipped", "skipped", "skipped"] and not marker.exists(), said)
+
+    marker.write_text('{"at": 12')  # a kill during the marker's own write
+    torn = installer.migrating(home)
+    recovered = upgrade_ran()
+    check("truncated marker: reads stale, not a failure; the next load clears it",
+          torn.get("stale") and not torn.get("error") and recovered and not marker.exists(), torn)
+
+    with file_lock(home / installer.LOCK):
+        marker.write_text(json.dumps({"at": time.time(), "pid": 1}))  # the pid is dead; the lock says it is running
+        running = installer.migrating(home)
+        quiet = entry.run(home, "proactive-watch")
+        kept = marker.exists()
+        marker.unlink()
+    check("running install: the lock's holder counts, not the pid: not stale, jobs silent, marker left alone",
+          not running.get("stale") and quiet == entry.silent("migration in progress") and kept, running)
+
+    failed = {"at": time.time(), "pid": os.getpid(), "error": "RuntimeError: synthetic"}
+    marker.write_text(json.dumps(failed))
+    hooks = Hooks(Kernel(home, adapter=adapter))
+    quiet, told = entry.run(home, "proactive-watch"), hooks.summary(time.time())
+    still = json.loads(marker.read_text()) == failed
+    hooks.tick_soon()
+    ticking = any(t.name == "muse-tick" for t in threading.enumerate())
+    retried = upgrade_ran()
+    check("failed install: jobs and the tick stay silent, no launcher touches the marker, the main session is told; "
+          "the next load retries", quiet == entry.silent("migration in progress") and still and not ticking
+          and "synthetic" in told and retried and not marker.exists(), {"told": told})
+
+
 def part_views(home):
     import importlib.util
     (home / "muse" / "workspace" / "your_files" / "feed" / "feed0.md").write_text("# Feed 0\nbody text")
@@ -343,7 +443,7 @@ def part_rollback(home, ids, adapter):
     sys.path.insert(0, str(ROOT / "scripts"))
     import cutover
     from cron.jobs import list_jobs
-    from hermes_muse.install import MARKER, PROMPTS_BACKUP, install
+    from hermes_muse.install import MARKER, PROMPTS_BACKUP, upgrade
     from unittest import mock
     opened = []
     connect = sqlite3.connect
@@ -384,7 +484,7 @@ def part_rollback(home, ids, adapter):
           and jobs[ids["weekly-governance-review"]]["state"] == "paused" and set(paused.values()) == {"paused"} and len(paused) == 2,
           {k: v for k, v in out.items() if k != "bridge"})
     (home / MARKER).unlink()  # cancel the rollback: reload v2
-    reloaded = install(adapter, ROOT)
+    reloaded = upgrade(adapter, ROOT)  # what a load runs: the rollback made it install again
     jobs = {j["id"]: j for j in list_jobs(include_disabled=True)}
     states = {j["script"]: j["state"] for j in jobs.values() if j.get("script") in ("hermes-muse-health.py", "hermes-muse-deliver.py")}
     check("cancelled rollback: reinstall resumes the Health and deliver jobs the rollback paused; the user's pause stays",
@@ -451,6 +551,7 @@ def main():
         adapter = part_install(home, ids)
         part_entry(home, ids)
         part_hooks(home, ids)
+        part_marker(home, ids)
         part_views(home)
         part_rollback(home, ids, adapter)
         part_checks(base)
