@@ -19,8 +19,10 @@ Every step is `PYTHONPATH=<hermes-agent> <hermes python> scripts/cutover.py <ste
    - refreshes the Muse jobs in place under their 0.3.x names (ids, schedules, routes and pauses are kept),
      pauses `muse-monthly-system-audit` (merged into the weekly digest), creates the `muse-deliver` and
      `muse-health` no_agent jobs and removes settled 0.4.1 one-shot delivery jobs;
-   - removes the marker. A failed install keeps the marker and its error; jobs stay silent and the main
-     session says so. `apply` repeats the install without a gateway (or on a copy).
+   - records the install in `muse/installed.json` and removes the marker. A failed install keeps the marker and
+     its error; jobs stay silent, the main session says so and the next load retries. `apply` repeats the install
+     without a gateway (or on a copy). A process killed mid-install needs nothing from you: the next load or Muse
+     cron run installs again.
 4. **Swap the external callers** to their rewritten versions (user-authorized step).
 5. **`verify`** runs one Health pass and must pass A4 (all probes ok) and A7 (signal watermark ok).
    Then watch the first patrol, intake and nightly runs and the main-session injection.
@@ -29,7 +31,7 @@ Every step is `PYTHONPATH=<hermes-agent> <hermes python> scripts/cutover.py <ste
 
 Use it when a high Health finding cannot be fixed within 2 hours.
 
-1. **`rollback`** sets the marker (v2 jobs go silent), runs the rollback bridge (v2 sent notices and
+1. **`rollback`** sets the marker (v2 jobs go silent), forgets the recorded install, runs the rollback bridge (v2 sent notices and
    settled signals are written back into `muse/state.db`, so 0.3.x neither resends nor reprocesses them),
    restores the saved 0.3.x job prompts (with their installation markers, so 0.3.x finds its jobs
    instead of creating duplicates), resumes the job the install paused and pauses `muse-health` and `muse-deliver`.
