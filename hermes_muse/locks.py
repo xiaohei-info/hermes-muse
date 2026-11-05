@@ -4,11 +4,23 @@ from contextlib import contextmanager
 import os
 import threading
 
-from .host import exclusive
+from .host import exclusive, unlocked
 
 _guard = threading.Lock()
 _locks = {}
 _local = threading.local()
+
+
+def lock_free(path):
+    """Whether no process holds this lock. The OS releases a lock when its holder dies, however it died."""
+    from .content_io import Files, open_at
+
+    with Files(path.parent.parent).directory() as parent:
+        fd = open_at(parent, path.name, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        return unlocked(fd)
+    finally:
+        os.close(fd)
 
 
 @contextmanager

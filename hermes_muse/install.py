@@ -1,4 +1,7 @@
-"""Install / upgrade on plugin load (design 7.4 step 2), under muse/install.lock.
+"""Install / upgrade (design 7.4 step 2), under muse/install.lock. `upgrade` runs it on plugin load only when
+muse/installed.json says this code has not finished installing here, so an ordinary load never opens the window
+below. A process killed inside the window leaves a marker `migrating` reads as stale: the next load, or the next
+launcher (silent jobs load nothing, so a load may never come), installs again. `migrating` alone decides.
 
 1. Write the migration marker muse/migrating.json: every Muse cron launcher and the background tick stay
    silent while it exists (a failed install leaves it, with the error, and the main session is told).
@@ -10,9 +13,11 @@
    the current watch prompt (ensure_watch is also how muse_manage watch_create makes them). The no-agent
    `deliver` job has no prompt; the finished 0.4.1 one-shot delivery jobs whose notice settled are removed.
 5. Create or refresh the Health no_agent cron and resume the jobs a cancelled rollback paused (user pauses stay).
-6. Remove the marker.
+6. Record what was installed in muse/installed.json and remove the marker.
 """
+import hashlib
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -23,9 +28,13 @@ from .host import PLUGIN
 from .kernel import Kernel, notifier
 from .kernel.common import preferences
 from .kernel.store import Store
-from .locks import file_lock
+from .locks import file_lock, lock_free
 
+log = logging.getLogger(__name__)
 MARKER = "muse/migrating.json"
+LOCK = "muse/install.lock"
+INSTALLED = "muse/installed.json"  # fingerprint of the last finished install
+INSTALLS_FROM = ("hermes_muse/**/*.py", "prompts/**/*.md", "templates/**/*.md", "cron_entry.py", "health_entry.py", "plugin.yaml")
 PROMPTS_BACKUP = "muse/backup/cron-prompts-0.3.json"
 # cron key (0.3.x name) -> (job, default schedule for a new install, delivers to the user); prompt prompts/jobs/<job>.md
 JOBS = {
@@ -49,13 +58,22 @@ FOLDERS = ("memory/people", "memory/groups", "dreams/alignment/derived", "worksp
 
 
 def migrating(home):
-    """The marker's content while an install is running or failed, else None."""
+    """The marker's content while an install is running, failed or was killed (`stale` set), else None.
+
+    Without an error, install.lock tells a running install from a dead one: the marker is removed under the lock,
+    so a marker still there once the lock is seen free has no process left to finish it."""
+    path = Path(home) / MARKER
     try:
-        return json.loads((Path(home) / MARKER).read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    except ValueError:
-        return {"at": 0, "error": "unreadable migration marker"}
+    try:
+        mark = json.loads(raw)
+    except ValueError:  # a kill can truncate the write
+        mark = {"at": 0}
+    if mark.get("error") or not lock_free(Path(home) / LOCK):
+        return mark
+    return {**mark, "stale": True} if path.exists() else None
 
 
 def route(adapter):
@@ -121,12 +139,16 @@ def ensure_watch(adapter, root, key, *, schedule, check, stop_condition, deliver
                                skills=SKILLS, deliver=deliver or route(adapter))
 
 
+def job_prompt(root, job):
+    return (root / "prompts" / "jobs" / f"{job}.md").read_text(encoding="utf-8")
+
+
 def jobs(adapter, root, store):
     entry, out = root / "cron_entry.py", {}
     for key, (job, schedule, delivered) in JOBS.items():
         quiet = job in NO_AGENT
         found = adapter.cron.ensure(key, schedule=schedule, entry=entry, skills=None if quiet else SKILLS, no_agent=quiet,
-                                    prompt=None if quiet else (root / "prompts" / "jobs" / f"{job}.md").read_text(encoding="utf-8"),
+                                    prompt=None if quiet else job_prompt(root, job),
                                     deliver=route(adapter) if delivered else "local")
         out[key] = found["id"] if found else None
     for key, reason in RETIRED.items():
@@ -149,7 +171,7 @@ def install(adapter, root, now=None):
     home, root = adapter.home, Path(root).resolve()
     now = time.time() if now is None else now
     marker = home / MARKER
-    with file_lock(home / "muse" / "install.lock"):
+    with file_lock(home / LOCK):
         mark = {"at": now, "pid": os.getpid()}
         marker.write_text(json.dumps(mark), encoding="utf-8")
         try:
@@ -162,8 +184,51 @@ def install(adapter, root, now=None):
             report["health_cron"] = (health.ensure_cron(adapter, route(adapter)) or {}).get("id")
             report["resumed"] = sorted(i for i, j in adapter.cron.jobs().items() if not j.get("enabled")
                                        and ROLLED_BACK in str(j.get("paused_reason") or "") and adapter.cron.resume(i))
+            (home / INSTALLED).write_text(json.dumps({"fingerprint": fingerprint(home, root), "at": now}), encoding="utf-8")
         except Exception as exc:
             marker.write_text(json.dumps({**mark, "error": f"{type(exc).__name__}: {exc}"[:500]}), encoding="utf-8")
             raise
         marker.unlink()
     return report
+
+
+def fingerprint(home, root):
+    """This code in this home: another version, checkout or copied profile installs again."""
+    digest = hashlib.sha256(f"{home}\n{root}".encode())
+    for path in sorted(p for pattern in INSTALLS_FROM for p in root.glob(pattern)):
+        digest.update(path.relative_to(root).as_posix().encode() + b"\n" + path.read_bytes())
+    return digest.hexdigest()
+
+
+def current(adapter, root):
+    """Whether an install has nothing to do: this code finished here, none is unfinished since, and what it
+    creates is still as it left it (a removed job or template comes back, an older version's prompt is replaced)."""
+    home = adapter.home
+    try:
+        done = json.loads((home / INSTALLED).read_text(encoding="utf-8")).get("fingerprint")
+    except (OSError, ValueError):
+        return False
+    if (home / MARKER).exists() or done != fingerprint(home, root):
+        return False
+    if not all((home / "muse" / p.relative_to(root / "templates")).exists() for p in (root / "templates").rglob("*.md")):
+        return False
+    for key, (job, _, _) in JOBS.items():
+        found = owned(adapter, key)
+        if not found or (job not in NO_AGENT and found.get("prompt") != job_prompt(root, job)):
+            return False
+    return bool(owned(adapter, "health"))
+
+
+def upgrade(adapter, root):
+    """Install when there is something to do, one process at a time; a process that waited finds it done. Returns
+    the install's report, or None when it did not run or failed (the marker then holds the error: jobs stay silent
+    and the main session is told; the next load retries)."""
+    root = Path(root).resolve()
+    try:
+        if current(adapter, root):
+            return None
+        with file_lock(adapter.home / LOCK):
+            return None if current(adapter, root) else install(adapter, root)
+    except Exception as exc:
+        log.error("Hermes Muse install failed: %s", exc)
+        return None

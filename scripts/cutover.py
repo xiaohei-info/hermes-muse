@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from hermes_muse import health  # noqa: E402
 from hermes_muse.host import HostAdapter  # noqa: E402
-from hermes_muse.install import MARKER, PROMPTS_BACKUP, RETIRED, ROLLED_BACK, install, owned  # noqa: E402
+from hermes_muse.install import INSTALLED, MARKER, PROMPTS_BACKUP, RETIRED, ROLLED_BACK, install, owned  # noqa: E402
 
 DB_FILES = ("*.db", "*.db-wal", "*.db-shm", "*.lock")
 
@@ -57,6 +57,7 @@ def rollback(adapter):
     from hermes_muse.kernel.store.bridge import bridge
     home = adapter.home
     (home / MARKER).write_text(json.dumps({"at": time.time(), "error": "rollback in progress"}), encoding="utf-8")
+    (home / INSTALLED).unlink(missing_ok=True)  # what follows undoes the install: loading v2 again must redo it
     out = {"marker": str(home / MARKER), "bridge": bridge(home)}
     try:
         saved = json.loads((home / PROMPTS_BACKUP).read_text(encoding="utf-8"))
