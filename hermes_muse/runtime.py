@@ -2,22 +2,20 @@
 
 register() only builds objects and registers: Hermes abandons a load that passes its deadline (import +
 register), and install waits on profile locks, SQLite writers and the host's cron lock. Install therefore runs
-in a background thread after the registrations; its migration marker keeps jobs, the background tick and the
-tools quiet until it is done. Whether this process's load counted is recorded for launchers and Health.
+in a background thread after the registrations, and only when this code has not finished installing yet; its
+migration marker keeps jobs, the background tick and the tools quiet until it is done. Whether this process's load counted is recorded for launchers and Health.
 The model surface (tool schemas and handlers, design 2.6) is `surface.register`; tools and hooks classify
 their caller with the same HostAdapter.caller() from host kwargs, never from tool arguments.
 """
-import logging
 import threading
 from pathlib import Path
 
 from . import surface
 from .hooks import Hooks
 from .host import HostAdapter
-from .install import install
+from .install import upgrade
 from .kernel import Kernel
 
-log = logging.getLogger(__name__)
 REQUIRED = ("register_tool", "register_skill", "register_system_prompt_section", "register_hook", "on_unload")
 
 
@@ -45,9 +43,3 @@ def register(ctx, *, plugin_root):
     threading.Thread(target=upgrade, args=(adapter, root), name="hermes-muse-install").start()
     return hooks
 
-
-def upgrade(adapter, root):
-    try:
-        install(adapter, root)
-    except Exception as exc:  # the marker keeps jobs silent and the main session is told
-        log.error("Hermes Muse install failed: %s", exc)

@@ -171,14 +171,17 @@ owned job 由 `install.JOBS` 定义，cron key 沿用 0.3.x 的名字，这样 j
    - `post_tool_call` 把原生 memory 写入的 failed/staged 结果交给 `receipts.record`：`host.sessions.memory_result` 区分待批（staged，含 `pending_id` 和审批命令）、容量已满（capacity）、参数错误（invalid）、配置关闭（disabled）和其他；`receipts.explain` 说清原因和下一步，staged 要说明怎么批准、整理后是否仍有效（add 有空间就能批准；patch/remove 钉在匹配时的条目上，条目变了就被拒绝）；
    - 例外：`pre_tool_call` 和 `post_tool_call` 对 Muse 自己的 intake run（hook 的 `task_id` 以 `cron:<memory-upkeep 的 job id>:` 开头，`host.sessions.run_of`；不读会话行）执行流程 1 的记忆整理守卫和记录；
    - `post_llm_call` 在后台运行一次 tick；用户静默 5 分钟后，满足 `intake.quiet_wake` 时唤醒 `memory-upkeep`，每天最多 3 次。
-9. **安装/升级**（`install.install`，持有 `muse/install.lock`）。`runtime.register` 只建对象并注册 Skill、prompt 段、工具和 hooks（`Kernel.store` 首次使用才打开），然后在后台线程 `hermes-muse-install` 里跑 install（不是 daemon：CLI 这类短命进程也会加载插件，退出前要跑完 install，否则会留下迁移标记让所有 job 静默）：Hermes 给 import + register 一个期限（默认 10s），超时就放弃这次加载、丢掉之后的所有注册，而冷启动时多个 Hermes 进程同时加载插件，install 要等 profile 锁、SQLite 写者和宿主的 cron 锁。注册完成后 `HostAdapter.loaded()` 记下本进程的加载是否算数（`muse/loaded/<pid>`：`ok` 或 `abandoned`，按宿主的 `_load_abandoned`）；launcher 的父进程就是运行该 job 的进程，它放弃了加载时，需要模型的 job 静默（reason 指向 `plugin_load`），`muse-deliver` 不需要模型照常投递，Health 报 high `plugin_load`。迁移标记存在且没有 error 时（install 进行中），工具返回 `host_unavailable`。步骤：
+9. **安装/升级**（`install.install`，持有 `muse/install.lock`）。`runtime.register` 只建对象并注册 Skill、prompt 段、工具和 hooks（`Kernel.store` 首次使用才打开），然后在后台线程 `hermes-muse-install` 里跑 install（不是 daemon：CLI 这类短命进程也会加载插件，退出前要跑完 install，否则会留下迁移标记让所有 job 静默）：Hermes 给 import + register 一个期限（默认 10s），超时就放弃这次加载、丢掉之后的所有注册，而冷启动时多个 Hermes 进程同时加载插件，install 要等 profile 锁、SQLite 写者和宿主的 cron 锁。注册完成后 `HostAdapter.loaded()` 记下本进程的加载是否算数（`muse/loaded/<pid>`：`ok` 或 `abandoned`，按宿主的 `_load_abandoned`）；launcher 的父进程就是运行该 job 的进程，它放弃了加载时，需要模型的 job 静默（reason 指向 `plugin_load`），`muse-deliver` 不需要模型照常投递，Health 报 high `plugin_load`。迁移标记存在且没有 error 时（install 进行中或被杀），工具返回 `host_unavailable`。
+   - **只在有事可做时进入安装窗口**（`install.upgrade`）：`muse/installed.json` 的指纹（`install.fingerprint`：home、插件路径、代码、prompt、模板、manifest）与当前一致，没有标记，且 job、health job、模板都在、job prompt 未变（`install.current`）时，不拿锁、不写标记直接返回；等锁的进程拿到锁后再判断一次，所以并发加载只有一个安装。`install.install` 本身无条件执行（`cutover.py apply`）；`cutover.py rollback` 删除这份记录，之后加载 v2 必定重装。
+   - **标记的判定只在 `install.migrating`**：带 error 的是失败（静默并告知主会话，下次加载重试；launcher 不碰它，rollback 的标记也属此类）；没有 error 时看 `install.lock`：被持有是安装中；空闲说明进程已死（操作系统释放锁，不看 pid，半截标记也算），返回 `stale`。所有调用方都静默；launcher（`entry.run`）遇到 `stale` 先经 `upgrade` 重装再继续，因为任务全静默时，运行中的 gateway 不会再加载插件，等下一次加载可能等不到。
+   步骤：
    1. 写迁移标记 `muse/migrating.json`；
    2. 执行一次 v1 → v2 迁移；
    3. 从模板补齐缺失的内容文件，不覆盖已有文件；
    4. 首次刷新前备份 0.3.x 的 job prompt；
    5. 原地刷新 owned job（含 no_agent 的 `muse-deliver`）和 watch，并删除已结清的 0.4.1 one-shot 投递 job（`notifier.sweep`）；
    6. 创建或刷新 Health cron；恢复暂停原因为 `install.ROLLED_BACK`（取消回滚）的 owned job，用户自己的暂停不动；
-   7. 删除标记。
+   7. 写 `muse/installed.json`，删除标记。
    - 失败时标记保留并写入错误：job 和后台 tick 保持静默，主会话会收到提示。
 
 ## 3. 系统架构
@@ -230,7 +233,7 @@ Hermes 宿主
   - 不 import 应用层和入口。
 - 共享基础只依赖 stdlib 和 `host/`（`content_io` 通过 `host.interrupted()` 判断宿主中断），不依赖 kernel 和应用层。所有内容文件只能通过 `content_io.Files`（O_NOFOLLOW 逐级打开 + revision CAS）和 `locks.file_lock`（`mutations.lock`）写入。
 - 应用层之间允许的依赖只有两类：
-  - 依赖 `install` 的 `JOBS`、`owned`、`migrating`、`ensure_watch`（job 归属和迁移标记的唯一来源）；
+  - 依赖 `install` 的 `JOBS`、`owned`、`migrating`、`upgrade`、`ensure_watch`（job 归属和迁移标记的唯一来源）；
   - 依赖 `health` 的只读函数 `load`、`summary`、`injection`。
 - `health/` 依赖 `host/` 和只读的 `kernel.store`。它**不调用 kernel 业务、不走 Notifier、不修复数据**，这样内核出 bug 时仍能被发现。
 - 模型面只有 `surface.py`：工具 schema、校验、授权和分发都由 `MAIN`/`JOB_ACTIONS` 这一张表生成。
@@ -261,7 +264,8 @@ Hermes 宿主
 |---|---|---|
 | `muse/state-v2.db` | Store v2：`entity`、`event`（保留 30 天）、`meta`（`intake_since`、`migration`、每日计数） | 只有 kernel 写；Health、views、Dashboard 只读；禁止手改 |
 | `muse/state.db` | 0.3.x 旧库，迁移后置为只读（0400） | 只有 `rollback-bridge` 可以写回 |
-| `muse/migrating.json` | 迁移标记；存在时 job 和后台 tick 保持静默 | 只有 `install` 和 `cutover rollback` 写 |
+| `muse/migrating.json` | 迁移标记；存在时 job 和后台 tick 保持静默，有效性只由 `install.migrating` 判定 | 只有 `install` 和 `cutover rollback` 写 |
+| `muse/installed.json` | 最后一次完成的安装的指纹 | `install` 写；`cutover rollback` 删 |
 | `muse/backup/cron-prompts-0.3.json` | 首次刷新前的 0.3.x job prompt，供回滚恢复 | `install.backup_prompts`，只写一次 |
 | `muse/install.json` | 0.3.x 写的安装记录；v2 只在迁移 watch 时读取 | 只读 |
 | `muse/health.json` | 健康报告，原子替换写入 | 只有 Health 写 |
@@ -327,7 +331,8 @@ Hermes 宿主
 | memory_receipt | 失败或待批准的原生记忆写入提示 | kind `memory_receipt`、`kernel/receipts.py` |
 | Run / outcome | 一次被唤醒的 job 执行 / 由代码计算的执行结果 | kind `run`、`kernel/runs.py` |
 | tombstone / forget | 遗忘标记 / 用户要求删除 | kind `tombstone`、`records.forget` |
-| migration marker | 安装或回滚期间让所有 job 静默的标记文件 | `install.migrating`、`muse/migrating.json` |
+| migration marker / stale | 安装或回滚期间让所有 job 静默的标记文件 / 安装进程已死、没有 error 的标记 | `install.migrating`、`muse/migrating.json` |
+| install fingerprint | 决定加载时要不要安装的内容摘要 | `install.fingerprint`、`muse/installed.json` |
 | Health / invariant / health item | 独立健康服务 / 不变量 / 一条检查结果（`health.json` 的 `invariants[]`；模型面 `read(kind=status).health.items[]`） | `hermes_muse/health/` |
 | action table | 生成工具 schema 的唯一表 | `surface.MAIN`（muse_manage）、`surface.JOB_ACTIONS`（muse_job） |
 | content kind / revision | 内容文件的类别 / 文件内容的 sha256（新文件用 `absent`） | `surface.CONTENT`、`content_io.revision` |
@@ -377,7 +382,7 @@ Hermes 宿主
 - packet：同一 job 同一时刻只有一个 `issued`，并发调用拿到同一个 packet；drain job 同一周期内可有多批 submitted；ref 只在本 packet 内有效；submit 按条目幂等，可边做边交。
 - 投递：muse-deliver run 先在一个事务内认领 `sending` 并写入 `delivery_key` 和本次 `execution_id`，再把消息打印为 stdout；回执只按该 execution 读取，已认领的 Notice 不会再被认领或重发。**结果未知的外部写入不得盲目重发**。
 - 文件：GOAL.md 和内容文件必须持有 `mutations.lock`，并通过 `expected_revision` CAS 写入。冲突时返回 `revision_conflict`，调用方需重读并合并。
-- 安装：同一 profile 同时只有一个 install（`install.lock`）；迁移标记存在期间，launcher 和后台 tick 都不推进状态。
+- 安装：同一 profile 同时只有一个 install（`install.lock`）；迁移标记存在期间，launcher 和后台 tick 都不推进状态（launcher 重装 `stale` 标记除外）。
 - **payload 字段以写入方为准**：读取别的模块写的 payload 字段时，字段名以写入方的代码为准；测试必须用写入方的函数产生数据，不得手写 payload。
 - 共享文件和后台任务之间的竞争属于正确性问题，不能当作“偶发”问题处理。
 
@@ -569,6 +574,7 @@ Hermes 宿主
 - 复盘规则用正则匹配中英文关键词，属于启发式。
 - 已标注的 shortcut：
   - 迁移来的 watch 如果没有 expires，给 30 天（`migrate._watches`）；
+  - `install.current` 不检查 launcher 文件和 watch job：它们被手动删除后，要到下次代码变化或 `cutover.py apply` 才恢复；
   - 安装时解析不了 prompt 的旧 watch 保留原 prompt，需要用户重建（`install.jobs`）；
   - hooks 的“只在变化时注入”记在进程内存中，进程重启后摘要会再注入一次（`hooks.Hooks`）；
   - 加载记录按 pid：一个已退出加载进程的 pid 被复用时，记录要到下一次加载时才清掉（`HostAdapter.load_failed`）；

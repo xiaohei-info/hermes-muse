@@ -74,6 +74,27 @@ def exclusive(fd):
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
 
+def unlocked(fd):
+    """Whether fd's lock is free right now; never waits and leaves it free."""
+    if os.name != "nt":
+        import fcntl
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return True
+    import msvcrt
+    os.lseek(fd, 0, os.SEEK_SET)
+    try:
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    except OSError:
+        return False
+    os.lseek(fd, 0, os.SEEK_SET)
+    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    return True
+
+
 HOST_ERROR = "host_error"
 
 

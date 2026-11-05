@@ -7,14 +7,19 @@ longer open. Otherwise the line carries the job's packet from build_packet (ids,
 filled in by code), which Hermes hands to the model as Script Output, and the run is registered with
 start_run so its outcome is computed later.
 The no-agent `deliver` key prints plain text instead: the notices it claimed, or nothing (silent).
+A launcher that finds a killed install's marker installs again first: with every job silent nothing else may ever
+load the plugin (a running gateway does not load it per job).
 """
+from pathlib import Path
+
 from . import health
 from .host import HostAdapter
 from .host.sessions import clean
-from .install import JOBS, migrating, owned
+from .install import JOBS, migrating, owned, upgrade
 from .kernel import Kernel, assignments, goals, notifier
 from .kernel.common import D, preferences
 
+ROOT = Path(__file__).resolve().parents[1]
 WEEK = 7 * D
 WEEKLY_KINDS = ("signal", "notice", "goal", "assignment", "feed", "finding", "interest", "idea", "run")
 
@@ -63,7 +68,11 @@ def run(home, key, now=None):
     adapter = HostAdapter(home)
     if not adapter.config.enabled():
         return silent("plugin absent or disabled")
-    if migrating(adapter.home):
+    marker = migrating(adapter.home)
+    if marker and marker.get("stale"):
+        upgrade(adapter, ROOT)
+        marker = migrating(adapter.home)
+    if marker:
         return silent("migration in progress")
     if key != notifier.DELIVER and adapter.load_failed():  # muse-deliver needs no model and no Muse tool
         return silent("Hermes abandoned Muse's plugin load in this process; restart the gateway (Health: plugin_load)")

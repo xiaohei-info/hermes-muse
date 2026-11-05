@@ -1,3 +1,19 @@
+# 0.5.2 — A killed install no longer silences Muse (2026-11-06)
+
+**Upgrade notes.** No Store schema change, no new cron job, no contract change. If `muse/migrating.json` is left over from a
+killed install, you no longer need to delete it: upgrading clears it. The first load after upgrading runs one full install.
+
+- **A process killed during install left every job silent until someone deleted the marker.** Any process that loads the
+  plugin ran the install, and one killed inside it left `muse/migrating.json` with no error. Now a marker with no error and a
+  free `muse/install.lock` counts as a dead install, and the next plugin load or Muse cron run installs again and clears it. A
+  marker cut short by the kill counts the same way. A failed install is unchanged: jobs stay silent, the main session is told,
+  the next load retries.
+- **Most loads no longer install.** `muse/installed.json` records what was last installed. A load skips the install, its lock
+  and its marker when the code is unchanged and the jobs, job prompts and templates are in place. A removed job or template
+  still comes back on the next load. A launcher or watch job you delete by hand now waits for the next upgrade or
+  `scripts/cutover.py apply`.
+- **Concurrent loads run one install.** A process that waited on the lock finds the work done and returns.
+
 # 0.5.1 — The main conversation is the user again (2026-11-03)
 
 **Upgrade notes.** No Store schema change, no new cron job, no contract change. Upgrade from 0.5.0 as soon as you can.

@@ -277,12 +277,17 @@ only its feature and raises a high item.
 
 ## Install, upgrade and rollback
 
-On plugin load, `install.install` holds `muse/install.lock`, writes `muse/migrating.json`, migrates the 0.3.1 or
+A plugin load installs only when there is something to do: `muse/installed.json` records the fingerprint of the last
+finished install (home, plugin path, code, prompts, templates, manifest), and with no marker and the jobs, their prompts and
+the templates still in place `install.upgrade` returns without taking a lock or writing the marker. Otherwise `install.install` holds `muse/install.lock`, writes `muse/migrating.json`, migrates the 0.3.1 or
 0.3.16 `muse/state.db` into Store v2 once (the old file becomes read-only), adds missing content files from
 `templates/` without overwriting, backs up the 0.3.x job prompts once to `muse/backup/cron-prompts-0.3.json`,
 refreshes owned jobs and watches in place (creating `muse-deliver`), removes settled 0.4.1 one-shot delivery
 jobs, creates the Health cron, resumes the jobs a cancelled rollback paused and removes the marker. A failed install keeps
-the marker and its error: jobs and the background tick stay silent and the main session is told. Cutover and
+the marker and its error: jobs and the background tick stay silent, the main session is told and the next load retries. A process
+killed mid-install leaves a marker with no error and a free lock (the OS released it); `install.migrating`, the one place that
+judges the marker, reads that as stale, and the next load or launcher installs again. Launchers do not wait for a load, since a
+running gateway does not load plugins per job and silent jobs would never bring one. Cutover and
 rollback steps are in [CUTOVER.md](CUTOVER.md); the rollback bridge writes v2's sent notices and settled signals back
 into the 0.3.x database so the old version neither resends nor reprocesses them.
 
