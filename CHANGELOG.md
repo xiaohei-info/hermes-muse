@@ -13,6 +13,8 @@ killed install, you no longer need to delete it: upgrading clears it. The first 
   still comes back on the next load. A launcher or watch job you delete by hand now waits for the next upgrade or
   `scripts/cutover.py apply`.
 - **Concurrent loads run one install.** A process that waited on the lock finds the work done and returns.
+- **Sources registered under older identities count toward coverage again** (#18, thanks Michael Forzano). Source discovery
+  finds an empty registry without rewriting legacy history, and cron runs admitted by the scheduler keep their attribution.
 
 # 0.5.1 — The main conversation is the user again (2026-11-03)
 
