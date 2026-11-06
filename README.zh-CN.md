@@ -68,7 +68,7 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 每个 job 的 launcher 先运行内核、组装有界 packet；intake、nightly 和 feed 的 packet 为空时不唤醒模型；nightly 和 feed 分批处理队列，Muse 会接着唤醒它们直到处理完；patrol 每轮都唤醒，因为只有模型能读你的来源。代码负责捕获消息、派生所有 ID 和键、对 7 天历史去重、执行静默时段和预算、投递、读投递回执、推进下次检查、询问并关闭休眠目标。模型只返回引用、枚举值和文本。行为写在 `prompts/jobs/<job>.md`，字段见生成的[接口](skills/companion/references/interface.md)。详见[设计文档](docs/DESIGN.md)和[功能覆盖](docs/FEATURE-COVERAGE.zh-CN.md)。
 
-只有用户界面上的私聊（CLI、TUI、桌面、手机和 `USER_SOURCES` 列出的消息平台私信）会被读取，也只有它们能修改 Muse 状态。cron run、委派子代理、群聊和未分类来源都不能。
+只有用户界面上的私聊（CLI、TUI、桌面、手机和 `USER_SOURCES` 列出的消息平台私信）会被读取，也只有它们能修改 Muse 状态。cron run、委派子代理、群聊和未分类来源都不能；Hermes 注入对话的轮次（job 输出、后台进程完成、委派结果）只能读。
 
 ## 数据源
 

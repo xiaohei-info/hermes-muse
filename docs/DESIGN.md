@@ -86,13 +86,18 @@ written only through `content_io.Files` with a revision CAS under `muse/mutation
 
 ## Authorization
 
-`host.sessions.caller()` returns `user | cron | child | group | other`. The stored `sessions.source` decides; the
-call's platform argument or an inherited session environment can only narrow it. Sources outside `USER_SOURCES`
-(including empty or unclassified ones) are `other`; group chats are `group`; delegated contexts are `child`.
+`host.sessions.caller()` returns `user | cron | child | automation | group | other`, judging three host facts on
+their own. Automation: delegated contexts are `child`, cron sessions `cron`, and a turn Hermes injected into a user
+conversation (cron output, a finished background process, a delegation result: its user message carries Hermes'
+machinery display kind) is `automation`, which may only read. Group: the turn's chat type. The user's private
+conversation: the stored private producer decides; the turn's surface (the host's `platform` argument, else
+`hermes_cli.plugin_session.session_surface()`, which resolves a LOCAL turn to its launch policy's client) can only
+narrow it. Sources outside `USER_SOURCES` (including empty or unclassified ones) are `other`; a refused `other` call says
+so in words Health's `main_session` looks for.
 
 Photon is a user surface, subject to the same private-chat and machine-source exclusions as other surfaces.
-Native `local` is a transport, not user authority. The adapter resolves its private producer from
-`created_source=cli/tui/gui/acp`, or from Hermes' immutable LOCAL creation receipt written by
+Native `local` is a transport, never a surface or user authority. The adapter resolves its private producer from
+the LOCAL creation label (Hermes' `STORED_AS_LOCAL`, mapped through its `SURFACES`), or from Hermes' immutable LOCAL creation receipt written by
 `commit_local_session` (identified by `hermes_state_local.POLICY_PREFIX`). A receipt must match the exact
 session, principal, route, LOCAL origin and interactive launch policy; it can also prove a reservation row
 whose later placeholder writer stamped `created_source=unknown`. A present malformed or machine receipt
@@ -271,7 +276,8 @@ Health itself writes only that file. So that a problem does not end there, a med
 turned by a kernel tick step (`notifier.health_followup`, reading `health.json`) into one notice for the main session,
 once per incident and withdrawn if it clears before delivery; the weekly digest lists every open item.
 `deliver_stalled` reports notices left unclaimed for three `muse-deliver` periods (its `next_run_at − last_run_at`).
-`main_session` reports a Bot Chat with recent user turns whose caller is not `user` or that yielded no signal, reading those
+`main_session` reports a Bot Chat with recent user turns whose row is not the user's, where a Muse tool call was refused as an
+unrecognized caller, or that yielded no signal, reading those
 turns past the authorization predicate. Probes judge capability and semantics, not version ranges; a missing capability degrades
 only its feature and raises a high item.
 

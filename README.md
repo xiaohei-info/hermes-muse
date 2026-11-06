@@ -68,7 +68,7 @@ Workers write what they find into Muse's ledger (`state-v2.db`); a few readers h
 
 Each job's launcher first runs the kernel and builds a bounded packet; intake, nightly and feed leave the model asleep when their packet is empty, nightly and feed work through their queue in batches and Muse wakes them again until it is done, while patrol wakes every period because only the model can read your sources. Code captures messages, derives every id and key, dedupes notices against 7 days of history, applies quiet hours and budgets, delivers, reads delivery receipts, moves next checks, and asks about and closes dormant goals. The model returns only references, enum values and text. Behavior lives in `prompts/jobs/<job>.md`; fields in the generated [interface](skills/companion/references/interface.md). See the [design](docs/DESIGN.md) and [feature coverage](docs/FEATURE-COVERAGE.md).
 
-Only private conversations on user surfaces (CLI, TUI, desktop, phone and messaging DMs listed in `USER_SOURCES`) are read and can change Muse state. Cron runs, delegated children, group chats and unclassified sources cannot.
+Only private conversations on user surfaces (CLI, TUI, desktop, phone and messaging DMs listed in `USER_SOURCES`) are read and can change Muse state. Cron runs, delegated children, group chats and unclassified sources cannot; a turn Hermes injects into the conversation (job output, a finished background process, a delegation result) may only read.
 
 ## Data sources
 
