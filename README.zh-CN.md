@@ -1,4 +1,4 @@
-# Hermes Muse 0.5.2
+# Hermes Muse 0.5.3
 
 [English](README.md) · [设计文档](docs/DESIGN.md) · [接口](skills/companion/references/interface.md) · [验收清单](docs/ACCEPTANCE.md) · [更新日志](CHANGELOG.md)
 

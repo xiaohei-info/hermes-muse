@@ -1,3 +1,29 @@
+# 0.5.3 — The main conversation is the user's on every client again (2026-11-06)
+
+**Upgrade notes.** No Store schema change, no new cron job, no change to the tool interface. The first load after upgrading
+runs one full install. A turn Hermes injects into a conversation (cron output, a finished background process, a delegation
+result) now only reads Muse; a change it calls for waits for your reply. The caller reads `hermes_cli.plugin_session` and
+`gateway.session_policy.SURFACES`, both in Hermes since 0.22.3: on an older Hermes Muse's tools, hooks and intake fail closed and
+the `symbols` probe names what is missing.
+
+- **`muse_manage` was refused in the main conversation when it was answered through the gateway's LOCAL transport.**
+  Hermes 0.22.6 sends Webapp messages to the gateway, which binds the transport name `local` to the turn. Muse resolved
+  `local` only for sessions stored with a `cli`/`tui`/`gui`/`acp` label, so a Bot Chat kept from an older Desktop
+  (stored as `desktop`) was not recognized as the user, and every `muse_manage` call there, reads included, failed with
+  "Muse is available in private conversations only". Cron output delivered into the Bot Chat over the same transport
+  was refused for the same reason. The caller now takes the turn's client from Hermes (`session_surface()`, which reads
+  the session's launch policy) and the LOCAL label table from Hermes' own `SURFACES`. A transport name is never treated
+  as a client.
+- **Injected turns are told apart by Hermes' own stamp, not by the transport.** The user row Hermes writes for cron
+  output, background-process and delegation results carries a machinery display kind; such a turn is now its own caller
+  kind, `automation`, which may read but not write, on every client. Before, such turns counted as the user on the
+  Desktop and were refused over LOCAL. Intake and Health use the same stamp; rows stored before Hermes stamped them are
+  still recognized by their prefix.
+- **Health `main_session` sees refused tool calls.** It looked only at the session row, so it reported the main session
+  as captured while its tool calls were refused. A Muse tool call in a Bot Chat refused as an unrecognized caller now
+  raises it (high), and that refusal says it could not confirm the turn as the user's own conversation; a group chat
+  gets its own message.
+
 # 0.5.2 — A killed install no longer silences Muse (2026-11-06)
 
 **Upgrade notes.** No Store schema change, no new cron job, no contract change. If `muse/migrating.json` is left over from a
