@@ -82,7 +82,7 @@ Hermes Muse 是一个独立的 Hermes 插件（standalone plugin，MIT）。它�
    - `submit.goals.create` 必须引用 packet 里的用户 signal，每天最多 5 个；
    - patrol 只能按 `RULES.md` 命中的规则答 `dispatch`/`forwarded`（规则目标不占上面的额度，事件线一个目标），并提交分派状态；
    - 对 Goal 只能追加 progress 和 assessment（`done_suggested` 转成问用户，不关闭）。
-4. **`child`（委派子代理）**和 **`automation`（注入用户会话的后台轮次）**只读：即使落在 Bot Chat 里也不是用户，写入等用户自己的轮次。**`group`、`other`** 一律拒绝。
+4. **`child`（委派子代理）**只读。**`automation`（注入用户会话的后台轮次）**即使落在 Bot Chat 里也不是用户：读类动作全部允许；写入只允许助手自己的跟进记账，按 `surface.AUTOMATION`（`MAIN` 旁的按动作授权表）判定：`goal_update`（`status=cancelled` 除外，取消由用户决定）、`assignment_record`、`assignment_update`（`state=running` 除外，它写入的是用户的答复）；其余写入等用户本人的轮次。**`group`、`other`** 一律拒绝。
 5. **内核代码**可以做：
    - 执行 TTL exit、推进 next_check；
    - 发淡出询问，并执行淡出取消；

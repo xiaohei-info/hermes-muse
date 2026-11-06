@@ -89,7 +89,9 @@ written only through `content_io.Files` with a revision CAS under `muse/mutation
 `host.sessions.caller()` returns `user | cron | child | automation | group | other`, judging three host facts on
 their own. Automation: delegated contexts are `child`, cron sessions `cron`, and a turn Hermes injected into a user
 conversation (cron output, a finished background process, a delegation result: its user message carries Hermes'
-machinery display kind) is `automation`, which may only read. Group: the turn's chat type. The user's private
+machinery display kind) is `automation`: it reads, and of the writes may only record the follow-up of a goal and its
+executor (`surface.AUTOMATION`: `goal_update` except cancelling, `assignment_record`, `assignment_update` except resuming
+with the user's answer); everything else waits for the user's own turn. Group: the turn's chat type. The user's private
 conversation: the stored private producer decides; the turn's surface (the host's `platform` argument, else
 `hermes_cli.plugin_session.session_surface()`, which resolves a LOCAL turn to its launch policy's client) can only
 narrow it. Sources outside `USER_SOURCES` (including empty or unclassified ones) are `other`; a refused `other` call says

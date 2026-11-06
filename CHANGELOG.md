@@ -2,9 +2,10 @@
 
 **Upgrade notes.** No Store schema change, no new cron job, no change to the tool interface. The first load after upgrading
 runs one full install. A turn Hermes injects into a conversation (cron output, a finished background process, a delegation
-result) now only reads Muse; a change it calls for waits for your reply. The caller reads `hermes_cli.plugin_session` and
-`gateway.session_policy.SURFACES`, both in Hermes since 0.22.3: on an older Hermes Muse's tools, hooks and intake fail closed and
-the `symbols` probe names what is missing.
+result) may read Muse and record the follow-up of a goal and its executor; it cannot cancel a goal or make any other change,
+which waits for your reply. **Requires Hermes 0.22.3 or later** (`requires_hermes: ">=0.22.3"`, was `>=0.21.5`): the caller
+reads `hermes_cli.plugin_session.session_surface` and `gateway.session_policy.STORED_AS_LOCAL`, both first released in
+Hermes 0.22.3.
 
 - **`muse_manage` was refused in the main conversation when it was answered through the gateway's LOCAL transport.**
   Hermes 0.22.6 sends Webapp messages to the gateway, which binds the transport name `local` to the turn. Muse resolved
@@ -16,7 +17,10 @@ the `symbols` probe names what is missing.
   as a client.
 - **Injected turns are told apart by Hermes' own stamp, not by the transport.** The user row Hermes writes for cron
   output, background-process and delegation results carries a machinery display kind; such a turn is now its own caller
-  kind, `automation`, which may read but not write, on every client. Before, such turns counted as the user on the
+  kind, `automation`, on every client. It may read and record the assistant's own follow-up: `goal_update` (not
+  cancelling), `assignment_record` and `assignment_update` (not resuming with the user's answer), so a goal still closes
+  with evidence when its executor's result comes back. Creating goals, preferences, feedback, forgetting, content files,
+  watches, interests, ideas and Feed changes wait for the user's own turn. Before, such turns counted as the user on the
   Desktop and were refused over LOCAL. Intake and Health use the same stamp; rows stored before Hermes stamped them are
   still recognized by their prefix.
 - **Health `main_session` sees refused tool calls.** It looked only at the session row, so it reported the main session
