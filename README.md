@@ -40,11 +40,11 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 Installation uses the selected profile (`hermes -p <profile> plugins install …`); each enabled profile has its own state, jobs and delivery. If you maintain explicit `platform_toolsets` lists, include `muse` where you use the plugin.
 
-Requires Hermes 0.21.5 or later with the plugin APIs for tools, Skills, prompt sections and hooks; tested on Hermes 0.22.5 ([baseline](docs/ACCEPTANCE.md)). First load registers one Skill, two tools (`muse_manage`, `muse_job`), four hooks and one system prompt section, creates five recurring jobs and the `muse-health` check, and adds missing content files from `templates/` without overwriting anything. Start a new conversation to load the prompt section; background work needs a running scheduler and an available model, at their normal cost.
+Requires Hermes 0.22.3 or later with the plugin APIs for tools, Skills, prompt sections and hooks; tested on Hermes 0.22.5 ([baseline](docs/ACCEPTANCE.md)). First load registers one Skill, two tools (`muse_manage`, `muse_job`), four hooks and one system prompt section, creates five recurring jobs and the `muse-health` check, and adds missing content files from `templates/` without overwriting anything. Start a new conversation to load the prompt section; background work needs a running scheduler and an available model, at their normal cost.
 
 ### Requirements
 
-- Hermes Agent 0.21.5 or later (`requires_hermes: ">=0.21.5"` in `plugin.yaml`). Hermes itself needs Python 3.14.
+- Hermes Agent 0.22.3 or later (`requires_hermes: ">=0.22.3"` in `plugin.yaml`). Hermes itself needs Python 3.14.
 - Tested on Hermes 0.22.5 only: CI pins that release and runs the full acceptance set against it.
 - Linux and macOS. Windows on a local NTFS profile is experimental: CI runs the acceptance set there, but rollback to 0.3.x is POSIX-only ([details](docs/CATALOG-COMPATIBILITY.md)).
 - On another version Muse does not check the version number. Three core capabilities (prompt sections, plugin skills, unload hooks) are hard requirements: without them Muse refuses to load with a clear error. Other capabilities are checked by host probes; a missing one only degrades that feature and shows a high item in Health. After upgrading Hermes, run `tests/native_host_contract.py` ([details](docs/ACCEPTANCE.md)).
@@ -68,7 +68,7 @@ Workers write what they find into Muse's ledger (`state-v2.db`); a few readers h
 
 Each job's launcher first runs the kernel and builds a bounded packet; intake, nightly and feed leave the model asleep when their packet is empty, nightly and feed work through their queue in batches and Muse wakes them again until it is done, while patrol wakes every period because only the model can read your sources. Code captures messages, derives every id and key, dedupes notices against 7 days of history, applies quiet hours and budgets, delivers, reads delivery receipts, moves next checks, and asks about and closes dormant goals. The model returns only references, enum values and text. Behavior lives in `prompts/jobs/<job>.md`; fields in the generated [interface](skills/companion/references/interface.md). See the [design](docs/DESIGN.md) and [feature coverage](docs/FEATURE-COVERAGE.md).
 
-Only private conversations on user surfaces (CLI, TUI, desktop, phone and messaging DMs listed in `USER_SOURCES`) are read and can change Muse state. Cron runs, delegated children, group chats and unclassified sources cannot; a turn Hermes injects into the conversation (job output, a finished background process, a delegation result) may only read.
+Only private conversations on user surfaces (CLI, TUI, desktop, phone and messaging DMs listed in `USER_SOURCES`) are read and can change Muse state. Cron runs, delegated children, group chats and unclassified sources cannot; a turn Hermes injects into the conversation (job output, a finished background process, a delegation result) may read and record the follow-up of a goal and its executor, but not cancel the goal or make any other change.
 
 ## Data sources
 
