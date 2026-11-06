@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 from hermes_muse.host import HostAdapter
 from hermes_muse import surface
 from hermes_muse.kernel import Kernel, intake
+from local_session_acceptance import local_turn
 
 
 def receipt(db, epoch, sid, home, source='cli'):
@@ -36,7 +37,6 @@ def main():
     from hermes_state import SessionDB
     from hermes_state_local import POLICY_PREFIX
     from hermes_state_runtime import begin_runtime_epoch
-    from gateway.session_context import set_session_vars, clear_session_vars
     for key in list(os.environ):
         if key.startswith('HERMES_SESSION_') or key in ('HERMES_CRON_SESSION', 'HERMES_PLATFORM', 'HERMES_DELEGATED_CHILD_CONTEXT'):
             os.environ.pop(key)
@@ -76,8 +76,7 @@ def main():
                            (sid, 'user', 'TEST ONLY ' + sid, i + 1, sid))
         adapter = HostAdapter(home)
         allowed = {'cli', 'tui', 'gui', 'acp', 'continued'}
-        tokens = set_session_vars(platform='local', chat_type='dm')
-        try:
+        with local_turn(home):
             actual = {sid: adapter.caller(session_id=sid) for sid in cases}
             assert actual == {sid: 'user' if sid in allowed else 'other' for sid in cases}, actual
             turns = adapter.sessions.user_turns(0)
@@ -96,8 +95,6 @@ def main():
                 assert result['ok'], result
             for row in turns:
                 assert adapter.sessions.read(row['ref'])['available']
-        finally:
-            clear_session_vars(tokens)
         assert not adapter.faults, list(adapter.faults)
     print('PASS native LOCAL writer receipts, continuations, authority, intake, read, tools and exclusions')
 

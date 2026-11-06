@@ -66,12 +66,15 @@ Hermes Muse 是一个独立的 Hermes 插件（standalone plugin，MIT）。它�
 
 ### 2.2 授权模型（可检验规则）
 
-1. **调用方只有一个分类函数**：`host.sessions.caller()`（经 `HostAdapter.caller(session_id, **host_kwargs)` 调用）返回 `user | cron | child | group | other`。工具和 hooks 都用它，Signal 捕获用同一份 `USER_SOURCES`。判定规则：
-   - 会话行存在时，**存储的 `sessions.source` 决定**；本次调用的 platform 参数和继承来的 session 环境变量只能收紧，不能放宽；
+1. **调用方只有一个分类函数**：`host.sessions.caller()`（经 `HostAdapter.caller(session_id, **host_kwargs)` 调用）返回 `user | cron | child | automation | group | other`。工具和 hooks 都用它，Signal 捕获用同一份 `USER_SOURCES`。三类事实都取宿主给出的语义，各自独立判定：
+   - **自动化**：显式委派调用上下文是 `child`；cron 会话是 `cron`；宿主注入用户会话的轮次（cron 输出、后台进程完成、委派结果）是 `automation`，依据是该轮用户消息上宿主盖的 machinery `display_kind`（`gateway.response_filters.is_machinery_display_kind`；宿主盖章之前存下的行看生产者前缀 `sessions.BACKGROUND`，`sessions.machinery`）。LLM hook 取宿主传入的 `conversation_history` 里本轮的用户消息，工具调用读该会话最新的用户行（Hermes 在本轮第一次模型调用前落库）；
+   - **群聊**：本轮的 chat type 是群聊即 `group`；
+   - **用户本人的私聊**：会话行存在时，**存储的私聊生产者（`user_source_of`）决定**；本轮的界面（宿主 `platform` kwarg，否则 `hermes_cli.plugin_session.session_surface()`：LOCAL 轮次取启动策略的客户端，聊天取平台；进程内 TUI 只绑定 session source）只能收紧，不能放宽。传输名 `local` 不是界面，不参与授权；LOCAL 的标签与客户端对照取宿主的 `gateway.session_policy.SURFACES`/`STORED_AS_LOCAL`（`sessions.local_surfaces`）；
    - 没有会话行时，只认宿主本次调用传入的 `platform` kwarg，单独的环境变量不算证据；
    - 不在 `USER_SOURCES` 里（含空值、未分类值）一律是 `other`；群聊是 `group`；显式委派调用上下文是 `child`，存储的父会话不改变压缩或 `/branch` 用户会话的授权。
    - 隐藏会话是 `other`，只有 Hermes 的规范 Bot Chat 例外（`sessions.BOT_CHAT`：生来隐藏，靠确切标题识别，它就是主会话）；
    - 只有 `user` 构成授权，也只有 `user` 的轮次会收到注入。CLI/TUI 靠存储的 `sessions.source`（`cli`、`tui`）识别。
+   - 拒绝 `other` 时报错为 `sessions.UNRECOGNIZED`，Health 的 `main_session` 在主会话的工具结果里找它。
 2. **`user`（私聊主会话）**：可以使用 `muse_manage` 的全部 16 个动作。Goal 的状态和设置只能在这里修改；例外只有规则建的目标（`goals.create(by="rule")`）：用户写的规则构成授权，分派 `done` 带证据后由代码置 `done`。`status=done` 必须带 `evidence`（链接、提交、文件路径或一句可核对的观测），由代码校验。
 3. **`cron`（job run）** 只能做这些：
    - `muse_job` 的 read/observe/submit，ref 必须属于本 run 拿到的 packet（`packets.packet_of` 校验，packet ID 不可猜）；
@@ -79,7 +82,7 @@ Hermes Muse 是一个独立的 Hermes 插件（standalone plugin，MIT）。它�
    - `submit.goals.create` 必须引用 packet 里的用户 signal，每天最多 5 个；
    - patrol 只能按 `RULES.md` 命中的规则答 `dispatch`/`forwarded`（规则目标不占上面的额度，事件线一个目标），并提交分派状态；
    - 对 Goal 只能追加 progress 和 assessment（`done_suggested` 转成问用户，不关闭）。
-4. **`child`（委派子代理）**只读。**`group`、`other`** 一律拒绝。
+4. **`child`（委派子代理）**只读。**`automation`（注入用户会话的后台轮次）**即使落在 Bot Chat 里也不是用户：读类动作全部允许；写入只允许助手自己的跟进记账，按 `surface.AUTOMATION`（`MAIN` 旁的按动作授权表）判定：`goal_update`（`status=cancelled` 除外，取消由用户决定）、`assignment_record`、`assignment_update`（`state=running` 除外，它写入的是用户的答复）；其余写入等用户本人的轮次。**`group`、`other`** 一律拒绝。
 5. **内核代码**可以做：
    - 执行 TTL exit、推进 next_check；
    - 发淡出询问，并执行淡出取消；
@@ -160,7 +163,7 @@ owned job 由 `install.JOBS` 定义，cron key 沿用 0.3.x 的名字，这样 j
    - 询问被撤回、过期、失败、closed_unknown 或 superseded 时，attempt+1 重问，最多 3 次；3 次都失败时写 `fade_blocked`，由 Health 报告；
    - 询问确实送达（notice `sent`）后，按 `dispatched_at + goal_fade_days` 算出 `fade_at` 写进 goal payload；到期仍无活动时由代码取消目标；`goal_update(status=active)` 可复活；
    - waiting 的目标同样淡出。扣住目标的只有：未来的 Goal `deadline` 字段、活跃 watch、活跃分派（`waiting` 3 天转 `stalled` 后不再扣住）、运行中的原生 owner、`no_fade`；模型不能撤回或 supersede 淡出询问。
-7. **Health**：`health_entry.py` 调 `health.run()`，写出 `muse/health.json`（`model_input`/`tool_errors` 只统计 Muse 自己的工具 `muse_manage`、`muse_job` 的结果；`plugin_load` 报告运行 job 的 Hermes 进程放弃了 Muse 的加载；`main_session` 绕过授权谓词读 Bot Chat 的用户轮次（`sessions.main_sessions`），近 6 小时有轮次而调用方不是 `user`，或超过 1 小时的轮次一条 signal 都没捕获时报 high）。告警有 4 个出口，**都不经过 Notifier**（内核坏了也能被发现）：
+7. **Health**：`health_entry.py` 调 `health.run()`，写出 `muse/health.json`（`model_input`/`tool_errors` 只统计 Muse 自己的工具 `muse_manage`、`muse_job` 的结果；`plugin_load` 报告运行 job 的 Hermes 进程放弃了 Muse 的加载；`main_session` 绕过授权谓词读 Bot Chat 的用户轮次（`sessions.main_sessions`），近 6 小时有轮次而会话行不是用户的、窗口内有 Muse 工具调用以 `UNRECOGNIZED` 被拒，或超过 1 小时的轮次一条 signal 都没捕获时报 high）。告警有 4 个出口，**都不经过 Notifier**（内核坏了也能被发现）：
    - 主会话注入；
    - Dashboard 的 `/health`；
    - cron stdout，只在告警集合变化时输出；
@@ -243,7 +246,7 @@ Hermes 宿主
 - `sessions`：
   - `user_turns(since, roles, limit)`：按来源白名单、私聊、脱敏、摘录返回会话轮次；
   - `read(ref, offset, length)`：单次 ≤12k，已脱敏；
-  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；LOCAL/Photon 规则见 DESIGN 的 Authorization）、`main_sessions(since)`（只供 Health）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
+  - `source_of(session_id)`（原始来源）、`user_source_of(session_id)`（私聊生产者；LOCAL/Photon 规则见 DESIGN 的 Authorization）、`main_sessions(since)`（只供 Health）、`latest_turn(session_id)`（调用方判定本轮是否宿主注入）、`job_of`、`cron_sessions`、`tool_results`、`sources`、`bot_chats`、`schema_gaps`。
 - `cron`：
   - `ensure(key, …)` 创建或刷新自有 job `muse-<key>`（launcher 为 `scripts/hermes-muse-<key>.py`）；
   - `job(key)` 按 cron key 找自有 job；`pause`、`wake`、`jobs`、`owned_jobs`、`executions`；
@@ -289,7 +292,7 @@ Hermes 宿主
 | profile home | 当前 Hermes profile 的绝对目录。每次调用都显式传入，不依赖进程默认值 | `host.resolve_home`、`Kernel.home` |
 | HostAdapter / probe / host fault / host_error | 出站唯一适配层 / 对宿主能力和语义的自检 / 一次被容错吞掉的宿主调用失败 / 读失败时返回的状态值，区别于“宿主说没有” | `host/`、`PROBES`、`@tolerant`、`HOST_ERROR` |
 | 入站入口 | 接收宿主插件 API 调用的文件 | 第 3.1 节 |
-| caller kind | 调用方分类：`user|cron|child|group|other`，只有 `user` 构成授权 | `host.sessions.caller`、`HostAdapter.caller` |
+| caller kind | 调用方分类：`user|cron|child|automation|group|other`，只有 `user` 构成授权；`automation` 是宿主注入用户会话的后台轮次 | `host.sessions.caller`、`HostAdapter.caller` |
 | Kernel / tick | 确定性内核门面 / 幂等、按依赖顺序执行所有到期处理 | `Kernel`、`Kernel.tick`、`Store.tick` |
 | Store v2 / entity / kind / event | 存储 / 一条状态记录 / 记录的类型（第 2.1 节的 14 种）/ 一次状态迁移的日志 | `kernel/store/`、`MACHINES` |
 | natural_key | 由代码派生的业务身份键。默认在同一 kind 内永久唯一 | `kernel/store/keys.py` |

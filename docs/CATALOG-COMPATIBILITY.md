@@ -2,8 +2,8 @@
 
 ## Compatibility
 
-- **Hermes.** Needs the plugin APIs for tools, Skills, system prompt sections, hooks and unload (Hermes 0.21.5 or
-  later); tested against `v0.22.5`. Host behavior Muse depends on (cron session identity, delivery semantics and
+- **Hermes.** Needs the plugin APIs for tools, Skills, system prompt sections, hooks and unload, and the turn's
+  client and LOCAL launch policy (Hermes 0.22.3 or later); tested against `v0.22.5`. Host behavior Muse depends on (cron session identity, delivery semantics and
   target, signal sources, config location, profile home) is checked by 7 probes in `muse/health.json` instead of a
   version range; a missing capability turns off only its feature and shows as a high health item.
 - **Upgrade.** 0.3.1 and 0.3.16 databases migrate in place on first load. Job ids, user schedules, routes and pauses

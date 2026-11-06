@@ -1,4 +1,4 @@
-# Hermes Muse 0.5.2
+# Hermes Muse 0.5.3
 
 [English](README.md) · [设计文档](docs/DESIGN.md) · [接口](skills/companion/references/interface.md) · [验收清单](docs/ACCEPTANCE.md) · [更新日志](CHANGELOG.md)
 
@@ -40,11 +40,11 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 安装作用于所选 profile（`hermes -p <profile> plugins install …`），每个启用的 profile 有独立的状态、job 和投递。如果你维护了显式的 `platform_toolsets` 列表，请在使用的平台里加上 `muse`。
 
-需要 Hermes 0.21.5 及以上，并具备工具、Skill、提示词段和 hooks 的插件接口；已在 Hermes 0.22.5 上测试（[基线](docs/ACCEPTANCE.md)）。首次加载注册 1 个 Skill、2 个工具（`muse_manage`、`muse_job`）、4 个 hooks 和 1 段系统提示词，创建 5 个周期 job 和 `muse-health` 检查，并从 `templates/` 补齐缺失的内容文件，不覆盖已有文件。新开会话后提示词段生效；后台工作需要运行中的调度器和可用模型，按正常用量计费。
+需要 Hermes 0.22.3 及以上，并具备工具、Skill、提示词段和 hooks 的插件接口；已在 Hermes 0.22.5 上测试（[基线](docs/ACCEPTANCE.md)）。首次加载注册 1 个 Skill、2 个工具（`muse_manage`、`muse_job`）、4 个 hooks 和 1 段系统提示词，创建 5 个周期 job 和 `muse-health` 检查，并从 `templates/` 补齐缺失的内容文件，不覆盖已有文件。新开会话后提示词段生效；后台工作需要运行中的调度器和可用模型，按正常用量计费。
 
 ### 版本要求
 
-- Hermes Agent 0.21.5 及以上（`plugin.yaml` 中 `requires_hermes: ">=0.21.5"`）。Hermes 本身需要 Python 3.14。
+- Hermes Agent 0.22.3 及以上（`plugin.yaml` 中 `requires_hermes: ">=0.22.3"`）。Hermes 本身需要 Python 3.14。
 - 仅在 Hermes 0.22.5 上测试过：CI 固定该版本并跑完整验收。
 - 支持 Linux 和 macOS。本地 NTFS profile 上的 Windows 属实验性：CI 在其上跑验收，但回滚到 0.3.x 只支持 POSIX（[详情](docs/CATALOG-COMPATIBILITY.md)）。
 - 其他版本不按版本号判断。三项核心能力（prompt section、插件 skill、卸载钩子）是硬性要求，缺失时 Muse 拒绝加载并给出明确错误；其他能力由宿主探测检查，缺失只降级对应功能，并在 Health 显示一条 high 项。升级 Hermes 后请运行 `tests/native_host_contract.py`（[详情](docs/ACCEPTANCE.md)）。
@@ -68,7 +68,7 @@ hermes plugins install xiaohei-info/hermes-muse --enable
 
 每个 job 的 launcher 先运行内核、组装有界 packet；intake、nightly 和 feed 的 packet 为空时不唤醒模型；nightly 和 feed 分批处理队列，Muse 会接着唤醒它们直到处理完；patrol 每轮都唤醒，因为只有模型能读你的来源。代码负责捕获消息、派生所有 ID 和键、对 7 天历史去重、执行静默时段和预算、投递、读投递回执、推进下次检查、询问并关闭休眠目标。模型只返回引用、枚举值和文本。行为写在 `prompts/jobs/<job>.md`，字段见生成的[接口](skills/companion/references/interface.md)。详见[设计文档](docs/DESIGN.md)和[功能覆盖](docs/FEATURE-COVERAGE.zh-CN.md)。
 
-只有用户界面上的私聊（CLI、TUI、桌面、手机和 `USER_SOURCES` 列出的消息平台私信）会被读取，也只有它们能修改 Muse 状态。cron run、委派子代理、群聊和未分类来源都不能。
+只有用户界面上的私聊（CLI、TUI、桌面、手机和 `USER_SOURCES` 列出的消息平台私信）会被读取，也只有它们能修改 Muse 状态。cron run、委派子代理、群聊和未分类来源都不能；Hermes 注入对话的轮次（job 输出、后台进程完成、委派结果）可以读，并记录目标与执行者的跟进，但不能取消目标，也不能做其他修改。
 
 ## 数据源
 

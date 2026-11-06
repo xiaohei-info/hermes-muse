@@ -21,7 +21,7 @@ REQUIRED = ("register_tool", "register_skill", "register_system_prompt_section",
 
 def register(ctx, *, plugin_root):
     if any(not callable(getattr(ctx, name, None)) for name in REQUIRED):
-        raise RuntimeError("Hermes Muse needs Hermes 0.21.5+ with prompt sections, plugin skills and unload hooks")
+        raise RuntimeError("Hermes Muse needs Hermes 0.22.3+ with prompt sections, plugin skills and unload hooks")
     root = Path(plugin_root).resolve()
     adapter = HostAdapter()
     kernel = Kernel(adapter.home, adapter=adapter)

@@ -300,21 +300,22 @@ def tools(results):
 
 
 def main_session(store, chats, now):
-    """The main session (Bot Chat) has recent user turns, yet its caller is not `user` or intake captured none of them.
-    Nothing else sees what never became a signal. A turn under an hour old may just be waiting for a tick; turns before a
+    """The main session (Bot Chat) has recent user turns, yet its row is not the user's, a Muse tool call there was refused
+    as an unrecognized caller, or intake captured none of them. Nothing else sees what never became a signal. A turn under an hour old may just be waiting for a tick; turns before a
     migration are never captured. shortcut: forgetting every signal of the window also raises this until the window
     passes, acceptable for a rare user action."""
     since = max(now - MAIN_WINDOW, (store.meta("migration") or {}).get("at", 0)) if store else now
     captured = {s["payload"].get("session_id") for s in store.query("signal", since=since)
                 if (s["payload"].get("created") or 0) >= since} if store else set()
-    refused = [c["id"] for c in chats if c["source"] == "other"]
+    refused = [c["id"] for c in chats if c["source"] == "other" or c["refused"]]
     missed = [c["id"] for c in chats if c["id"] not in captured and any(since <= t < now - H for t in c["turns"])]
     lost = sorted({*refused, *missed})
     return item("main_session", "high" if lost else "ok", len(lost), 0,
                 f"{len(refused)} main sessions not recognized as the user, {len(missed)} with user turns and no signal in "
                 f"{MAIN_WINDOW / H:.0f}h" if lost else f"{len(chats)} main sessions with recent user turns, all captured",
                 lost, "Muse tools, injections and intake do not reach the main session: check host.sessions.private_user "
-                "against its row and the tick's errors, then run tests/native_host_contract.py")
+                "against its row, host.sessions.caller against the turn's surface (plugin_session.session_surface) and "
+                "the tick's errors, then run tests/native_host_contract.py")
 
 
 def memory(stores):
