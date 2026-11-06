@@ -117,6 +117,14 @@ MAIN = {  # action: (kind, summary, data schema)
     "installation_prepare": ("read", "Read-only plan for disabling or removing Muse: owned jobs and the confirmed steps.",
                              obj(["operation"], operation=enum("disable", "remove"))),
 }
+# The writes a turn Hermes injected (caller `automation`: a finished background process, a delegation result) may make: the
+# assistant's own follow-up of a goal and its executor. Each predicate refuses the part only the user decides. Reads are
+# always allowed; every other write waits for the user's own turn (goals are accepted, set and forgotten by the user).
+AUTOMATION = {
+    "goal_update": lambda d: d.get("status") != "cancelled",      # cancelling is the user's decision
+    "assignment_record": lambda d: True,
+    "assignment_update": lambda d: d.get("state") != "running",   # running resumes it with the user's answer
+}
 JOB_ACTIONS = {
     "read": ("read", "Original text of a packet item beyond its excerpt (12k per call, 24k per item).",
              obj(["packet_id", "ref"], packet_id=ID, ref=text(200), offset=count(0, 10 ** 7))),
@@ -298,9 +306,9 @@ class Surface:
             if MAIN[action][0] != "read":
                 raise PermissionError("a delegated task may only read; changes belong to the parent conversation")
         elif kind == "automation":
-            if MAIN[action][0] != "read":
-                raise PermissionError("this turn answers a job, background process or delegation result, not the user; "
-                                      "it may only read, changes wait for the user's own turn")
+            if MAIN[action][0] != "read" and not AUTOMATION.get(action, lambda d: False)(data):
+                raise PermissionError(f"this turn answers a job, background process or delegation result, not the user: "
+                                      f"{action} with these arguments waits for the user's own turn")
         elif kind == "cron" and action not in ("read", "calendar_view") and not (
                 action == "content_write" and data.get("kind") in CRON_CONTENT):
             raise PermissionError("a job run may write only notes, dreams and alignment; it submits results through muse_job")
