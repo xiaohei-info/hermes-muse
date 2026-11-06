@@ -256,13 +256,22 @@ def main():
         lost = main_item()
         intake.capture(Kernel(chat, adapter=adapter), at)
         found = main_item()
+        # A Muse tool call there refused as an unrecognized caller, as the tool handler stores it
+        from hermes_muse.surface import Surface
+        result = Surface(Kernel(chat, adapter=adapter)).handle("muse_manage", {"action": "read", "data": {"kind": "goal"}},
+                                                                {"kind": "other", "session_id": "main"})
+        with closing(sqlite3.connect(chat / "state.db")) as db, db:
+            db.execute("INSERT INTO messages (session_id, role, content, tool_name, timestamp) VALUES ('main','tool',?,'muse_manage',?)",
+                       (json.dumps(result, ensure_ascii=False), at - 60))
+        denied = main_item()
         with closing(sqlite3.connect(chat / "state.db")) as db, db:
             db.execute("UPDATE sessions SET chat_type='group'")
         refused = main_item()
-        check("main_session: turns with no signal or a refused caller are high; deliveries and fresh turns are not",
-              [f["level"] for f in (quiet, lost, found, refused)] == ["ok", "high", "ok", "high"]
-              and lost["evidence"] == ["main"] and "1 main sessions not recognized" in refused["detail"],
-              {"lost": lost["detail"], "refused": refused["detail"]})
+        check("main_session: turns with no signal, a refused row or a refused tool call are high; deliveries and fresh turns are not",
+              [f["level"] for f in (quiet, lost, found, denied, refused)] == ["ok", "high", "ok", "high", "high"]
+              and lost["evidence"] == ["main"] and "1 main sessions not recognized" in denied["detail"]
+              and "1 main sessions not recognized" in refused["detail"],
+              {"lost": lost["detail"], "denied": denied["detail"], "refused": refused["detail"]})
 
         # -- an old 0.3.16 store, migrated, reproduces its stuck watermark and duplicate sends -----
         from store_v2_acceptance import NOW, sample

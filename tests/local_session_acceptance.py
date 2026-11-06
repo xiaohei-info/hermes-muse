@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
-from contextlib import closing
+from contextlib import closing, contextmanager
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -13,6 +13,21 @@ from hermes_muse.host import HostAdapter
 from hermes_muse.host.sessions import classify
 from hermes_muse.kernel import Kernel
 from hermes_muse import surface
+
+
+@contextmanager
+def local_turn(home, label='gui'):
+    """A gateway LOCAL turn (Webapp, attached clients): the transport binds `local`, the turn runs in its launch policy."""
+    from gateway.session_context import set_session_vars, clear_session_vars
+    from gateway.session_policy import build_policy, policy_scope
+    policy = build_policy({'source': label, 'cwd': str(home), 'model': 'synthetic', 'toolsets': []},
+                          {'platform_toolsets': {'cli': [], 'acp': []}}, private_secrets={})
+    tokens = set_session_vars(platform='local', chat_type='dm')
+    try:
+        with policy_scope(policy):
+            yield
+    finally:
+        clear_session_vars(tokens)
 
 
 def main():
@@ -53,12 +68,10 @@ def main():
         counts = adapter.sessions.sources(-1)
         assert all(counts[s] >= 1 for s in ('cli', 'tui', 'gui', 'acp', 'photon')), counts
         assert counts['local'] >= 1, counts  # unresolved transports still surface in Health
-        tokens = set_session_vars(platform='local', chat_type='dm')
-        try:
-            actual = {sid: adapter.caller(session_id=sid) for sid, *_ in cases}
-            expected = {sid: 'user' if sid in ('cli','tui','gui','acp','photon','reserved') else 'other' for sid, *_ in cases}
-            # Photon transport is not LOCAL, so test it in its own native binding below.
-            expected['photon'] = 'other'
+        with local_turn(home):
+            # Photon is not a LOCAL session; it has its own binding below.
+            actual = {sid: adapter.caller(session_id=sid) for sid, *_ in cases if sid != 'photon'}
+            expected = {sid: 'user' if sid in ('cli','tui','gui','acp','reserved') else 'other' for sid, *_ in cases if sid != 'photon'}
             assert actual == expected, actual
             turns = adapter.sessions.user_turns(0)
             assert {r['session_id'] for r in turns} == {'cli','tui','gui','acp','photon','reserved'}, turns
@@ -80,6 +93,9 @@ def main():
             surface.register(SimpleNamespace(register_tool=lambda **kw: registered.append(kw)), Kernel(home, adapter=adapter))
             result = json.loads(registered[0]['handler']({'action':'read','data':{'kind':'goal'}}, session_id='cli'))
             assert result['ok'], result
+        tokens = set_session_vars(platform='photon', chat_type='dm')
+        try:
+            assert adapter.caller(session_id='photon') == 'user'
         finally:
             clear_session_vars(tokens)
         tokens = set_session_vars(platform='cli', chat_type='dm')
@@ -123,6 +139,45 @@ def main():
         with closing(sqlite3.connect(home / 'state.db')) as db, db:
             for sid in continued:
                 db.execute('DELETE FROM sessions WHERE id=?', (sid,))
+        # A legacy Desktop Bot Chat row keeps its stored `desktop` label. Answered over gateway LOCAL (the Webapp) or the
+        # TUI binding it is the user's; a turn Hermes injected there (cron output, a finished process) is automation,
+        # which reads but never writes.
+        with closing(sqlite3.connect(home / 'state.db')) as db, db:
+            db.execute("INSERT INTO sessions(id,source,created_source,chat_type,title,hidden,started_at) "
+                       "VALUES('bot','desktop','desktop','dm','Bot Chat',1,0)")
+            db.execute("INSERT INTO messages(session_id,role,content,timestamp,message_uid) VALUES('bot','user','TEST ONLY hi',300,'bot-0')")
+
+        def tool(action, data):
+            return json.loads(registered[0]['handler']({'action': action, 'data': data}, session_id='bot'))
+
+        def desktop_turns():
+            """(Webapp kind, read, write), TUI kind"""
+            with local_turn(home):
+                webapp = adapter.caller(session_id='bot'), tool('read', {'kind': 'goal'}), tool('idea_add', {'title': 'TEST ONLY'})
+            tokens = set_session_vars(source='desktop')
+            try:
+                return webapp, adapter.caller(session_id='bot')
+            finally:
+                clear_session_vars(tokens)
+        (kind, read, write), tui = desktop_turns()
+        assert kind == tui == 'user' and read['ok'] and write['ok'], (kind, tui, read, write)
+        for i, (display_kind, text) in enumerate([
+                ('internal_notification', '[Cronjob "test" output — scheduled job, not the user.] hi'),
+                ('process_complete', 'TEST ONLY process finished'),
+                (None, '[IMPORTANT: Background process finished]')]):  # stored before Hermes stamped it
+            with closing(sqlite3.connect(home / 'state.db')) as db, db:
+                db.execute('INSERT INTO messages(session_id,role,content,timestamp,message_uid,display_kind) VALUES(?,?,?,?,?,?)',
+                           ('bot', 'user', text, 301 + i, f'bot-{i + 1}', display_kind))
+            (kind, read, write), tui = desktop_turns()
+            assert kind == tui == 'automation' and read['ok'] and write['code'] == 'permission_denied', (kind, tui, read, write)
+        # An LLM hook gets the turn's own message before Hermes persists its row.
+        with local_turn(home):
+            assert adapter.caller(session_id='bot', platform='desktop', conversation_history=[
+                {'role': 'user', 'content': 'TEST ONLY hi'}]) == 'user'
+            assert adapter.caller(session_id='bot', platform='desktop', conversation_history=[
+                {'role': 'user', 'content': 'TEST ONLY', 'display_kind': 'internal_notification'}]) == 'automation'
+        with closing(sqlite3.connect(home / 'state.db')) as db, db:
+            db.execute("DELETE FROM sessions WHERE id='bot'")
         # Old native schemas retain their existing source policy, never infer LOCAL provenance.
         with closing(sqlite3.connect(home / 'state.db')) as db, db:
             for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions' AND sql LIKE '%created_source%'").fetchall():
