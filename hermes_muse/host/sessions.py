@@ -16,9 +16,6 @@ USER_SOURCES = frozenset({
     "telegram", "discord", "whatsapp", "whatsapp_cloud", "slack", "signal", "mattermost", "matrix",
     "email", "sms", "dingtalk", "feishu", "wecom", "weixin", "bluebubbles", "qqbot", "yuanbao",
 })
-# gateway.session_a2a.storage_source maps only these creation labels to LOCAL.
-# `local` is a transport, never producer authority on its own.
-LOCAL_SURFACES = ("cli", "tui", "gui", "acp")
 MACHINE_SOURCES = frozenset({
     "cron", "oneshot", "kanban", "subagent", "delegate", "tool", "batch", "api", "api_server",
     "webhook", "msgraph_webhook", "wecom_callback", "relay", "bot_room", "bot_peer_dm",
@@ -27,8 +24,10 @@ GROUP_CHATS = ("group", "supergroup", "channel", "guild", "room")
 # Hermes' canonical main conversation: this exact title is its identity, and it is born hidden from the sidebar.
 BOT_CHAT = "Bot Chat"
 HIDDEN_KINDS = ("hidden", "process_complete", "async_delegation_complete")
-# Cron/Muse/delegation results arrive as user-role turns in a user session; they are not the user.
+# Producer prefixes of injected user-role turns that Hermes stored before it stamped them with a machinery display kind.
 BACKGROUND = ('[Cronjob "', "[ASYNC DELEGATION ", "[IMPORTANT:", "[Hermes Muse ")
+# A refused `other` caller; Health's main_session finds it among the main session's tool results.
+UNRECOGNIZED = "Muse could not confirm this turn as the user's own private conversation"
 LIVE_TURN = (f"COALESCE(m.display_kind,'') NOT IN ({','.join('?' * len(HIDDEN_KINDS))}) "
              "AND (m.active = 1 OR m.compacted = 1) AND m.content IS NOT NULL AND m.content != ''")
 COLUMNS = {
@@ -58,37 +57,70 @@ def classify(source):
     return "user" if source in USER_SOURCES else "machine" if source in MACHINE_SOURCES else "unclassified"
 
 
-def caller(platform="", task_id="", parent_session_id="", stored_source=None, stored_transport=None, **_):
-    """Who runs the current hook or tool call: user | cron | child | group | other.
+def surface():
+    """The client or platform Hermes names for the running turn: `session_surface()` resolves a LOCAL turn to its
+    launch policy's client (cli/tui/desktop/acp; cron for a scheduled run) and a chat turn to its platform. The
+    in-process TUI binds no platform, only the session source."""
+    from gateway.session_context import get_session_env
+    from hermes_cli.plugin_session import session_surface
+    return session_surface() or get_session_env("HERMES_SESSION_SOURCE", "")
 
-    Only `user` (a private turn on a user-surface platform) carries authority or gets injections.
-    `stored_source()` is the resolved private producer source, Hermes' final classification of the session
-    (e.g. `oneshot` for `hermes -q` although the env says cli): when the row exists it decides; the call's
-    platform or the session env (which a child process may simply inherit) can only narrow it, never widen it.
-    Without a row only the host's own `platform` kwarg of this call counts (hooks get it; tool calls never
-    run before Hermes writes the row); an env value alone is not evidence. Otherwise: missing, refused.
+
+def local_surfaces():
+    """Hermes' LOCAL creation labels (those a peer refresh stores as `local`) and the client each one is."""
+    from gateway.session_policy import STORED_AS_LOCAL, SURFACES
+    return {label: SURFACES[label] for label in sorted(STORED_AS_LOCAL)}
+
+
+def machinery(display_kind, content) -> bool:
+    """A user-role turn Hermes injected (cron output, a finished background process, a delegation result), not words
+    the user wrote: Hermes stamps its row with a machinery display kind; rows from before that stamp keep the
+    producer's prefix."""
+    from gateway.response_filters import is_machinery_display_kind
+    return is_machinery_display_kind(display_kind) or (
+        not display_kind and str(content or "").lstrip().startswith(BACKGROUND))
+
+
+def turn_message(history):
+    """The running turn's user message as Hermes hands it to an LLM hook (the last user entry), else None."""
+    return next((m for m in reversed(history or ()) if isinstance(m, dict) and m.get("role") == "user"), None)
+
+
+def caller(platform="", task_id="", parent_session_id="", conversation_history=None,
+           stored_source=None, stored_transport=None, latest_turn=None, **_):
+    """Who runs the current hook or tool call: user | cron | child | automation | group | other.
+
+    Each fact comes from the host and is judged on its own:
+    - automation: a delegated child (`child`), a cron run (`cron`), or a turn Hermes injected into a user conversation
+      (`automation`: its user message carries a machinery display kind, see `machinery`). The turn's message is the
+      one an LLM hook receives in `conversation_history`; a tool call reads the session's latest user row
+      (`latest_turn()`), which Hermes persists before the turn's first model call;
+    - group: the turn's chat type;
+    - the user's private conversation: `stored_source()`, the resolved private producer and Hermes' final
+      classification of the row (e.g. `oneshot` for `hermes -q` although the env says cli), and the turn's surface
+      (the host's `platform` kwarg, else `surface()`) must both be user surfaces. The row decides; the surface, which a
+      child process may simply inherit, can only narrow it. A transport name such as `local` is never a surface.
+    Without a row only the host's own `platform` kwarg of this call counts (hooks get it; tool calls never run before
+    Hermes writes the row); an env value alone is not evidence. Otherwise: missing, refused.
+    Only `user` carries authority or gets injections.
     """
     from agent.delegation_context import is_delegated_child_context
     from gateway.session_context import get_session_env
     if parent_session_id or is_delegated_child_context():
         return "child"
     stored = str((stored_source() if stored_source else "") or "").lower()
-    # The gateway binds the session platform, CLI/TUI/desktop bind the session source.
-    named = str(platform or get_session_env("HERMES_SESSION_PLATFORM", "")
-                or get_session_env("HERMES_SESSION_SOURCE", "")).lower()
+    named = str(platform or surface()).lower()
     transport = str((stored_transport() if stored_transport else "") or "").lower()
     if (get_session_env("HERMES_CRON_SESSION", "") == "1" or "cron" in (named, stored, transport)
             or str(task_id or "").startswith("cron:")):
         return "cron"
     if get_session_env("HERMES_SESSION_CHAT_TYPE", "").lower() in GROUP_CHATS:
         return "group"
-    if not stored:
-        return "user" if classify(platform) == "user" else "other"
-    # LOCAL also binds the initially reserved cli/tui/gui/acp row before peer refresh.
-    # In both states authority comes from the private stored producer, not the transport.
-    if named == "local" and stored in LOCAL_SURFACES and transport in ("local", stored):
-        named = stored
-    return "user" if classify(stored) == "user" and classify(named or stored) == "user" else "other"
+    if not (classify(stored) == "user" and classify(named or stored) == "user"
+            or not stored and classify(platform) == "user"):
+        return "other"
+    message = turn_message(conversation_history) or (latest_turn() if stored and latest_turn else None)
+    return "automation" if message and machinery(message.get("display_kind"), message.get("content")) else "user"
 
 
 def run_of(task_id, job_id) -> bool:
@@ -178,8 +210,9 @@ PRIVATE_USER = (f"s.source IN ({','.join('?' * len(USER_SOURCES))}) "
 PRIVATE_USER_ARGS = (*sorted(USER_SOURCES), *GROUP_CHATS)
 
 
-def local_surface(raw, session_id, route, chat_id, user_id):
+def local_surface(raw, session_id, route, chat_id, user_id, surfaces):
     """Project only a matching native immutable creation receipt, never its config/prompt.
+    `surfaces` is `local_surfaces()`.
 
     commit_local_session reserves sessions.source without created_source. A later
     placeholder writer can stamp `unknown`; the native receipt still proves who
@@ -193,7 +226,7 @@ def local_surface(raw, session_id, route, chat_id, user_id):
         policy, entry = receipt["policy"], receipt["entry"]
         origin = entry["origin"]
         source = policy["source"]
-        platform = {"cli": "cli", "tui": "tui", "gui": "desktop", "acp": "acp"}.get(source)
+        platform = surfaces.get(source)
         if (not platform or not route or not user_id or chat_id != session_id
                 or receipt["session_id"] != session_id or receipt["route"] != route
                 or receipt["principal_id"] != user_id
@@ -218,11 +251,12 @@ def private_user(db):
     """
     columns = {r[1] for r in db.execute("PRAGMA table_info(sessions)")}
     source, guards, native = "s.source", [], "''"
-    labels = ",".join(f"'{s}'" for s in LOCAL_SURFACES)
+    surfaces = local_surfaces()
+    labels = ",".join(f"'{s}'" for s in surfaces)
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "state_meta" in tables and {"session_key", "chat_id", "user_id"} <= columns:
         from hermes_state_local import POLICY_PREFIX
-        db.create_function("muse_local_surface", 5, local_surface, deterministic=True)
+        db.create_function("muse_local_surface", 5, lambda *row: local_surface(*row, surfaces=surfaces), deterministic=True)
         native = ("(SELECT muse_local_surface(value,s.id,s.session_key,s.chat_id,s.user_id) "
                   f"FROM state_meta WHERE key = '{POLICY_PREFIX}' || s.id)")
     if "created_source" in columns:
@@ -246,7 +280,8 @@ def private_user(db):
 def turns_query(db, since, roles, limit):
     """(sql, args) of `user_turns`; the native contract asserts its query plan."""
     source, private, args = private_user(db)
-    return (f"SELECT m.id, m.session_id, m.role, m.content, m.timestamp, m.tool_name, m.message_uid, ({source}) AS source "
+    return (f"SELECT m.id, m.session_id, m.role, m.content, m.timestamp, m.tool_name, m.message_uid, m.display_kind, "
+            f"({source}) AS source "
             "FROM messages m JOIN sessions s ON s.id = m.session_id "
             f"WHERE m.timestamp > ? AND m.role IN ({','.join('?' * len(roles))}) AND {private} AND {LIVE_TURN} "
             "ORDER BY m.timestamp, m.id LIMIT ?",
@@ -274,7 +309,7 @@ class Sessions(Part):
                 text = as_text(row["content"])
                 if row["message_uid"] in seen or text.strip() == "[SILENT]":
                     continue  # compression copies share the original's uid
-                if row["role"] == "user" and text.lstrip().startswith(BACKGROUND):
+                if row["role"] == "user" and machinery(row["display_kind"], text):
                     continue
                 if row["message_uid"]:
                     seen.add(row["message_uid"])
@@ -330,6 +365,16 @@ class Sessions(Part):
             row = db.execute(f"SELECT CASE WHEN {private} THEN ({source}) ELSE 'other' END AS source "
                              "FROM sessions s WHERE s.id = ?", (*args, str(session_id))).fetchone()
         return row["source"] if row else ""
+
+    def latest_turn(self, session_id):
+        """{display_kind, content} of the session's latest live user row, else None. Raises when unreadable: the caller
+        fails closed."""
+        if not session_id or not self.path.exists():
+            return None
+        with reader(self.path) as db:
+            row = db.execute("SELECT display_kind, content FROM messages WHERE session_id = ? AND role = 'user' "
+                             "AND active = 1 ORDER BY id DESC LIMIT 1", (str(session_id),)).fetchone()
+        return dict(row) if row else None
 
     @tolerant(lambda: None)
     def job_of(self, session_id):
@@ -400,23 +445,30 @@ class Sessions(Part):
                 "SELECT id, cwd FROM sessions WHERE title = ? AND COALESCE(archived, 0) = 0", (BOT_CHAT,))]
 
     @tolerant(list)
-    def main_sessions(self, since):
-        """Bot Chats with user turns after `since`, as {id, source (`other` when excluded), turns: [timestamp]}.
+    def main_sessions(self, since, tools=("muse_manage", "muse_job")):
+        """Bot Chats with user turns after `since`, as {id, source (`other` when excluded), turns: [timestamp],
+        refused: Muse tool calls since then refused as an unrecognized caller (`UNRECOGNIZED`)}.
 
-        Read past `private_user`, so Health can see that predicate lose the main session. A title held by a
+        Read past `private_user` and the caller, so Health can see either lose the main session. A title held by a
         machine conversation (Hermes moves those aside) is not the main session.
         """
         if not self.path.exists():
             return []
-        chats = {}
+        chats, refused = {}, Counter()
         with reader(self.path) as db:
             for row in db.execute(
-                    "SELECT s.id, s.source, m.content, m.timestamp FROM sessions s JOIN messages m ON m.session_id = s.id "
+                    "SELECT s.id, s.source, m.content, m.display_kind, m.timestamp FROM sessions s JOIN messages m ON m.session_id = s.id "
                     f"WHERE s.title = ? AND COALESCE(s.archived, 0) = 0 AND m.role = 'user' AND m.timestamp > ? AND {LIVE_TURN}",
                     (BOT_CHAT, since, *HIDDEN_KINDS)):
-                if classify(row["source"]) != "machine" and not str(row["content"]).lstrip().startswith(BACKGROUND):
+                if classify(row["source"]) != "machine" and not machinery(row["display_kind"], row["content"]):
                     chats.setdefault(row["id"], []).append(row["timestamp"])
-        return [{"id": sid, "source": self.user_source_of(sid), "turns": turns} for sid, turns in chats.items()]
+            for sid in chats:
+                for (content,) in db.execute(
+                        f"SELECT content FROM messages WHERE session_id = ? AND role = 'tool' AND timestamp > ? AND tool_name IN "
+                        f"({','.join('?' * len(tools))})", (sid, since, *tools)):
+                    refused[sid] += UNRECOGNIZED in as_text(content or "")
+        return [{"id": sid, "source": self.user_source_of(sid), "turns": turns, "refused": refused[sid]}
+                for sid, turns in chats.items()]
 
     def schema_gaps(self):
         """Columns this adapter reads that the native state.db lacks (none before the first session)."""

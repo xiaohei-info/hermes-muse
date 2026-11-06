@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import health, install
 from .content_io import DomainError, Files, revision
-from .host.sessions import READ_MAX, clean
+from .host.sessions import READ_MAX, UNRECOGNIZED, clean
 from .kernel import assignments, goals, packets, records
 from .kernel.common import header, one, render
 from .kernel.packets import enum, obj
@@ -287,14 +287,20 @@ class Surface:
     @staticmethod
     def authorize(tool, action, data, caller):
         kind = caller.get("kind")
-        if kind not in ("user", "cron", "child"):
-            raise PermissionError("Muse is available in private conversations only")
+        if kind == "group":
+            raise PermissionError("Muse is not available in group chats")
+        if kind not in ("user", "cron", "child", "automation"):
+            raise PermissionError(UNRECOGNIZED)
         if tool == "muse_job":
             if kind != "cron":
                 raise PermissionError("muse_job belongs to a Muse job run")
         elif kind == "child":
             if MAIN[action][0] != "read":
                 raise PermissionError("a delegated task may only read; changes belong to the parent conversation")
+        elif kind == "automation":
+            if MAIN[action][0] != "read":
+                raise PermissionError("this turn answers a job, background process or delegation result, not the user; "
+                                      "it may only read, changes wait for the user's own turn")
         elif kind == "cron" and action not in ("read", "calendar_view") and not (
                 action == "content_write" and data.get("kind") in CRON_CONTENT):
             raise PermissionError("a job run may write only notes, dreams and alignment; it submits results through muse_job")

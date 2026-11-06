@@ -5,7 +5,8 @@ summary only when it changed for this session, and failed/staged memory-write re
 again a day later). post_llm_call runs one kernel tick in the background (captures the turn as a signal,
 reads delivery receipts; only the muse-deliver job sends) and arms the quiet wake: 5 minutes of silence may wake the intake job early.
 post_tool_call records failed/staged results of native memory writes. Saved and unconfirmed writes stay
-silent. Only `user` callers count; cron runs, delegated children and group chats are ignored.
+silent. Only `user` callers count; cron runs, delegated children, turns Hermes injected into the conversation (cron
+output, background process and delegation results) and group chats are ignored.
 The one exception is Muse's own intake run (cron key memory-upkeep): pre_tool_call refuses a native memory
 write that deletes an entry outright and snapshots the stores, post_tool_call records what changed (upkeep).
 """

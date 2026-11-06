@@ -206,12 +206,13 @@ class HostAdapter:
             return datetime.now().astimezone()
 
     def caller(self, session_id="", **kwargs):
-        """user | cron | child | group | other for the current hook or tool call (host kwargs, never tool
-        arguments); the one classification hooks and tools share. Unknown fails closed as `other`."""
+        """user | cron | child | automation | group | other for the current hook or tool call (host kwargs, never
+        tool arguments); the one classification hooks and tools share. Unknown fails closed as `other`."""
         from .sessions import caller
         try:
             return caller(stored_source=lambda: self.sessions.user_source_of(session_id),
-                          stored_transport=lambda: self.sessions.source_of(session_id), **kwargs)
+                          stored_transport=lambda: self.sessions.source_of(session_id),
+                          latest_turn=lambda: self.sessions.latest_turn(session_id), **kwargs)
         except Exception as exc:
             self.fault("adapter.caller", exc)
             return "other"
