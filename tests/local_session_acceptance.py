@@ -161,6 +161,8 @@ def main():
                 clear_session_vars(tokens)
         (kind, read, write), tui = desktop_turns()
         assert kind == tui == 'user' and read['ok'] and write['ok'], (kind, tui, read, write)
+        with local_turn(home):
+            goal = tool('goal_create', {'title': 'TEST ONLY goal', 'criteria': 'TEST ONLY'})['result']['goal_id']
         for i, (display_kind, text) in enumerate([
                 ('internal_notification', '[Cronjob "test" output — scheduled job, not the user.] hi'),
                 ('process_complete', 'TEST ONLY process finished'),
@@ -170,6 +172,11 @@ def main():
                            ('bot', 'user', text, 301 + i, f'bot-{i + 1}', display_kind))
             (kind, read, write), tui = desktop_turns()
             assert kind == tui == 'automation' and read['ok'] and write['code'] == 'permission_denied', (kind, tui, read, write)
+        # automation records the follow-up of a goal; cancelling it is the user's decision
+        with local_turn(home):
+            progress = tool('goal_update', {'goal_id': goal, 'progress_note': 'TEST ONLY executor delivered'})
+            cancel = tool('goal_update', {'goal_id': goal, 'status': 'cancelled'})
+        assert progress['ok'] and cancel['code'] == 'permission_denied', (progress, cancel)
         # An LLM hook gets the turn's own message before Hermes persists its row.
         with local_turn(home):
             assert adapter.caller(session_id='bot', platform='desktop', conversation_history=[
