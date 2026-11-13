@@ -11,7 +11,7 @@ their native parts print `SKIP`.
 | Outbound boundaries, no 0.3.x modules | `python scripts/check_boundaries.py` |
 | No removed 0.3.x dependency in Muse's own prompts, skills and templates | `python scripts/check_callers.py prompts templates skills after-install.md` |
 | Compile | `python -m compileall -q hermes_muse dashboard scripts tests` |
-| Dashboard and Desktop page | `node --test tests/page_markdown.test.mjs` |
+| Dashboard and Desktop page (after `python ui/build.py`) | `node --test tests/page_markdown.test.mjs tests/page_actions.test.mjs` |
 | Generated interface is current | `python -m hermes_muse.surface && git diff --exit-code skills/companion/references/interface.md` |
 | Store v2, migration, rollback (SKIP-able; needs tags `v0.3.1`, `v0.3.16`) | `python tests/store_v2_acceptance.py` |
 | Kernel (SKIP-able) | `PYTHONPATH=<hermes-agent> <py> tests/kernel_acceptance.py` |
