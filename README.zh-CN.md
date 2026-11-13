@@ -1,4 +1,4 @@
-# Hermes Muse 0.5.3
+# Hermes Muse 0.5.4
 
 [English](README.md) · [设计文档](docs/DESIGN.md) · [接口](skills/companion/references/interface.md) · [验收清单](docs/ACCEPTANCE.md) · [更新日志](CHANGELOG.md)
 
@@ -18,7 +18,7 @@
 
 ## 插件页面
 
-Muse 的 Dashboard 与 Desktop 页面可选择 profile，浏览它的 Feed、Ideas 和 Goals，顶部显示最近一次健康检查。页面只读，跟随宿主主题。
+Muse 的 Dashboard 与 Desktop 页面可选择 profile，浏览它的 Feed、Ideas、Goals、最近 7 天的后台运行记录和未处理的复盘 findings，顶部显示最近一次健康检查。页面只读，跟随宿主主题。“Cancel goal in chat”这类按钮会为你准备一条发给 Muse 的消息：在 Desktop 上，如果你在该 profile 最近使用的对话接受输入，消息会放进它的输入框；否则页面直接显示这条消息供复制。改动本身在对话里完成。
 
 ![Muse 概览与 Feed 文章列表](docs/images/muse-dashboard-overview.png)
 *选择 profile，浏览或搜索 Feed 文章，切换到 Ideas 或 Goals。截图均为演示数据。*

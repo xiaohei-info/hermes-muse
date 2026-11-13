@@ -1,4 +1,4 @@
-# Hermes Muse 0.5.3
+# Hermes Muse 0.5.4
 
 [简体中文](README.zh-CN.md) · [Design](docs/DESIGN.md) · [Interface](skills/companion/references/interface.md) · [Acceptance](docs/ACCEPTANCE.md) · [Changelog](CHANGELOG.md)
 
@@ -18,7 +18,7 @@ It is built on what Hermes already has: sessions, cron, delivery, delegation and
 
 ## Plugin pages
 
-Muse's Dashboard and Desktop page lets you choose a profile and browse its Feed, Ideas and Goals inside Hermes, with the last Health check on top. It is read-only and follows the host theme.
+Muse's Dashboard and Desktop page lets you choose a profile and browse its Feed, Ideas and Goals, the background runs of the last 7 days and the open review findings inside Hermes, with the last Health check on top. It is read-only and follows the host theme. A button such as "Cancel goal in chat" prepares the message for you to send to Muse: on the Desktop it goes into the message box of the chat you last used in that profile when that chat accepts it; otherwise the page shows it to copy. The change itself is made in chat.
 
 ![Muse overview with Feed article list](docs/images/muse-dashboard-overview.png)
 *Choose a profile, browse or search its Feed articles, and switch to Ideas or Goals. All screenshots use demo data.*
