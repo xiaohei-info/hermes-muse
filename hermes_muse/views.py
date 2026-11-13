@@ -1,16 +1,22 @@
-"""Read-only dashboard views of one profile: Feed, ideas and goals from Store v2 and the content files.
+"""Read-only dashboard views of one profile: Feed, ideas, goals, recent runs and open review findings from Store v2
+and the content files.
 
 Opens state-v2.db read-only and never repairs or writes. Lists page by a plain offset cursor; an article
 or goal body pages by offset and is pinned to the revision of its first page.
 """
+import time
+from collections import Counter
 from pathlib import Path
 
 from .content_io import Files, revision
 from .kernel import goals
+from .kernel.common import D, clip
 from .kernel.records import FEED_DIR
 from .kernel.store import Store
 
 BODY_MAX = 24000
+RUN_DAYS = 7  # runs listed: those that started or ended in this window
+FOUND = 5  # observed source items named per run
 SUMMARY = ("title", "status", "created", "updated", "goal_id", "interest_id", "why", "rationale", "deadline",
            "next_check_at", "waiting_user", "blocked", "no_fade")
 
@@ -28,6 +34,21 @@ def summary(entity_id, record):
     return {k: v[:512] if isinstance(v, str) else v for k, v in out.items()}
 
 
+def run_summary(store, e):
+    """What one run was given and did, from its packet: item kinds, items handled, source items observed."""
+    p, events = e["payload"], store.events(e["id"])
+    out = {"id": e["id"], "job": p.get("job"), "state": e["state"], "started": events[0]["at"] if events else None,
+           "ended": None if e["state"] == "running" else e["state_since"]}
+    packet = store.get(p["packet_id"]) if p.get("packet_id") else None
+    if packet:
+        pp = packet["payload"]
+        observed = pp.get("observed") or []
+        out.update(items=len(pp.get("items") or []), item_kinds=dict(Counter(i.get("kind") for i in pp.get("items") or [])),
+                   handled=len(pp.get("handled") or []), observed=len(observed),
+                   found=[clip(str(o.get("title") or ""), 160) for o in observed[:FOUND] if o.get("title")])
+    return out
+
+
 def page(items, cursor, limit):
     offset = int(cursor) if str(cursor or "").isdigit() else 0
     end = offset + max(1, min(int(limit), 100))
@@ -40,9 +61,13 @@ class Views:
         self.home = Path(home)
         self.files = Files(self.home)
 
-    def entities(self, kind, state):
+    def store(self):
         path = self.home / "muse" / "state-v2.db"
-        return Store(path, readonly=True).query(kind, state=state) if path.is_file() else []
+        return Store(path, readonly=True) if path.is_file() else None
+
+    def entities(self, kind, state):
+        store = self.store()
+        return store.query(kind, state=state) if store else []
 
     def feed_path(self, e):
         return e["payload"].get("path") or f"{FEED_DIR}/{e['natural_key']}.md"
@@ -87,6 +112,28 @@ class Views:
                 return (3, -(r.get("updated") or 0), r["id"])
             return (0 if r.get("waiting_user") else 1 if r.get("blocked") else 2, r.get("next_check_at") or 0, r["id"])
         return page(sorted(rows, key=order), cursor, limit)
+
+    def runs(self, cursor=None, limit=25, now=None):
+        """Job runs of the last RUN_DAYS, newest first. A run is recorded only when its job had work (a packet); the
+        outcome is computed by code from the host's execution status and the packet's dispositions."""
+        store = self.store()
+        if store is None:
+            return {**page([], cursor, limit), "days": RUN_DAYS}
+        now = time.time() if now is None else now
+        listed = page(store.query("run", since=now - RUN_DAYS * D), cursor, limit)
+        return {**listed, "days": RUN_DAYS, "items": [run_summary(store, e) for e in listed["items"]]}
+
+    def findings(self, cursor=None, limit=25):
+        """Open conversation-review findings, newest first; the user resolves or dismisses one in chat (feedback)."""
+        items = []
+        for e in self.entities("finding", "open"):
+            p = e["payload"]
+            items.append({"id": e["id"], "kind": "finding", "title": clip(p.get("reason") or "", 512),
+                          "verdict": p.get("verdict"), "tag": p.get("tag"), "turn": p.get("turn"),
+                          "rules": [r[5:] for r in p.get("evidence", ()) if str(r).startswith("rule:")],
+                          "created": e["state_since"], "expires": e["deadline"]})
+        items.sort(key=lambda r: (-(r["created"] or 0), r["id"]))
+        return page(items, cursor, limit)
 
     # -- one object ----------------------------------------------------------------------------------
     def article(self, kind, object_id, offset=0, length=12000, pinned=None):
