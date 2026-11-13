@@ -509,7 +509,7 @@ Hermes 宿主
 |---|---|
 | 出站边界、0.3.x 模块不回归 | `python scripts/check_boundaries.py`（输出 `boundaries PASS`） |
 | 编译 | `python -m compileall -q hermes_muse dashboard scripts tests` |
-| Dashboard 页面 | `node --test tests/page_markdown.test.mjs` |
+| Dashboard 页面（`python ui/build.py` 重新生成 dist 后） | `node --test tests/page_markdown.test.mjs tests/page_actions.test.mjs` |
 | Store v2、迁移、回滚（A1/A2/A3/A5/A12） | `python tests/store_v2_acceptance.py`（需要 git tag `v0.3.1`、`v0.3.16`） |
 | 内核（A3/A5/A10） | `PYTHONPATH=<hermes-agent> <py> tests/kernel_acceptance.py` |
 | 模型面（S1–S11，含“只在 kernel 写入”） | `PYTHONPATH=<hermes-agent> <py> tests/surface_acceptance.py` |

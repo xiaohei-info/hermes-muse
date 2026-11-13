@@ -1,4 +1,4 @@
-"""Host-authenticated read-only Muse views: Feed, ideas, goals and the last health check."""
+"""Host-authenticated read-only Muse views: Feed, ideas, goals, recent runs, open findings and the last health check."""
 
 import importlib.util
 import sys
@@ -41,7 +41,7 @@ def read(fn, *args, **kwargs):
 @router.get("/capabilities")
 def capabilities(selected_profile: str | None = None):
     return {"read_only": True, "profile": selected_profile or home().name,
-            "features": ["feed", "ideas", "goals", "health", "pagination"]}
+            "features": ["feed", "ideas", "goals", "runs", "findings", "health", "pagination"]}
 
 
 @router.get("/feed")
@@ -71,6 +71,16 @@ def goals(cursor: str | None = None, limit: int = Query(25, ge=1, le=100),
 def goal(object_id: str, offset: int = Query(0, ge=0), length: int = Query(12000, ge=1, le=24000),
          revision: str | None = None, selected_profile: str | None = None):
     return read(_views.Views(home(selected_profile)).article, "goal", object_id, offset, length, revision)
+
+
+@router.get("/runs")
+def runs(cursor: str | None = None, limit: int = Query(25, ge=1, le=100), selected_profile: str | None = None):
+    return read(_views.Views(home(selected_profile)).runs, cursor=cursor, limit=limit)
+
+
+@router.get("/findings")
+def findings(cursor: str | None = None, limit: int = Query(25, ge=1, le=100), selected_profile: str | None = None):
+    return read(_views.Views(home(selected_profile)).findings, cursor=cursor, limit=limit)
 
 
 @router.get("/health")

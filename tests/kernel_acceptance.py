@@ -932,6 +932,59 @@ def part_upkeep(base):
     return k
 
 
+def part_views(base):
+    """Dashboard Runs and Findings (#21): runs of the last days newest first with what their packet held and handled;
+    only open findings, with the rules that picked their turn. Data comes from the writers (runs, packets, review)."""
+    from hermes_muse.views import RUN_DAYS, Views
+    clock = [T0]
+    host = FakeHost(lambda: clock[0])
+    home = make_home(base)
+    k = Kernel(home, adapter=host, clock=lambda: clock[0])
+    write_goal(home, "g-a", no_fade=True, next_check_at=T0 - H)
+    write_goal(home, "g-b", no_fade=True, next_check_at=T0 - H)
+    k.tick()
+    old = k.build_packet("nightly")
+    k.start_run("nightly", job_id="job-n", execution_id="e-old", packet_id=old["id"])
+    host.outcomes["e-old"] = {"status": "failed"}
+    clock[0] += 60
+    k.tick()
+    clock[0] += (RUN_DAYS + 1) * D  # that run is now older than the window
+    write_goal(home, "g-c", no_fade=True, next_check_at=clock[0] - H)
+    k.tick()
+    packet = k.build_packet("nightly")
+    refs = [i["ref"] for i in packet["items"] if i["kind"] == "goal"]
+    k.start_run("nightly", job_id="job-n", execution_id="e1", packet_id=packet["id"])
+    k.submit(packet["id"], [{"goal_id": refs[0], "assessment": "on_track"}])
+    host.outcomes["e1"] = {"status": "completed"}
+    clock[0] += 60
+    k.tick()
+    clock[0] += 60
+    k.start_run("patrol", job_id="job-p", execution_id="e2", packet_id=k.build_packet("patrol")["id"])
+    for n, verdict in enumerate(("agent_gap", "friction", "fine", "agent_gap")):
+        review.record(k, f"review:s1:{n}", verdict, f"reason {n}", clock[0] + n, rules=("claim_without_write",))
+    records.feedback(k, review_finding(k, "review:s1:3"), "useful", now=clock[0])
+    views = Views(home)
+    runs = views.runs(now=clock[0])
+    findings = views.findings()
+    first = runs["items"][0] if runs["items"] else {}
+    done = next((r for r in runs["items"] if r["job"] == "nightly"), {})
+    check("V1 dashboard runs: last days only, newest first, outcome from code, packet items and handled counts",
+          [r["job"] for r in runs["items"]] == ["patrol", "nightly"] and first["state"] == "running" and first["ended"] is None
+          and done["state"] == "degraded" and done["items"] == len(packet["items"]) > 1 and done["handled"] == 1
+          and done["item_kinds"].get("goal") == len(refs) and done["started"] < done["ended"] and runs["days"] == RUN_DAYS,
+          {"runs": runs["items"]})
+    check("V2 dashboard findings: open ones only (fine is dismissed, a resolved one leaves), with tag and pick rules",
+          [f["title"] for f in findings["items"]] == ["reason 1", "reason 0"] and findings["items"][0]["tag"] == "friction"
+          and findings["items"][1]["rules"] == ["claim_without_write"] and findings["items"][1]["turn"] == "s1:0"
+          and all(f["kind"] == "finding" and f["expires"] for f in findings["items"]),
+          {"findings": findings["items"]})
+    return k
+
+
+def review_finding(k, ref):
+    return k.store.query("finding", natural_key=ref)[0]
+
+
 def a3_a10(kernels):
     missing = []
     for k in kernels:
@@ -1482,7 +1535,8 @@ def main():
         kernels = []
         for name, part in (("source_coverage", part_source_coverage), ("intake", part_intake), ("notifier", part_notifier), ("goals", part_goals), ("drain", part_drain),
                            ("intake_drain", part_intake_drain), ("reviews", part_reviews), ("proposals", part_proposals), ("feed", part_feed), ("upkeep", part_upkeep),
-                           ("assignments", part_assignments), ("review", part_review), ("followups", part_followups)):
+                           ("assignments", part_assignments), ("review", part_review), ("followups", part_followups),
+                           ("views", part_views)):
             (base / name).mkdir()
             result = part(base / name)
             kernels.append(result[0] if isinstance(result, tuple) else result)

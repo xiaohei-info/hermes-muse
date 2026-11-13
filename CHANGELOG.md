@@ -1,3 +1,26 @@
+# 0.5.4 — Dashboard buttons always answer; runs and review findings are visible (2026-11-13)
+
+**Upgrade notes.** No Store schema change, no new cron job, no change to the tool interface. The Dashboard and Desktop
+page gain two read-only tabs and two `GET` routes (`/runs`, `/findings`); nothing on the page writes. Requires Hermes
+0.22.3 or later, as before.
+
+- **The page's "in chat" buttons did nothing you could see** (#21). On the Desktop, "Discuss or change this goal",
+  "Cancel goal in chat", "Discuss idea in chat" and "Accept idea in chat" called a draft function that needs a chat
+  composer of the same profile, but the Muse page takes the place of the chat. When no chat of that profile held focus,
+  the only answer was a five-second toast in the corner; when the focused chat was a tab kept open behind the page, the
+  text went into that hidden message box and nothing said so. Every such button now goes through one path, and its
+  result shows under it: on the Desktop the message goes into the message box of the chat you last used in that profile
+  when that chat accepts it, and the page says where it went; otherwise the page shows the message to copy and says
+  why. The Dashboard has no composer to write into, so there it always shows the message to copy (before, it showed no
+  buttons). The draft no longer requires the chat a goal came from. "Cancel goal in chat" shows only on an open goal.
+- **Runs tab: what the background jobs did.** The runs of the last 7 days, newest first: the job (intake, patrol,
+  nightly review, Feed research), when it started and ended, its outcome as code computes it (completed, partly done,
+  failed, lost), how many items its packet held and how many were handled, and the first source items a patrol
+  observed. A check with nothing to do leaves no run, so it is not listed.
+- **Findings tab: what the nightly review found.** The open conversation-review findings, newest first, with the
+  rules that picked the turn and when one is dismissed automatically. "Dismiss in chat" and "Mark useful in chat"
+  prepare the message for Muse, which records it with `feedback` in your conversation; the page itself does not write.
+
 # 0.5.3 — The main conversation is the user's on every client again (2026-11-06)
 
 **Upgrade notes.** No Store schema change, no new cron job, no change to the tool interface. The first load after upgrading

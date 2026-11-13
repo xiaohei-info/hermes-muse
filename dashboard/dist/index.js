@@ -49,6 +49,12 @@ const MUSE_CSS = `
 .muse-list>li.dim{opacity:.6}
 .muse-row{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;align-items:start;width:100%;padding:16px 8px;border:0;background:transparent;text-align:left;cursor:pointer;border-radius:var(--muse-radius)}
 .muse-row:hover{background:var(--muse-hover)}
+.muse-row.static{cursor:default}
+.muse-row.static:hover{background:transparent}
+.muse-compose{margin-top:12px;padding:12px 16px;border:1px solid var(--muse-border);border-radius:var(--muse-radius);background:var(--muse-card);font-size:.9rem}
+.muse-compose p{margin:0 0 8px}
+.muse-compose textarea{display:block;width:100%;min-height:4.5em;padding:8px 12px;border:1px solid var(--muse-border);border-radius:var(--muse-radius);background:transparent;resize:vertical;font:inherit;color:inherit}
+.muse-compose .muse-idea-actions{margin-top:8px}
 .muse-row-main{display:block;min-width:0}
 .muse-row-side{display:block;min-width:4.5rem;text-align:right;color:var(--muse-muted);font-size:.8rem;white-space:nowrap}
 .muse-row-title{display:block;font-weight:600;font-size:1rem}
@@ -228,6 +234,31 @@ function museMarkdown(h, source) {
   return blocks;
 }
 
+// The message a button asks the user to send to Muse in chat; the change itself goes through muse_manage there.
+const MUSE_ASKS = {discuss:'I want to discuss or change {}.', feedback:'I have feedback on {}.', cancel:'Please cancel {}.',
+  accept:'I accept {}; please take it on.', dismiss:'Please dismiss {} as not useful.', useful:'Please mark {} as useful.'};
+function museDraftText(item, kind, intent) {
+  const name = String(item.title || item.metadata?.title || '').replace(/\s+/g, ' ').trim();
+  const label = 'Muse ' + kind + ' ' + item.id + (name ? ' "' + (name.length > 120 ? name.slice(0, 119) + '…' : name) + '"' : '');
+  return (MUSE_ASKS[intent] || MUSE_ASKS.discuss).replace('{}', () => label) + ' Read its current state before changing anything.';
+}
+
+// Desktop only: put the text into the message box of the focused chat, when that chat belongs to the profile and
+// connection shown here. insertText reaches a mounted composer by session address and fails closed.
+async function museComposerDraft(host, text, scope) {
+  if (!scope.current()) return {ok:false, reason:'The connection or profile changed.'};
+  const owner = host.state.focusedSessionOwner.get(), stored = host.state.focusedStoredSessionId.get();
+  const same = (a, b) => (a || 'default') === (b || 'default');
+  if (!stored || !owner || !same(owner.profile, scope.profile) || owner.connectionId !== scope.connection)
+    return {ok:false, reason:'No chat of this profile is open next to this page.'};
+  return await host.composer.insertText(stored, text) ? {ok:true} : {ok:false, reason:'The chat did not accept the text.'};
+}
+
+const MUSE_JOBS = {intake:'Intake', patrol:'Patrol', nightly:'Nightly review', feed:'Feed research'};
+const MUSE_RUN_STATES = {running:['Running',''], ok:['Completed','ok'], degraded:['Partly done','warn'], failed:['Failed','danger'], abandoned:['Lost','danger']};
+const MUSE_RULES = {claim_without_write:'claimed done without a write', tool_failure_unretried:'failed tool not retried',
+  user_correction:'user corrected the agent', unrecorded_need:'need not recorded'};
+
 function makeMusePage(React, useScope, request, draft, profileAdmin) {
   const h = React.createElement;
   return function MusePage() {
@@ -261,6 +292,7 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
     const [error, setError] = React.useState('');
     const [busy, setBusy] = React.useState(false);
     const [health, setHealth] = React.useState(null);
+    const [composed, setComposed] = React.useState(null);
     const generation = React.useRef(0);
     const identity = scope.key + ':' + tab + ':' + query + ':' + topic;
     const active = React.useRef(identity);
@@ -301,12 +333,12 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
       } catch (e) { if (active.current === captured && scope.current()) setError(String(e.message || e)); }
       finally { if (active.current === captured) setBusy(false); }
     }
-    React.useEffect(() => { setPage(null); setClosed(null); setClosedOpen(false); setArticle(null); load(); return () => { generation.current++; }; }, [identity, ready]);
+    React.useEffect(() => { setPage(null); setClosed(null); setClosedOpen(false); setArticle(null); setComposed(null); load(); return () => { generation.current++; }; }, [identity, ready]);
     React.useEffect(() => {
       if (!ready) return;
       let live = true;
       setCounts({});
-      Promise.all([['feed',{}],['ideas',{}],['goals',{status:'open'}],['closed',{status:'closed'}]].map(([name,extra])=>
+      Promise.all([['feed',{}],['ideas',{}],['goals',{status:'open'}],['closed',{status:'closed'}],['runs',{}],['findings',{}]].map(([name,extra])=>
         request('/'+(name==='closed'?'goals':name)+'?'+new URLSearchParams({limit:'1',...extra}), scope).then(v=>live&&scope.current()&&setCounts(c=>({...c,[name]:v.total}))).catch(()=>{})));
       return ()=>{live=false;};
     }, [scope.key, ready]);
@@ -329,6 +361,22 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
       } catch (e) { if (active.current === captured && scope.current()) setError(String(e.message || e)); }
       finally { if (active.current === captured) setBusy(false); }
     }
+    // Every "in chat" button: the host's draft writes into a chat where it can; otherwise, or when that fails, the
+    // message is shown here to copy. Either way the click shows its result on this page.
+    async function compose(item, kind, intent) {
+      const text = museDraftText(item, kind, intent), id = item.id;
+      setComposed({id, text, working:Boolean(draft)});
+      let result = {ok:false, reason:''};
+      if (draft) {
+        try { result = (await draft(text, scope)) || result; } catch (e) { result = {ok:false, reason:String(e.message || e)}; }
+      }
+      setComposed(c => c && c.id === id && c.text === text ? {id, text, ok:Boolean(result.ok), reason:result.reason || ''} : c);
+    }
+    async function copy(text) {
+      let note = 'Copied. Paste it into your conversation with Muse.';
+      try { await globalThis.navigator.clipboard.writeText(text); } catch (e) { note = 'Copying is not available here: select the text above and copy it.'; }
+      setComposed(c => c && c.text === text ? {...c, copied:note} : c);
+    }
     const currentPage = page?.identity === identity ? page : null;
     const currentClosed = closed?.identity === identity ? closed : null;
     const currentArticle = article?.identity === identity ? article : null;
@@ -349,6 +397,15 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
             h('span', {className:'muse-row-meta'}, meta)),
           h('span', {className:'muse-row-side'}, side)));
     };
+    const composePanel = id => composed && composed.id === id && h('div', {className:'muse-compose', role:'status'},
+      h('p', null, composed.working ? 'Adding the message to your chat…' : composed.ok ?
+        [h('strong', {key:'t'}, 'Added to your chat. '), 'It is waiting in the message box of the chat you last used in this profile: switch to that chat to review and send it.'] :
+        [h('strong', {key:'t'}, 'Send this message to Muse in chat. '), composed.reason ? composed.reason + ' ' : '', 'Copy it and paste it into your conversation with Muse in this profile.']),
+      h('textarea', {readOnly:true, value:composed.text, rows:3, 'aria-label':'Message for Muse', onFocus:e=>e.target.select()}),
+      h('div', {className:'muse-idea-actions'},
+        !composed.ok && !composed.working && button('Copy message', ()=>copy(composed.text), false, 'primary'),
+        button('Close', ()=>setComposed(null), false, 'text'),
+        composed.copied && h('span', {className:'muse-sub'}, composed.copied)));
     const goalRow = (g, i) => {
       const [label, tone] = goalState(g), isOpen = g.status === 'active';
       const meta = isOpen ? [g.next_check_at ? 'Next check ' + museTime(g.next_check_at, true) : '', g.deadline ? (g.next_check_at ? ' · ' : '') + 'Due ' + museTime(g.deadline) : ''] :
@@ -379,9 +436,10 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
             h('ul', {className:'muse-plain'}, ...[...md.progress].reverse().map((p,i)=>h('li',{key:i},h('span',{className:'muse-sub'},museTime(p.at,true)+' — '),p.text)))),
           sources.length > 0 && h('section', {className:'muse-section'}, h('h3', {className:'muse-sh'}, 'Sources'),
             h('ul', {className:'muse-plain'}, ...sources.map((s,i)=>h('li',{key:i}, museSource(h, s, 's'+i))))),
-          draft && h('div', {className:'muse-detail-actions'},
-            button(tab==='goals'?'Discuss or change this goal':'Give feedback in chat',()=>draft(currentArticle,scope),busy),
-            tab==='goals' && button('Cancel goal in chat',()=>draft(currentArticle,scope,'cancel'),busy))));
+          h('div', {className:'muse-detail-actions'},
+            button(goal?'Discuss or change this goal':'Give feedback in chat',()=>compose(currentArticle,currentArticle.kind,goal?'discuss':'feedback'),busy),
+            goal && md.status === 'active' && button('Cancel goal in chat',()=>compose(currentArticle,'goal','cancel'),busy)),
+          composePanel(currentArticle.id)));
     } else if (!currentPage) {
       content = error ? null : busy ? h('p', {role:'status', className:'muse-sub'}, 'Loading…') : null;
     } else if (tab === 'feed') {
@@ -406,11 +464,42 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
               h('span', {className:'muse-row-title'}, item.title),
               h('span', {className:'muse-row-text'}, item.rationale || item.why),
               item.source_count > 0 && h('span', {className:'muse-row-meta'}, plural(item.source_count, 'source')),
-              (item.goal_id || draft) && h('div', {className:'muse-idea-actions'},
+              h('div', {className:'muse-idea-actions'},
                 item.goal_id && button('Explore topic',()=>{setTab('feed');setTopic(item.goal_id);setTopicLabel(group.name);}),
-                draft && button('Discuss idea in chat',()=>draft(item,scope)),
-                draft && button('Accept idea in chat',()=>draft(item,scope,'accept'),false,'primary')))));
+                button('Discuss idea in chat',()=>compose(item,'idea','discuss')),
+                button('Accept idea in chat',()=>compose(item,'idea','accept'),false,'primary')),
+              composePanel(item.id))));
         });
+    } else if (tab === 'runs') {
+      content = currentPage.items.length === 0 ?
+        empty('No runs in the last ' + currentPage.days + ' days', 'Background jobs (intake, patrol, nightly review, Feed research) are listed here when they had work. A check with nothing to do leaves no record.') :
+        h('ul', {className:'muse-list', 'aria-label':'Recent runs'}, ...currentPage.items.map(r=>{
+          const [label, tone] = MUSE_RUN_STATES[r.state] || [r.state, ''];
+          const kinds = Object.entries(r.item_kinds || {}).map(([k,n])=>plural(n, k)).join(', ');
+          const did = r.items === undefined ? 'No work packet recorded.' :
+            (r.items ? 'Handled ' + r.handled + ' of ' + r.items + (kinds ? ' (' + kinds + ')' : '') + '.' : 'Checked sources.') +
+            (r.observed ? ' Observed ' + plural(r.observed, 'source item') + (r.found?.length ? ': ' + r.found.join('; ') : '') + '.' : '');
+          return h('li', {key:r.id}, h('div', {className:'muse-row static'},
+            h('span', {className:'muse-row-main'},
+              h('span', {className:'muse-row-title'}, MUSE_JOBS[r.job] || r.job || 'Run'),
+              h('span', {className:'muse-row-text'}, did),
+              h('span', {className:'muse-row-meta'}, (r.started ? 'Started ' + museTime(r.started, true) : '') + (r.ended ? (r.started ? ' · ' : '') + 'ended ' + museTime(r.ended, true) : ''))),
+            h('span', {className:'muse-row-side'}, badge(label, tone))));
+        }));
+    } else if (tab === 'findings') {
+      content = currentPage.items.length === 0 ?
+        empty('No open findings', 'The nightly review files a finding when a recent conversation turn shows the assistant missed something. Open findings are listed here until you resolve or dismiss them, or for 14 days.') :
+        h('ul', {className:'muse-list', 'aria-label':'Open findings'}, ...currentPage.items.map(f=>h('li', {key:f.id}, h('div', {className:'muse-row static'},
+          h('div', {className:'muse-row-main'},
+            h('span', {className:'muse-row-title'}, f.title || f.id),
+            h('span', {className:'muse-row-text'}, (f.tag === 'friction' ? 'Friction (a suggestion)' : 'Agent gap') + (f.rules?.length ? ' · ' + f.rules.map(r=>MUSE_RULES[r] || r).join(', ') : '')),
+            h('span', {className:'muse-row-meta'}, (f.turn ? 'Turn ' + f.turn : '') + (f.expires ? (f.turn ? ' · ' : '') + 'dismissed automatically ' + museTime(f.expires) : '')),
+            h('div', {className:'muse-idea-actions'},
+              button('Dismiss in chat',()=>compose(f,'finding','dismiss')),
+              button('Mark useful in chat',()=>compose(f,'finding','useful')),
+              button('Discuss in chat',()=>compose(f,'finding','discuss'),false,'text')),
+            composePanel(f.id)),
+          h('span', {className:'muse-row-side'}, museTime(f.created))))));
     } else {
       content = h(React.Fragment, null,
         h('h3', {className:'muse-sect'}, 'Active', h('span', {className:'muse-count'}, currentPage.total)),
@@ -434,7 +523,7 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
             h('span', {className:'muse-sub'}, 'checked ' + new Date(report.generated_at).toLocaleString() + (items.length ? ' · ' + plural(items.length, 'health item') : ''))),
           items.length > 0 && h('ul', null, ...items.map(f=>h('li', {key:f.id}, h('strong', null, f.level + ' ' + f.id), ': ' + f.detail + (f.fix ? ' — Fix: ' + f.fix : ''))))));
     };
-    const label = {feed:'Feed', ideas:'Ideas', goals:'Goals'};
+    const label = {feed:'Feed', ideas:'Ideas', goals:'Goals', runs:'Runs', findings:'Findings'};
     const state = selectedRow && (selectedRow.enabled ? 'Enabled' : selectedRow.installed ? 'Disabled' : 'Not installed');
     return h('main', {className:'muse-root'},
       h('style', null, MUSE_CSS),
@@ -448,9 +537,9 @@ function makeMusePage(React, useScope, request, draft, profileAdmin) {
           [h('span',{className:'muse-meta'},scope.label)]))),
       profileAdmin && managementMessage && h('section',{'aria-label':'Muse profiles',className:'muse-admin'},
         h('p',{role:'status'},managementMessage)),
-      profileAdmin && !ready && empty(selectedRow ? 'Muse is not enabled for this profile' : 'No profile selected', selectedRow ? 'Install and enable Muse in that profile with Hermes plugin management (hermes -p <profile> plugins), then browse its Feed, Ideas and Goals here.' : 'Choose a profile to browse its Feed, Ideas and Goals.'),
+      profileAdmin && !ready && empty(selectedRow ? 'Muse is not enabled for this profile' : 'No profile selected', selectedRow ? 'Install and enable Muse in that profile with Hermes plugin management (hermes -p <profile> plugins), then browse its Feed, Ideas, Goals, Runs and Findings here.' : 'Choose a profile to browse its Feed, Ideas, Goals, Runs and Findings.'),
       ready && h('nav', {'aria-label':'Muse sections', className:'muse-tabs'},
-        ...['feed','ideas','goals'].map(name => h('button', {key:name, type:'button', className:'muse-tab', 'aria-pressed':tab===name, 'aria-label':label[name], onClick:()=>setTab(name)}, label[name], counts[name] !== undefined && h('span', {className:'muse-count'}, counts[name])))),
+        ...Object.keys(label).map(name => h('button', {key:name, type:'button', className:'muse-tab', 'aria-pressed':tab===name, 'aria-label':label[name], onClick:()=>setTab(name)}, label[name], counts[name] !== undefined && h('span', {className:'muse-count'}, counts[name])))),
       ready && health && healthPanel(health),
       ready && tab === 'feed' && !currentArticle && h('form', {className:'muse-toolbar', onSubmit:e=>{e.preventDefault(); setQuery(draftQuery.trim());}},
         h('label', {className:'muse-search'}, icon([h('circle',{key:'c',cx:7,cy:7,r:4.5}), h('path',{key:'p',d:'M10.5 10.5L14 14'})]),

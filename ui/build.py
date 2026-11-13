@@ -1,4 +1,7 @@
-"""Deterministic stdlib packaging; both SDKs share content views; only Dashboard adds read-only profile selection."""
+"""Deterministic stdlib packaging; both SDKs share content views; only Dashboard adds read-only profile selection.
+
+The Dashboard SDK has no chat composer, so its page passes no draft and every in-chat button shows the message to copy.
+Run: python ui/build.py (writes dashboard/dist/index.js and desktop/plugin.js)."""
 
 from pathlib import Path
 
@@ -44,17 +47,9 @@ export default {
    if (!scope.current()) throw new Error('Connection changed; refresh Muse');
    return ctx.rest(path+(path.includes('?')?'&':'?')+'profile='+encodeURIComponent(scope.profile));
   }
-  async function draft(item,scope,intent="discuss") {
-   if (!scope.current()) return;
-   if (!host.state.focusedSessionOwner || !host.composer?.insertText) { host.notify({kind:'info',message:'This Desktop build does not support safely addressed chat drafts. Update Desktop first.'}); return; }
-   const sid=host.state.focusedSessionId.get(),stored=host.state.focusedStoredSessionId.get(),owner=host.state.focusedSessionOwner.get();
-   const original=item.metadata?.session_id;
-   if (!sid || !stored || !owner || owner.profile!==scope.profile || owner.connectionId!==scope.connection || (original && stored!==original)) {
-    host.notify({kind:'info',message:'Select the original chat in this connection and profile, then try again.'}); return;
-   }
-   const ok=await host.composer.insertText(sid,'Please '+intent+' this Muse '+(item.kind || 'item')+' '+item.id+'. Read its current state before changing anything.');
-   if (!ok) host.notify({kind:'info',message:'Open the selected chat composer and try again.'});
-  }
+  // Chat drafts only where this Desktop can address a session's composer; makeMusePage shows the text to copy otherwise.
+  const draft=typeof host.composer?.insertText==='function' && host.state.focusedSessionOwner && host.state.focusedStoredSessionId ?
+   (text,scope)=>museComposerDraft(host,text,scope) : null;
   const Page=makeMusePage(React,useScope,request,draft);
   ctx.register({id:'page',area:ROUTES_AREA,data:{path:'/muse'},render:()=>React.createElement(Page)});
   ctx.register({id:'nav',area:SIDEBAR_NAV_AREA,data:{path:'/muse',label:'Muse',codicon:'sparkle'}});
