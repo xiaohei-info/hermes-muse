@@ -22,7 +22,7 @@ jobs:
       - run: python scripts/check_boundaries.py
       - run: python scripts/check_callers.py prompts templates skills after-install.md
       - run: python -m compileall -q hermes_muse dashboard scripts tests
-      - run: node --test tests/page_markdown.test.mjs
+      - run: node --test tests/page_markdown.test.mjs tests/page_actions.test.mjs
       - name: Generated interface reference is current
         run: python -m hermes_muse.surface && git diff --exit-code skills/companion/references/interface.md
       - run: python tests/store_v2_acceptance.py

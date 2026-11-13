@@ -434,6 +434,14 @@ def part_views(home):
           feed["total"] == 1 and article.get("body", "").startswith("# Feed 0") and open_goals["total"] == 3
           and open_goals["next_cursor"] == "1" and closed["total"] == 1 and goal["body"].startswith("# g-active") and not escaped,
           {"feed": feed["total"], "open": open_goals["total"], "closed": closed["total"]})
+    runs = api.runs(cursor=None, limit=25, selected_profile=None)
+    findings = api.findings(cursor=None, limit=25, selected_profile=None)
+    features = api.capabilities(selected_profile="p")["features"]
+    check("dashboard: Runs and Findings are read-only lists of the profile (#21)",
+          {"items", "total", "next_cursor", "days"} <= set(runs) and {"items", "total", "next_cursor"} <= set(findings)
+          and all(r.get("job") and r.get("state") for r in runs["items"]) and all(f["kind"] == "finding" for f in findings["items"])
+          and {"runs", "findings"} <= set(features) and not any(r.methods - {"GET", "HEAD"} for r in api.router.routes),
+          {"runs": runs["total"], "findings": findings["total"]})
     js = subprocess.run(["node", "--check", str(ROOT / "dashboard" / "dist" / "index.js")], capture_output=True, text=True)
     check("dashboard: page script parses and requests /health", js.returncode == 0
           and "request('/health', scope)" in (ROOT / "dashboard" / "dist" / "index.js").read_text(encoding="utf-8"), js.stderr[:200])
