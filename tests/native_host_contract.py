@@ -179,8 +179,12 @@ def main():
         # The canonical Bot Chat is born hidden and is the main session; any other hidden row stays excluded. The query
         # must reach messages through sessions(source), not by scanning them.
         from hermes_muse.host.sessions import BOT_CHAT, turns_query
-        from hermes_state import SessionDB
-        assert SessionDB.CANONICAL_BOT_CHAT_TITLE == BOT_CHAT
+        try:  # Hermes <= 0.22 exposed it on SessionDB; 0.23 moved it into the storage interface
+            from hermes_state import SessionDB
+            canonical = SessionDB.CANONICAL_BOT_CHAT_TITLE
+        except (ImportError, AttributeError):
+            from persistence.sqlite.conversation._store.core import CANONICAL_BOT_CHAT_TITLE as canonical
+        assert canonical == BOT_CHAT
         with closing(sqlite3.connect(home / "state.db")) as db, db:
             db.execute("UPDATE sessions SET source='desktop', created_source='desktop', hidden=1 WHERE id='bot'")
             db.execute("INSERT INTO sessions (id, source, created_source, chat_type, title, hidden, started_at) "
