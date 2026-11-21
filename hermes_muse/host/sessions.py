@@ -72,6 +72,22 @@ def local_surfaces():
     return {label: SURFACES[label] for label in sorted(STORED_AS_LOCAL)}
 
 
+def local_policy_prefix():
+    """Hermes' `state_meta` key prefix for a LOCAL creation receipt (`gateway.local_policy.v1:`).
+
+    Hermes 0.23.0 moved the symbol out of the removed top-level `hermes_state_local` module into the
+    storage interface; the value is unchanged, so both locations are tried and one adapter serves
+    either host. Resolved by name so a host that keeps only one of them still loads.
+    """
+    import importlib
+    for module in ("persistence.sqlite.conversation._store.local", "hermes_state_local"):
+        try:
+            return getattr(importlib.import_module(module), "POLICY_PREFIX")
+        except (ImportError, AttributeError):
+            continue
+    raise ImportError("no Hermes module exposes POLICY_PREFIX (local creation receipts)")
+
+
 def machinery(display_kind, content) -> bool:
     """A user-role turn Hermes injected (cron output, a finished background process, a delegation result), not words
     the user wrote: Hermes stamps its row with a machinery display kind; rows from before that stamp keep the
@@ -255,7 +271,7 @@ def private_user(db):
     labels = ",".join(f"'{s}'" for s in surfaces)
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "state_meta" in tables and {"session_key", "chat_id", "user_id"} <= columns:
-        from hermes_state_local import POLICY_PREFIX
+        POLICY_PREFIX = local_policy_prefix()
         db.create_function("muse_local_surface", 5, lambda *row: local_surface(*row, surfaces=surfaces), deterministic=True)
         native = ("(SELECT muse_local_surface(value,s.id,s.session_key,s.chat_id,s.user_id) "
                   f"FROM state_meta WHERE key = '{POLICY_PREFIX}' || s.id)")
